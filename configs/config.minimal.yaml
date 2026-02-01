@@ -1,0 +1,25 @@
+# Minimal Configuration for Testing
+server:
+  port: 8080
+
+kafka:
+  brokers:
+    - "localhost:9092"
+  topics:
+    wikipedia_changes: "wikipedia-changes"
+  consumer_group: "wikisurge-minimal"
+
+redis:
+  host: "localhost"
+  port: 6379
+
+elasticsearch:
+  hosts:
+    - "http://localhost:9200"
+  index_prefix: "wikisurge-minimal"
+
+wikipedia:
+  sse_url: "https://stream.wikimedia.org/v2/stream/recentchange"
+
+logging:
+  level: "info"

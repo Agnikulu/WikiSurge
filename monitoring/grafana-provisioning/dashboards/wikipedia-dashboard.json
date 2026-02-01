@@ -1,0 +1,153 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "WikiSurge Dashboard",
+    "tags": ["wikipedia", "wikisurge", "monitoring"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Ingestion Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(wikipedia_events_ingested_total[5m])",
+            "legendFormat": "Events/sec"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Events per second",
+            "min": 0
+          }
+        ],
+        "xAxis": {
+          "mode": "time"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Kafka Lag",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "kafka_consumer_lag_sum",
+            "legendFormat": "Consumer Lag"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Messages",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Redis Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "redis_memory_used_bytes",
+            "legendFormat": "Memory Used"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Bytes",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Elasticsearch Index Size",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "elasticsearch_indices_store_size_bytes",
+            "legendFormat": "Index Size"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Bytes",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "Hot Pages Count",
+        "type": "singlestat",
+        "targets": [
+          {
+            "expr": "wikipedia_hot_pages_count",
+            "legendFormat": "Hot Pages"
+          }
+        ],
+        "valueName": "current",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 6,
+        "title": "Alert Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(wikipedia_alerts_total[5m])",
+            "legendFormat": "Alerts/sec"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Alerts per second",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "10s",
+    "schemaVersion": 30,
+    "version": 1
+  }
+}
