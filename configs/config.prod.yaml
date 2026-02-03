@@ -1,62 +1,47 @@
-# Production Configuration
-server:
-  port: 8080
-  host: "0.0.0.0"
-  read_timeout: "15s"
-  write_timeout: "15s"
-  idle_timeout: "60s"
+# Production Configuration - High performance setup
+features:
+  elasticsearch_indexing: true
+  trending: true
+  edit_wars: true
+  websockets: true
+
+elasticsearch:
+  enabled: true
+  url: "http://elasticsearch:9200"
+  retention_days: 30
+  max_docs_per_day: 50000
+  selective_criteria:
+    trending_top_n: 500
+    spike_ratio_min: 1.5
+    edit_war_enabled: true
+
+redis:
+  url: "redis://redis:6379"
+  max_memory: "1gb"
+  eviction_policy: "allkeys-lru"
+  hot_pages:
+    max_tracked: 5000
+    promotion_threshold: 10
+    window_duration: 30m
+    max_members_per_page: 200
+  trending:
+    enabled: true
+    max_pages: 10000
+    half_life_minutes: 60.0
+    prune_interval: 2m
 
 kafka:
   brokers:
-    - "kafka-1:9092"
-    - "kafka-2:9092"
-    - "kafka-3:9092"
-  topics:
-    wikipedia_changes: "wikipedia-changes"
-    hot_pages: "hot-pages"
-    alerts: "alerts"
+    - "kafka:9092"
   consumer_group: "wikisurge-prod"
-  batch_size: 1000
-  flush_interval: "5s"
+  max_poll_records: 1000
+  session_timeout: 60s
 
-redis:
-  host: "redis-cluster"
-  port: 6379
-  db: 0
-  ttl: "24h"
-  pool_size: 20
-  idle_timeout: "5m"
-
-elasticsearch:
-  hosts:
-    - "http://es-1:9200"
-    - "http://es-2:9200"
-    - "http://es-3:9200"
-  index_prefix: "wikisurge-prod"
-  bulk_size: 1000
-  flush_interval: "10s"
-  replicas: 2
-  shards: 3
-
-metrics:
-  port: 2112
-  path: "/metrics"
+api:
+  port: 8080
+  rate_limit: 10000
+  max_websocket_connections: 5000
 
 logging:
-  level: "info"
+  level: "warn"
   format: "json"
-
-wikipedia:
-  sse_url: "https://stream.wikimedia.org/v2/stream/recentchange"
-  rate_limit: 1000
-  timeout: "30s"
-  retry_attempts: 3
-  retry_delay: "5s"
-
-alerting:
-  enabled: true
-  thresholds:
-    ingestion_rate_low: 10
-    kafka_lag_high: 10000
-    memory_usage_high: 90
-    disk_usage_high: 80

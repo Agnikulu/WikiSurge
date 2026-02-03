@@ -1,36 +1,47 @@
 # Development Configuration
-server:
-  port: 8080
-  host: "0.0.0.0"
+features:
+  elasticsearch_indexing: true
+  trending: true
+  edit_wars: true
+  websockets: true
+
+elasticsearch:
+  enabled: true
+  url: "http://localhost:9200"
+  retention_days: 7
+  max_docs_per_day: 10000
+  selective_criteria:
+    trending_top_n: 100
+    spike_ratio_min: 2.0
+    edit_war_enabled: true
+
+redis:
+  url: "redis://localhost:6379"
+  max_memory: "256mb"
+  eviction_policy: "allkeys-lru"
+  hot_pages:
+    max_tracked: 1000
+    promotion_threshold: 5
+    window_duration: 15m
+    max_members_per_page: 100
+  trending:
+    enabled: true
+    max_pages: 1000
+    half_life_minutes: 30.0
+    prune_interval: 5m
 
 kafka:
   brokers:
     - "localhost:9092"
-  topics:
-    wikipedia_changes: "wikipedia-changes"
-    hot_pages: "hot-pages"
   consumer_group: "wikisurge-dev"
+  max_poll_records: 500
+  session_timeout: 30s
 
-redis:
-  host: "localhost"
-  port: 6379
-  db: 0
-  ttl: "1h"
-
-elasticsearch:
-  hosts:
-    - "http://localhost:9200"
-  index_prefix: "wikisurge-dev"
-
-metrics:
-  port: 2112
-  path: "/metrics"
+api:
+  port: 8080
+  rate_limit: 1000
+  max_websocket_connections: 1000
 
 logging:
   level: "debug"
   format: "json"
-
-wikipedia:
-  sse_url: "https://stream.wikimedia.org/v2/stream/recentchange"
-  rate_limit: 100
-  timeout: "30s"

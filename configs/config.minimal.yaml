@@ -1,25 +1,47 @@
-# Minimal Configuration for Testing
-server:
-  port: 8080
+# Minimal Configuration - Lightweight setup
+features:
+  elasticsearch_indexing: false
+  trending: false
+  edit_wars: true
+  websockets: true
+
+elasticsearch:
+  enabled: false
+  url: "http://localhost:9200"
+  retention_days: 3
+  max_docs_per_day: 1000
+  selective_criteria:
+    trending_top_n: 50
+    spike_ratio_min: 3.0
+    edit_war_enabled: true
+
+redis:
+  url: "redis://localhost:6379"
+  max_memory: "128mb"
+  eviction_policy: "allkeys-lru"
+  hot_pages:
+    max_tracked: 100
+    promotion_threshold: 3
+    window_duration: 10m
+    max_members_per_page: 50
+  trending:
+    enabled: false
+    max_pages: 100
+    half_life_minutes: 15.0
+    prune_interval: 10m
 
 kafka:
   brokers:
     - "localhost:9092"
-  topics:
-    wikipedia_changes: "wikipedia-changes"
   consumer_group: "wikisurge-minimal"
+  max_poll_records: 100
+  session_timeout: 30s
 
-redis:
-  host: "localhost"
-  port: 6379
-
-elasticsearch:
-  hosts:
-    - "http://localhost:9200"
-  index_prefix: "wikisurge-minimal"
-
-wikipedia:
-  sse_url: "https://stream.wikimedia.org/v2/stream/recentchange"
+api:
+  port: 8080
+  rate_limit: 500
+  max_websocket_connections: 100
 
 logging:
   level: "info"
+  format: "text"

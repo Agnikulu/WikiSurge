@@ -49,6 +49,50 @@ health:
 # Run all tests (placeholder)
 test:
 	@echo "Running tests..."
+
+# Test infrastructure components
+test-infra:
+	@echo "Testing infrastructure components..."
+	@./scripts/test-infrastructure.sh
+
+# Test configuration and metrics
+test-config:
+	@echo "Testing configuration and metrics..."
+	@./scripts/test-config.sh
+
+# Build Go applications
+build:
+	@echo "Building applications..."
+	@go build -o bin/api ./cmd/api
+	@go build -o bin/ingestor ./cmd/ingestor
+	@go build -o bin/processor ./cmd/processor
+
+# Build and run demo
+demo:
+	@echo "Building and running configuration/metrics demo..."
+	@go build -o bin/demo ./cmd/demo
+	@./bin/demo
+
+# Validate configuration and metrics
+validate:
+	@echo "Validating WikiSurge configuration and metrics framework..."
+	@echo ""
+	@echo "=== Configuration Validation ==="
+	@echo "Testing dev config..."
+	@go run ./cmd/demo configs/config.dev.yaml & sleep 3 && pkill -f demo
+	@echo ""
+	@echo "Testing minimal config..."
+	@go run ./cmd/demo configs/config.minimal.yaml & sleep 3 && pkill -f demo
+	@echo ""
+	@echo "Testing prod config..."
+	@go run ./cmd/demo configs/config.prod.yaml & sleep 3 && pkill -f demo
+	@echo ""
+	@echo "=== Metrics Endpoint Test ==="
+	@echo "Starting metrics server..."
+	@go run ./cmd/demo & sleep 3 && curl -s http://localhost:2112/metrics | head -5 && pkill -f demo
+	@echo ""
+	@echo "✅ Configuration and metrics validation complete!"
+	@echo "Running tests..."
 	@go test ./... -v
 
 # Build all Go applications
