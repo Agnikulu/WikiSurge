@@ -38,9 +38,6 @@ func NewServer(port int) *Server {
 
 // Start starts the metrics server in a goroutine
 func (s *Server) Start() error {
-	// Initialize all metrics first
-	InitMetrics()
-	
 	log.Printf("Starting metrics server on port %d", s.port)
 	
 	go func() {

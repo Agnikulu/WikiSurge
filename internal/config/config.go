@@ -13,6 +13,7 @@ import (
 // Config represents the main configuration structure
 type Config struct {
 	Features      Features      `yaml:"features"`
+	Ingestor      Ingestor      `yaml:"ingestor"`
 	Elasticsearch Elasticsearch `yaml:"elasticsearch"`
 	Redis         Redis         `yaml:"redis"`
 	Kafka         Kafka         `yaml:"kafka"`
@@ -26,6 +27,17 @@ type Features struct {
 	Trending             bool `yaml:"trending"`
 	EditWars             bool `yaml:"edit_wars"`
 	Websockets           bool `yaml:"websockets"`
+}
+
+// Ingestor configuration for Wikipedia SSE client
+type Ingestor struct {
+	ExcludeBots      bool     `yaml:"exclude_bots"`
+	AllowedLanguages []string `yaml:"allowed_languages"`
+	RateLimit        int      `yaml:"rate_limit"`
+	BurstLimit       int      `yaml:"burst_limit"`
+	ReconnectDelay   time.Duration `yaml:"reconnect_delay"`
+	MaxReconnectDelay time.Duration `yaml:"max_reconnect_delay"`
+	MetricsPort      int      `yaml:"metrics_port"`
 }
 
 // Elasticsearch configuration
@@ -120,6 +132,23 @@ func LoadConfig(configPath string) (*Config, error) {
 
 // setDefaults sets default values for optional fields
 func setDefaults(config *Config) {
+	// Ingestor defaults
+	if config.Ingestor.RateLimit == 0 {
+		config.Ingestor.RateLimit = 100
+	}
+	if config.Ingestor.BurstLimit == 0 {
+		config.Ingestor.BurstLimit = 200
+	}
+	if config.Ingestor.ReconnectDelay == 0 {
+		config.Ingestor.ReconnectDelay = 1 * time.Second
+	}
+	if config.Ingestor.MaxReconnectDelay == 0 {
+		config.Ingestor.MaxReconnectDelay = 60 * time.Second
+	}
+	if config.Ingestor.MetricsPort == 0 {
+		config.Ingestor.MetricsPort = 2112
+	}
+
 	// Elasticsearch defaults
 	if config.Elasticsearch.URL == "" {
 		config.Elasticsearch.URL = "http://localhost:9200"

@@ -104,6 +104,22 @@ var (
 		[]string{},
 	)
 
+	RateLimitHitsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "rate_limit_hits_total",
+			Help: "Rate limiter hits",
+		},
+		[]string{},
+	)
+
+	SSEReconnectionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "sse_reconnections_total",
+			Help: "SSE client reconnection attempts",
+		},
+		[]string{},
+	)
+
 	// Gauges
 	KafkaConsumerLag = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -260,6 +276,12 @@ func InitMetrics() {
 
 	prometheus.MustRegister(WebSocketDisconnectionsTotal)
 	metricsRegistry["websocket_disconnections_total"] = WebSocketDisconnectionsTotal
+
+	prometheus.MustRegister(RateLimitHitsTotal)
+	metricsRegistry["rate_limit_hits_total"] = RateLimitHitsTotal
+
+	prometheus.MustRegister(SSEReconnectionsTotal)
+	metricsRegistry["sse_reconnections_total"] = SSEReconnectionsTotal
 
 	// Register all gauges
 	prometheus.MustRegister(KafkaConsumerLag)

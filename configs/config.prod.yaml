@@ -5,6 +5,15 @@ features:
   edit_wars: true
   websockets: true
 
+ingestor:
+  exclude_bots: true
+  allowed_languages: ["en"]
+  rate_limit: 200
+  burst_limit: 400
+  reconnect_delay: 1s
+  max_reconnect_delay: 60s
+  metrics_port: 2112
+
 elasticsearch:
   enabled: true
   url: "http://elasticsearch:9200"
