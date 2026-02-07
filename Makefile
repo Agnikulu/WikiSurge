@@ -1,9 +1,14 @@
-.PHONY: setup start stop clean logs health test
+.PHONY: setup kafka-setup start stop clean logs health test
 
 # Setup infrastructure
 setup:
 	@echo "Setting up WikiSurge infrastructure..."
 	@./scripts/setup-infrastructure.sh
+
+# Setup Kafka topic
+kafka-setup:
+	@echo "Setting up Kafka topic..."
+	@./scripts/setup-kafka-topic.sh
 
 # Start all Docker services
 start:

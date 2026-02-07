@@ -32,6 +32,38 @@ var (
 		[]string{},
 	)
 
+	ProduceAttemptsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "produce_attempts_total",
+			Help: "Total attempts to produce messages to Kafka",
+		},
+		[]string{},
+	)
+
+	MessagesProducedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "messages_produced_total",
+			Help: "Total messages successfully produced to Kafka",
+		},
+		[]string{},
+	)
+
+	MessagesDroppedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "messages_dropped_total",
+			Help: "Total messages dropped due to buffer full or other reasons",
+		},
+		[]string{"reason"},
+	)
+
+	ProduceErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "produce_errors_total",
+			Help: "Total Kafka production errors by type",
+		},
+		[]string{"type"},
+	)
+
 	EditsProcessedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "edits_processed_total",
@@ -249,6 +281,18 @@ func InitMetrics() {
 
 	prometheus.MustRegister(KafkaProduceErrorsTotal)
 	metricsRegistry["kafka_produce_errors_total"] = KafkaProduceErrorsTotal
+
+	prometheus.MustRegister(ProduceAttemptsTotal)
+	metricsRegistry["produce_attempts_total"] = ProduceAttemptsTotal
+
+	prometheus.MustRegister(MessagesProducedTotal)
+	metricsRegistry["messages_produced_total"] = MessagesProducedTotal
+
+	prometheus.MustRegister(MessagesDroppedTotal)
+	metricsRegistry["messages_dropped_total"] = MessagesDroppedTotal
+
+	prometheus.MustRegister(ProduceErrorsTotal)
+	metricsRegistry["produce_errors_total"] = ProduceErrorsTotal
 
 	prometheus.MustRegister(EditsProcessedTotal)
 	metricsRegistry["edits_processed_total"] = EditsProcessedTotal

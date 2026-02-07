@@ -12,6 +12,7 @@ import (
 
 	"github.com/Agnikulu/WikiSurge/internal/config"
 	"github.com/Agnikulu/WikiSurge/internal/ingestor"
+	"github.com/Agnikulu/WikiSurge/internal/kafka"
 	"github.com/Agnikulu/WikiSurge/internal/metrics"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -58,8 +59,19 @@ func main() {
 		}
 	}()
 
+	// Create Kafka producer
+	producer, err := kafka.NewProducer(cfg.Kafka.Brokers, "wikipedia.edits", cfg, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to create Kafka producer")
+	}
+
+	// Start the Kafka producer
+	if err := producer.Start(); err != nil {
+		logger.Fatal().Err(err).Msg("Failed to start Kafka producer")
+	}
+
 	// Create Wikipedia SSE client
-	client := ingestor.NewWikiStreamClient(cfg, logger)
+	client := ingestor.NewWikiStreamClient(cfg, logger, producer)
 
 	// Test connection first
 	if err := client.Connect(); err != nil {

@@ -41,7 +41,7 @@ redis:
 
 kafka:
   brokers:
-    - "localhost:9092"
+    - "localhost:19092"
   consumer_group: "wikisurge-dev"
   max_poll_records: 500
   session_timeout: 30s

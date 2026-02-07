@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Agnikulu/WikiSurge/internal/config"
+	"github.com/Agnikulu/WikiSurge/internal/kafka"
 	"github.com/Agnikulu/WikiSurge/internal/metrics"
 	"github.com/Agnikulu/WikiSurge/internal/models"
 	"github.com/r3labs/sse/v2"
@@ -24,20 +25,21 @@ const (
 
 // WikiStreamClient handles connection to Wikipedia's SSE stream
 type WikiStreamClient struct {
-	sseClient       *sse.Client
-	config          *config.Config
-	logger          zerolog.Logger
-	rateLimiter     *rate.Limiter
-	stopChan        chan struct{}
-	reconnectDelay  time.Duration
-	wg              sync.WaitGroup
-	mu              sync.RWMutex
-	isRunning       bool
+	sseClient         *sse.Client
+	config            *config.Config
+	logger            zerolog.Logger
+	rateLimiter       *rate.Limiter
+	producer          *kafka.Producer
+	stopChan          chan struct{}
+	reconnectDelay    time.Duration
+	wg                sync.WaitGroup
+	mu                sync.RWMutex
+	isRunning         bool
 	rateLimitHitCount int64
 }
 
 // NewWikiStreamClient creates a new Wikipedia SSE client
-func NewWikiStreamClient(cfg *config.Config, logger zerolog.Logger) *WikiStreamClient {
+func NewWikiStreamClient(cfg *config.Config, logger zerolog.Logger, producer *kafka.Producer) *WikiStreamClient {
 	// Create rate limiter with configured limits
 	rateLimiter := rate.NewLimiter(rate.Limit(cfg.Ingestor.RateLimit), cfg.Ingestor.BurstLimit)
 	
@@ -56,6 +58,7 @@ func NewWikiStreamClient(cfg *config.Config, logger zerolog.Logger) *WikiStreamC
 		config:         cfg,
 		logger:         logger.With().Str("component", "sse-client").Logger(),
 		rateLimiter:    rateLimiter,
+		producer:       producer,
 		stopChan:       make(chan struct{}),
 		reconnectDelay: cfg.Ingestor.ReconnectDelay,
 	}
@@ -244,20 +247,27 @@ func (w *WikiStreamClient) processEvent(event *sse.Event) error {
 	// Increment metrics
 	metrics.EditsIngestedTotal.WithLabelValues().Inc()
 	
-	// Log the edit (placeholder for Kafka sending)
-	w.logger.Info().
-		Int64("edit_id", edit.ID).
-		Str("title", edit.Title).
-		Str("user", edit.User).
-		Bool("bot", edit.Bot).
-		Str("type", edit.Type).
-		Str("language", edit.Language()).
-		Int("byte_change", edit.ByteChange()).
-		Bool("significant", edit.IsSignificant()).
-		Msg("Edit processed")
-	
-	// TODO: Send to Kafka (placeholder for now)
-	// This is where we would send edit.ToJSON() to Kafka
+	// Send edit to Kafka
+	if err := w.producer.Produce(&edit); err != nil {
+		w.logger.Error().
+			Err(err).
+			Int64("edit_id", edit.ID).
+			Str("title", edit.Title).
+			Msg("Failed to send edit to Kafka")
+		metrics.ProduceErrorsTotal.WithLabelValues("produce").Inc()
+		// Continue processing other events even if one fails
+	} else {
+		w.logger.Debug().
+			Int64("edit_id", edit.ID).
+			Str("title", edit.Title).
+			Str("user", edit.User).
+			Bool("bot", edit.Bot).
+			Str("type", edit.Type).
+			Str("language", edit.Language()).
+			Int("byte_change", edit.ByteChange()).
+			Bool("significant", edit.IsSignificant()).
+			Msg("Edit sent to Kafka successfully")
+	}
 	
 	return nil
 }
@@ -301,6 +311,13 @@ func (w *WikiStreamClient) Stop() {
 	
 	// Signal stop to event loop
 	close(w.stopChan)
+	
+	// Close Kafka producer first to flush any remaining messages
+	if w.producer != nil {
+		if err := w.producer.Close(); err != nil {
+			w.logger.Error().Err(err).Msg("Failed to close Kafka producer")
+		}
+	}
 	
 	// Close SSE client
 	if w.sseClient != nil {
