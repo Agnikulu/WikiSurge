@@ -72,6 +72,34 @@ func main() {
 	trendingAggregator := processor.NewTrendingAggregator(trendingScorer, cfg, logger)
 	logger.Info().Msg("Initialized TrendingAggregator")
 
+	// Initialize IndexingStrategy
+	indexingStrategy := storage.NewIndexingStrategy(
+		&cfg.Elasticsearch.SelectiveCriteria,
+		redisClient,
+		trendingScorer,
+		hotPageTracker,
+	)
+	logger.Info().Msg("Initialized IndexingStrategy")
+
+	// Initialize Elasticsearch client (if enabled)
+	var esClient *storage.ElasticsearchClient
+	var selectiveIndexer *processor.SelectiveIndexer
+	if cfg.Elasticsearch.Enabled {
+		var esErr error
+		esClient, esErr = storage.NewElasticsearchClient(&cfg.Elasticsearch)
+		if esErr != nil {
+			logger.Warn().Err(esErr).Msg("Failed to create Elasticsearch client, indexing disabled")
+		} else {
+			logger.Info().Msg("Connected to Elasticsearch")
+			esClient.StartBulkProcessor()
+
+			// Initialize SelectiveIndexer
+			selectiveIndexer = processor.NewSelectiveIndexer(esClient, indexingStrategy, cfg, logger)
+			selectiveIndexer.Start()
+			logger.Info().Msg("Initialized SelectiveIndexer")
+		}
+	}
+
 	// Initialize Kafka consumer for spike detection
 	spikeConsumerCfg := kafka.ConsumerConfig{
 		Brokers:        cfg.Kafka.Brokers,
@@ -106,6 +134,27 @@ func main() {
 		logger.Fatal().Err(err).Msg("Failed to create trending aggregation Kafka consumer")
 	}
 
+	// Initialize Kafka consumer for elasticsearch indexing (if enabled)
+	var indexerConsumer *kafka.Consumer
+	if selectiveIndexer != nil {
+		indexerConsumerCfg := kafka.ConsumerConfig{
+			Brokers:        cfg.Kafka.Brokers,
+			Topic:          "wikipedia.edits",
+			GroupID:        "elasticsearch-indexer",
+			StartOffset:    kafkago.FirstOffset,
+			MinBytes:       1024,
+			MaxBytes:       10 * 1024 * 1024,
+			CommitInterval: time.Second,
+			MaxWait:        500 * time.Millisecond,
+		}
+
+		var indexerErr error
+		indexerConsumer, indexerErr = kafka.NewConsumer(cfg, indexerConsumerCfg, selectiveIndexer, logger)
+		if indexerErr != nil {
+			logger.Fatal().Err(indexerErr).Msg("Failed to create elasticsearch indexer Kafka consumer")
+		}
+	}
+
 	// Start metrics server
 	metricsPort := 2112 // Default metrics port for processor
 	if cfg.Ingestor.MetricsPort != 0 {
@@ -125,6 +174,14 @@ func main() {
 		logger.Fatal().Err(err).Msg("Failed to start trending aggregation Kafka consumer")
 	}
 	logger.Info().Msg("Trending aggregation Kafka consumer started")
+
+	// Start indexer consumer (if enabled)
+	if indexerConsumer != nil {
+		if err := indexerConsumer.Start(); err != nil {
+			logger.Fatal().Err(err).Msg("Failed to start elasticsearch indexer Kafka consumer")
+		}
+		logger.Info().Msg("Elasticsearch indexer Kafka consumer started")
+	}
 
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -150,6 +207,29 @@ func main() {
 		logger.Error().Err(err).Msg("Error stopping trending aggregation Kafka consumer")
 	} else {
 		logger.Info().Msg("Trending aggregation Kafka consumer stopped")
+	}
+
+	// Stop indexer consumer
+	if indexerConsumer != nil {
+		if err := indexerConsumer.Stop(); err != nil {
+			logger.Error().Err(err).Msg("Error stopping elasticsearch indexer Kafka consumer")
+		} else {
+			logger.Info().Msg("Elasticsearch indexer Kafka consumer stopped")
+		}
+	}
+
+	// Stop selective indexer
+	if selectiveIndexer != nil {
+		logger.Info().Msg("Stopping selective indexer...")
+		selectiveIndexer.Stop()
+		logger.Info().Msg("Selective indexer stopped")
+	}
+
+	// Stop ES client
+	if esClient != nil {
+		logger.Info().Msg("Stopping Elasticsearch client...")
+		esClient.Stop()
+		logger.Info().Msg("Elasticsearch client stopped")
 	}
 	
 	// Stop trending scorer
