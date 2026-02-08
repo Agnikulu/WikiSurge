@@ -2,10 +2,15 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Agnikulu/WikiSurge/internal/storage"
 )
 
 // ---------------------------------------------------------------------------
@@ -218,38 +223,170 @@ func (s *APIServer) handleGetStats(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
-	limit, err := parseIntQuery(r, "limit", 20, 200)
+	limit, err := parseIntQuery(r, "limit", 20, 100)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'limit' parameter (must be 1-200)", "INVALID_PARAM")
+		respondError(w, http.StatusBadRequest, "Invalid 'limit' parameter (must be 1-100)", "INVALID_PARAM")
 		return
 	}
-	alertType := r.URL.Query().Get("type")
-	if alertType == "" {
-		alertType = "spikes" // default
+
+	offset, err := parseIntQuery(r, "offset", 0, 10000)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid 'offset' parameter", "INVALID_PARAM")
+		return
 	}
 
-	validTypes := map[string]bool{"spikes": true, "editwars": true, "trending": true, "vandalism": true}
-	if !validTypes[alertType] {
-		respondError(w, http.StatusBadRequest,
-			fmt.Sprintf("Invalid alert type '%s'; valid types: spikes, editwars, trending, vandalism", alertType),
-			"INVALID_PARAM")
+	// Parse 'since' (default: 24h ago)
+	since, err := parseTimeQuery(r, "since", time.Now().Add(-24*time.Hour))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid 'since' parameter (use RFC3339 or Unix timestamp)", "INVALID_PARAM")
+		return
+	}
+
+	severity := r.URL.Query().Get("severity")
+	if severity != "" {
+		validSeverities := map[string]bool{"low": true, "medium": true, "high": true, "critical": true}
+		if !validSeverities[severity] {
+			respondError(w, http.StatusBadRequest,
+				fmt.Sprintf("Invalid severity '%s'; valid values: low, medium, high, critical", severity),
+				"INVALID_PARAM")
+			return
+		}
+	}
+
+	alertType := r.URL.Query().Get("type")
+	validTypes := map[string]string{
+		"spike":    "spikes",
+		"edit_war": "editwars",
+		"spikes":   "spikes",
+		"editwars": "editwars",
+	}
+
+	if alertType != "" {
+		if _, ok := validTypes[alertType]; !ok {
+			respondError(w, http.StatusBadRequest,
+				fmt.Sprintf("Invalid alert type '%s'; valid types: spike, edit_war", alertType),
+				"INVALID_PARAM")
+			return
+		}
+	}
+
+	// Check cache
+	ck := cacheKey("alerts", alertType, severity, since.Format(time.RFC3339), strconv.Itoa(limit), strconv.Itoa(offset))
+	if cached, ok := s.cache.Get(ck); ok {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "max-age=5")
+		w.Header().Set("X-Cache", "HIT")
+		w.WriteHeader(http.StatusOK)
+		w.Write(cached)
 		return
 	}
 
 	if s.alerts == nil {
-		respondJSON(w, http.StatusOK, []interface{}{})
+		respondJSON(w, http.StatusOK, AlertsResponse{
+			Alerts: []AlertEntry{},
+			Total:  0,
+			Pagination: PaginationInfo{
+				Total: 0, Limit: limit, Offset: offset, HasMore: false,
+			},
+		})
 		return
 	}
 
 	ctx := r.Context()
-	alerts, err := s.alerts.GetRecentAlerts(ctx, alertType, int64(limit))
-	if err != nil {
-		s.logger.Error().Err(err).Str("type", alertType).Msg("failed to get alerts")
-		respondError(w, http.StatusInternalServerError, "Failed to retrieve alerts", "INTERNAL_ERROR")
-		return
+
+	// Decide which streams to query
+	streams := []string{}
+	if alertType == "" {
+		streams = []string{"spikes", "editwars"}
+	} else {
+		streams = []string{validTypes[alertType]}
 	}
 
-	respondJSON(w, http.StatusOK, alerts)
+	// Fetch a larger batch to allow for filtering + offset
+	fetchCount := int64(limit + offset + 100)
+	var allAlerts []storage.Alert
+
+	for _, stream := range streams {
+		alerts, err := s.alerts.GetAlertsSince(ctx, stream, since, severity, fetchCount)
+		if err != nil {
+			s.logger.Error().Err(err).Str("stream", stream).Msg("failed to get alerts")
+			continue
+		}
+		allAlerts = append(allAlerts, alerts...)
+	}
+
+	// Sort all combined alerts by timestamp descending
+	sort.Slice(allAlerts, func(i, j int) bool {
+		return allAlerts[i].Timestamp.After(allAlerts[j].Timestamp)
+	})
+
+	// Transform to response format
+	total := len(allAlerts)
+	entries := make([]AlertEntry, 0)
+
+	// Apply offset
+	start := offset
+	if start > len(allAlerts) {
+		start = len(allAlerts)
+	}
+	end := start + limit
+	if end > len(allAlerts) {
+		end = len(allAlerts)
+	}
+
+	for _, a := range allAlerts[start:end] {
+		entry := AlertEntry{
+			Type:      a.Type,
+			Timestamp: a.Timestamp.Format(time.RFC3339),
+			Severity:  storage.DeriveSeverity(a),
+		}
+
+		if title, ok := a.Data["title"].(string); ok {
+			entry.PageTitle = title
+		}
+		if wiki, ok := a.Data["wiki"].(string); ok {
+			entry.Wiki = wiki
+		}
+		if ratio, ok := a.Data["spike_ratio"].(float64); ok {
+			entry.SpikeRatio = ratio
+		}
+		if editCount, ok := a.Data["edit_count"].(float64); ok {
+			entry.Edits5Min = int(editCount)
+		}
+		if numEditors, ok := a.Data["num_editors"].(float64); ok {
+			entry.EditorCount = int(numEditors)
+		}
+		if participants, ok := a.Data["participants"].([]interface{}); ok {
+			eds := make([]string, 0, len(participants))
+			for _, p := range participants {
+				if s, ok := p.(string); ok {
+					eds = append(eds, s)
+				}
+			}
+			entry.Editors = eds
+		}
+
+		entries = append(entries, entry)
+	}
+
+	resp := AlertsResponse{
+		Alerts: entries,
+		Total:  total,
+		Pagination: PaginationInfo{
+			Total:   int64(total),
+			Limit:   limit,
+			Offset:  offset,
+			HasMore: end < total,
+		},
+	}
+
+	// Cache the response
+	respBytes, _ := json.Marshal(resp)
+	s.cache.Set(ck, respBytes, 5*time.Second)
+
+	w.Header().Set("Cache-Control", "max-age=5")
+	w.Header().Set("X-Cache", "MISS")
+	respondJSON(w, http.StatusOK, resp)
 }
 
 // ---------------------------------------------------------------------------
@@ -263,20 +400,95 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	active := parseBoolQuery(r, "active", true)
+
 	if s.alerts == nil {
-		respondJSON(w, http.StatusOK, []interface{}{})
+		respondJSON(w, http.StatusOK, []EditWarEntry{})
 		return
 	}
 
 	ctx := r.Context()
-	alerts, err := s.alerts.GetRecentAlerts(ctx, "editwars", int64(limit))
-	if err != nil {
-		s.logger.Error().Err(err).Msg("failed to get edit war alerts")
-		respondError(w, http.StatusInternalServerError, "Failed to retrieve edit wars", "INTERNAL_ERROR")
+
+	if active {
+		// SCAN for editwar:editors:* keys to find currently active wars
+		activeWars, err := s.alerts.GetActiveEditWars(ctx, limit)
+		if err != nil {
+			s.logger.Error().Err(err).Msg("failed to scan active edit wars")
+			respondError(w, http.StatusInternalServerError, "Failed to retrieve active edit wars", "INTERNAL_ERROR")
+			return
+		}
+
+		results := make([]EditWarEntry, 0, len(activeWars))
+		for _, w := range activeWars {
+			entry := EditWarEntry{Active: true}
+			if pt, ok := w["page_title"].(string); ok {
+				entry.PageTitle = pt
+			}
+			if ec, ok := w["editor_count"].(int); ok {
+				entry.EditorCount = ec
+			}
+			if edc, ok := w["edit_count"].(int); ok {
+				entry.EditCount = edc
+			}
+			if rc, ok := w["revert_count"].(int); ok {
+				entry.RevertCount = rc
+			}
+			if sev, ok := w["severity"].(string); ok {
+				entry.Severity = sev
+			}
+			if eds, ok := w["editors"].([]string); ok {
+				entry.Editors = eds
+			}
+			results = append(results, entry)
+		}
+
+		respondJSON(w, http.StatusOK, results)
 		return
 	}
 
-	respondJSON(w, http.StatusOK, alerts)
+	// Historical: read from the alerts:editwars stream
+	since := time.Now().Add(-7 * 24 * time.Hour) // last 7 days
+	historicalWars, err := s.alerts.GetEditWarAlertsSince(ctx, since, int64(limit))
+	if err != nil {
+		s.logger.Error().Err(err).Msg("failed to get historical edit wars")
+		respondError(w, http.StatusInternalServerError, "Failed to retrieve edit war history", "INTERNAL_ERROR")
+		return
+	}
+
+	results := make([]EditWarEntry, 0, len(historicalWars))
+	for _, w := range historicalWars {
+		entry := EditWarEntry{Active: false}
+		if pt, ok := w["page_title"].(string); ok {
+			entry.PageTitle = pt
+		}
+		if ec, ok := w["editor_count"].(float64); ok {
+			entry.EditorCount = int(ec)
+		}
+		if edc, ok := w["edit_count"].(float64); ok {
+			entry.EditCount = int(edc)
+		}
+		if rc, ok := w["revert_count"].(float64); ok {
+			entry.RevertCount = int(rc)
+		}
+		if sev, ok := w["severity"].(string); ok {
+			entry.Severity = sev
+		}
+		if ts, ok := w["start_time"].(string); ok {
+			entry.StartTime = ts
+		}
+		if eds, ok := w["editors"].([]interface{}); ok {
+			names := make([]string, 0, len(eds))
+			for _, e := range eds {
+				if s, ok := e.(string); ok {
+					names = append(names, s)
+				}
+			}
+			entry.Editors = names
+		}
+		results = append(results, entry)
+	}
+
+	respondJSON(w, http.StatusOK, results)
 }
 
 // ---------------------------------------------------------------------------
@@ -290,9 +502,34 @@ func (s *APIServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit, err := parseIntQuery(r, "limit", 20, 100)
+	limit, err := parseIntQuery(r, "limit", 50, 100)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'limit' parameter", "INVALID_PARAM")
+		respondError(w, http.StatusBadRequest, "Invalid 'limit' parameter (must be 1-100)", "INVALID_PARAM")
+		return
+	}
+
+	offset, err := parseIntQuery(r, "offset", 0, 10000)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid 'offset' parameter", "INVALID_PARAM")
+		return
+	}
+
+	// Parse time range
+	defaultFrom := time.Now().Add(-7 * 24 * time.Hour) // 7 days ago
+	from, err := parseTimeQuery(r, "from", defaultFrom)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid 'from' parameter (use RFC3339 or Unix timestamp)", "INVALID_PARAM")
+		return
+	}
+
+	to, err := parseTimeQuery(r, "to", time.Now())
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid 'to' parameter (use RFC3339 or Unix timestamp)", "INVALID_PARAM")
+		return
+	}
+
+	if from.After(to) {
+		respondError(w, http.StatusBadRequest, "'from' must be before 'to'", "INVALID_PARAM")
 		return
 	}
 
@@ -301,27 +538,198 @@ func (s *APIServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	searchQuery := map[string]interface{}{
-		"size": limit,
-		"query": map[string]interface{}{
-			"multi_match": map[string]interface{}{
-				"query":  query,
-				"fields": []string{"title^3", "user", "comment"},
-			},
-		},
-		"sort": []map[string]interface{}{
-			{"timestamp": map[string]string{"order": "desc"}},
-		},
+	// Optional filters
+	language := r.URL.Query().Get("language")
+	botFilter := r.URL.Query().Get("bot")
+
+	// Check cache
+	ck := cacheKey("search", query, from.Format(time.RFC3339), to.Format(time.RFC3339),
+		strconv.Itoa(limit), strconv.Itoa(offset), language, botFilter)
+	if cached, ok := s.cache.Get(ck); ok {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "max-age=10")
+		w.Header().Set("X-Cache", "HIT")
+		w.WriteHeader(http.StatusOK)
+		w.Write(cached)
+		return
 	}
+
+	// Build Elasticsearch query
+	searchQuery := s.buildSearchQuery(query, from, to, limit, offset, language, botFilter)
 
 	result, err := s.es.Search(searchQuery, "wikipedia-edits-*")
 	if err != nil {
+		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "context deadline exceeded") {
+			respondError(w, http.StatusGatewayTimeout, "Search timed out", "TIMEOUT")
+			return
+		}
 		s.logger.Error().Err(err).Str("query", query).Msg("Elasticsearch search failed")
 		respondError(w, http.StatusInternalServerError, "Search failed", "INTERNAL_ERROR")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, result)
+	// Parse ES response
+	resp := s.parseSearchResponse(result, query, limit, offset)
+
+	// Cache the response
+	respBytes, _ := json.Marshal(resp)
+	s.cache.Set(ck, respBytes, 10*time.Second)
+
+	w.Header().Set("Cache-Control", "max-age=10")
+	w.Header().Set("X-Cache", "MISS")
+	respondJSON(w, http.StatusOK, resp)
+}
+
+// buildSearchQuery constructs an Elasticsearch bool query DSL.
+func (s *APIServer) buildSearchQuery(
+	query string,
+	from, to time.Time,
+	limit, offset int,
+	language, botFilter string,
+) map[string]interface{} {
+	// Build the multi_match must clause
+	multiMatch := map[string]interface{}{
+		"query":     query,
+		"fields":    []string{"title^2", "comment", "user"},
+		"fuzziness": "AUTO",
+	}
+
+	// Detect phrase queries (quoted strings)
+	if strings.HasPrefix(query, "\"") && strings.HasSuffix(query, "\"") {
+		multiMatch["type"] = "phrase"
+		multiMatch["query"] = strings.Trim(query, "\"")
+		delete(multiMatch, "fuzziness")
+	}
+
+	must := []interface{}{
+		map[string]interface{}{
+			"multi_match": multiMatch,
+		},
+	}
+
+	// Build filters
+	filters := []interface{}{
+		map[string]interface{}{
+			"range": map[string]interface{}{
+				"timestamp": map[string]interface{}{
+					"gte": from.Format("2006-01-02T15:04:05.000Z"),
+					"lte": to.Format("2006-01-02T15:04:05.000Z"),
+				},
+			},
+		},
+	}
+
+	// Language filter
+	if language != "" {
+		filters = append(filters, map[string]interface{}{
+			"term": map[string]interface{}{
+				"language": language,
+			},
+		})
+	}
+
+	// Bot filter
+	if botFilter != "" {
+		isBot := botFilter == "true" || botFilter == "1"
+		filters = append(filters, map[string]interface{}{
+			"term": map[string]interface{}{
+				"bot": isBot,
+			},
+		})
+	}
+
+	esQuery := map[string]interface{}{
+		"query": map[string]interface{}{
+			"bool": map[string]interface{}{
+				"must":   must,
+				"filter": filters,
+			},
+		},
+		"size": limit,
+		"from": offset,
+		"sort": []map[string]interface{}{
+			{"timestamp": map[string]string{"order": "desc"}},
+		},
+		"highlight": map[string]interface{}{
+			"fields": map[string]interface{}{
+				"title":   map[string]interface{}{},
+				"comment": map[string]interface{}{},
+			},
+		},
+	}
+
+	return esQuery
+}
+
+// parseSearchResponse transforms the raw ES response into our SearchResponse.
+func (s *APIServer) parseSearchResponse(result map[string]interface{}, query string, limit, offset int) SearchResponse {
+	resp := SearchResponse{
+		Hits:  make([]SearchHit, 0),
+		Query: query,
+	}
+
+	// Extract total
+	if hitsObj, ok := result["hits"].(map[string]interface{}); ok {
+		// Total count
+		if totalObj, ok := hitsObj["total"].(map[string]interface{}); ok {
+			if val, ok := totalObj["value"].(float64); ok {
+				resp.Total = int64(val)
+			}
+		}
+
+		// Extract individual hits
+		if hitsArr, ok := hitsObj["hits"].([]interface{}); ok {
+			for _, h := range hitsArr {
+				hitMap, ok := h.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				hit := SearchHit{}
+
+				// Score
+				if score, ok := hitMap["_score"].(float64); ok {
+					hit.Score = score
+				}
+
+				// Source fields
+				if source, ok := hitMap["_source"].(map[string]interface{}); ok {
+					if v, ok := source["title"].(string); ok {
+						hit.Title = v
+					}
+					if v, ok := source["user"].(string); ok {
+						hit.User = v
+					}
+					if v, ok := source["comment"].(string); ok {
+						hit.Comment = v
+					}
+					if v, ok := source["wiki"].(string); ok {
+						hit.Wiki = v
+					}
+					if v, ok := source["language"].(string); ok {
+						hit.Language = v
+					}
+					if v, ok := source["timestamp"].(string); ok {
+						hit.Timestamp = v
+					}
+					if v, ok := source["byte_change"].(float64); ok {
+						hit.ByteChange = int(v)
+					}
+				}
+
+				resp.Hits = append(resp.Hits, hit)
+			}
+		}
+	}
+
+	resp.Pagination = PaginationInfo{
+		Total:   resp.Total,
+		Limit:   limit,
+		Offset:  offset,
+		HasMore: int64(offset+limit) < resp.Total,
+	}
+
+	return resp
 }
 
 // ---------------------------------------------------------------------------

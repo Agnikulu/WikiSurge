@@ -302,6 +302,233 @@ func (r *RedisAlerts) parseAlertMessage(message redis.XMessage) (Alert, error) {
 	return alert, nil
 }
 
+// GetAlertsSince retrieves alerts from a stream that are newer than the given timestamp,
+// optionally filtered by severity.
+func (r *RedisAlerts) GetAlertsSince(ctx context.Context, alertType string, since time.Time, severity string, count int64) ([]Alert, error) {
+	streamName := fmt.Sprintf("alerts:%s", alertType)
+
+	// Build the start ID from the since timestamp (milliseconds)
+	startID := fmt.Sprintf("%d-0", since.UnixMilli())
+
+	result, err := r.client.XRevRangeN(ctx, streamName, "+", startID, count).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get alerts since %v: %w", since, err)
+	}
+
+	alerts := make([]Alert, 0, len(result))
+	for _, message := range result {
+		alert, err := r.parseAlertMessage(message)
+		if err != nil {
+			log.Printf("Failed to parse alert message: %v", err)
+			continue
+		}
+
+		// Filter by severity if specified
+		if severity != "" {
+			alertSeverity := DeriveSeverity(alert)
+			if alertSeverity != severity {
+				continue
+			}
+		}
+
+		alerts = append(alerts, alert)
+	}
+
+	return alerts, nil
+}
+
+// GetEditWarAlertsSince reads edit war alerts from the alerts:editwars stream.
+// Edit war alerts are stored in a different format (field "data" instead of "alert_data").
+func (r *RedisAlerts) GetEditWarAlertsSince(ctx context.Context, since time.Time, count int64) ([]map[string]interface{}, error) {
+	streamName := "alerts:editwars"
+	startID := fmt.Sprintf("%d-0", since.UnixMilli())
+
+	result, err := r.client.XRevRangeN(ctx, streamName, "+", startID, count).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get edit war alerts: %w", err)
+	}
+
+	wars := make([]map[string]interface{}, 0, len(result))
+	for _, message := range result {
+		entry := make(map[string]interface{})
+
+		// Try "data" field first (edit war detector format)
+		if dataStr, ok := message.Values["data"].(string); ok {
+			var warData map[string]interface{}
+			if err := json.Unmarshal([]byte(dataStr), &warData); err == nil {
+				entry = warData
+				entry["active"] = false
+				wars = append(wars, entry)
+				continue
+			}
+		}
+
+		// Try "alert_data" field (general alert format)
+		if alertDataStr, ok := message.Values["alert_data"].(string); ok {
+			var alert Alert
+			if err := json.Unmarshal([]byte(alertDataStr), &alert); err == nil {
+				entry["page_title"] = alert.Data["title"]
+				entry["severity"] = message.Values["severity"]
+				entry["active"] = false
+				entry["timestamp"] = alert.Timestamp.Format(time.RFC3339)
+				wars = append(wars, entry)
+			}
+		}
+	}
+
+	return wars, nil
+}
+
+// GetActiveEditWars scans Redis for keys marking active edit wars and builds
+// a response from the editor tracking hashes.
+func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[string]interface{}, error) {
+	var cursor uint64
+	var activeWars []map[string]interface{}
+
+	for {
+		keys, nextCursor, err := r.client.Scan(ctx, cursor, "editwar:editors:*", 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan for active edit wars: %w", err)
+		}
+
+		for _, key := range keys {
+			if len(activeWars) >= limit {
+				break
+			}
+
+			// Extract page title
+			pageTitle := key[len("editwar:editors:"):]
+
+			// Check if the marker key exists (confirms active war)
+			markerKey := fmt.Sprintf("editwar:%s", pageTitle)
+			exists, err := r.client.Exists(ctx, markerKey).Result()
+			if err != nil || exists == 0 {
+				continue
+			}
+
+			// Get editor hash
+			editorMap, err := r.client.HGetAll(ctx, key).Result()
+			if err != nil || len(editorMap) == 0 {
+				continue
+			}
+
+			editors := make([]string, 0, len(editorMap))
+			totalEdits := 0
+			for editor, countStr := range editorMap {
+				editors = append(editors, editor)
+				count := 0
+				fmt.Sscanf(countStr, "%d", &count)
+				totalEdits += count
+			}
+
+			// Count reverts from the changes list
+			changesKey := fmt.Sprintf("editwar:changes:%s", pageTitle)
+			revertCount := 0
+			changes, err := r.client.LRange(ctx, changesKey, 0, -1).Result()
+			if err == nil {
+				revertCount = countRevertPatterns(changes)
+			}
+
+			severity := classifyEditWarSeverity(len(editors), totalEdits, revertCount)
+
+			war := map[string]interface{}{
+				"page_title":   pageTitle,
+				"editor_count": len(editors),
+				"edit_count":   totalEdits,
+				"revert_count": revertCount,
+				"severity":     severity,
+				"editors":      editors,
+				"active":       true,
+			}
+			activeWars = append(activeWars, war)
+		}
+
+		cursor = nextCursor
+		if cursor == 0 || len(activeWars) >= limit {
+			break
+		}
+	}
+
+	if activeWars == nil {
+		activeWars = make([]map[string]interface{}, 0)
+	}
+	return activeWars, nil
+}
+
+// DeriveSeverity extracts or computes severity from an Alert.
+func DeriveSeverity(alert Alert) string {
+	switch alert.Type {
+	case AlertTypeSpike:
+		ratio, _ := alert.Data["spike_ratio"].(float64)
+		switch {
+		case ratio >= 10:
+			return "critical"
+		case ratio >= 5:
+			return "high"
+		case ratio >= 2:
+			return "medium"
+		default:
+			return "low"
+		}
+	case AlertTypeEditWar:
+		numEditors, _ := alert.Data["num_editors"].(float64)
+		switch {
+		case numEditors >= 6:
+			return "critical"
+		case numEditors >= 4:
+			return "high"
+		default:
+			return "medium"
+		}
+	case AlertTypeVandalism:
+		confidence, _ := alert.Data["confidence"].(float64)
+		switch {
+		case confidence >= 0.9:
+			return "critical"
+		case confidence >= 0.7:
+			return "high"
+		case confidence >= 0.5:
+			return "medium"
+		default:
+			return "low"
+		}
+	default:
+		return "low"
+	}
+}
+
+// countRevertPatterns counts sign-reversal patterns in a list of byte change strings.
+func countRevertPatterns(changes []string) int {
+	if len(changes) < 2 {
+		return 0
+	}
+	reverts := 0
+	for i := 1; i < len(changes); i++ {
+		var prev, curr int
+		fmt.Sscanf(changes[i-1], "%d", &prev)
+		fmt.Sscanf(changes[i], "%d", &curr)
+		// A revert is when changes go in opposite directions
+		if (prev > 0 && curr < 0) || (prev < 0 && curr > 0) {
+			reverts++
+		}
+	}
+	return reverts
+}
+
+// classifyEditWarSeverity returns a severity level based on edit war metrics.
+func classifyEditWarSeverity(editorCount, editCount, revertCount int) string {
+	switch {
+	case editorCount >= 5 || revertCount >= 8:
+		return "critical"
+	case editorCount >= 3 || revertCount >= 4:
+		return "high"
+	case editorCount >= 2 || revertCount >= 2:
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
 // AlertStats contains statistics about an alert stream
 type AlertStats struct {
 	StreamName     string `json:"stream_name"`

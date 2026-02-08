@@ -24,6 +24,7 @@ type APIServer struct {
 	config         *config.Config
 	logger         zerolog.Logger
 	startTime      time.Time
+	cache          *responseCache
 
 	// Stats cache
 	statsMu        sync.RWMutex
@@ -51,6 +52,7 @@ func NewAPIServer(
 		config:    cfg,
 		logger:    logger.With().Str("component", "api").Logger(),
 		startTime: time.Now(),
+		cache:     newResponseCache(),
 	}
 
 	s.setupRoutes()
