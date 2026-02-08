@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { TrendingPage, Edit, Alert, Stats, EditWar, SearchResult } from '../types';
+import type { TrendingPage, Edit, Alert, Stats, EditWar, SearchResult, SearchParams } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
@@ -29,10 +29,23 @@ export const getTrending = async (limit = 20, language?: string): Promise<Trendi
   return response.data;
 };
 
-export const searchEdits = async (query: string, limit = 50): Promise<SearchResult> => {
-  const response = await api.get('/api/search', {
-    params: { q: query, limit },
-  });
+export const searchEdits = async (
+  query: string,
+  limit = 50,
+  params?: Partial<SearchParams>
+): Promise<SearchResult> => {
+  const searchParams: Record<string, unknown> = { q: query, limit };
+  if (params?.offset) searchParams.offset = params.offset;
+  if (params?.sort) searchParams.sort = params.sort;
+  if (params?.from) searchParams.from = params.from;
+  if (params?.to) searchParams.to = params.to;
+  if (params?.language) searchParams.language = params.language;
+  if (params?.wiki) searchParams.wiki = params.wiki;
+  if (params?.user) searchParams.user = params.user;
+  if (params?.exclude_bots) searchParams.exclude_bots = params.exclude_bots;
+  if (params?.min_bytes !== undefined) searchParams.min_bytes = params.min_bytes;
+  if (params?.max_bytes !== undefined) searchParams.max_bytes = params.max_bytes;
+  const response = await api.get('/api/search', { params: searchParams });
   return response.data;
 };
 

@@ -86,6 +86,21 @@ export interface SearchResult {
   total: number;
 }
 
+export interface SearchParams {
+  q: string;
+  limit?: number;
+  offset?: number;
+  sort?: 'relevance' | 'date_desc' | 'date_asc';
+  from?: string;
+  to?: string;
+  language?: string;
+  wiki?: string;
+  user?: string;
+  exclude_bots?: boolean;
+  min_bytes?: number;
+  max_bytes?: number;
+}
+
 export interface WebSocketMessage<T = unknown> {
   type: string;
   data: T;
