@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Agnikulu/WikiSurge/internal/api"
 	"github.com/Agnikulu/WikiSurge/internal/config"
 	"github.com/Agnikulu/WikiSurge/internal/kafka"
 	"github.com/Agnikulu/WikiSurge/internal/processor"
@@ -52,12 +53,17 @@ type processorOrchestrator struct {
 	editWarDetector    *processor.EditWarDetector
 	trendingAggregator *processor.TrendingAggregator
 	selectiveIndexer   *processor.SelectiveIndexer
+	wsForwarder        *processor.WebSocketForwarder
+
+	// WebSocket hub
+	wsHub              *api.WebSocketHub
 
 	// Consumers
 	spikeConsumer    *kafka.Consumer
 	trendingConsumer *kafka.Consumer
 	editWarConsumer  *kafka.Consumer
 	indexerConsumer  *kafka.Consumer
+	wsConsumer       *kafka.Consumer
 
 	// Health monitoring
 	components       []*componentHealth
@@ -116,15 +122,20 @@ func main() {
 		logger.Fatal().Err(err).Msg("Failed to initialize infrastructure")
 	}
 
-	// Step 2: Initialize all processors
+	// Step 2: Initialize WebSocket hub
+	orch.wsHub = api.NewWebSocketHub(logger)
+	go orch.wsHub.Run()
+	logger.Info().Msg("WebSocket hub started")
+
+	// Step 3: Initialize all processors
 	orch.initProcessors()
 
-	// Step 3: Create all Kafka consumers
+	// Step 4: Create all Kafka consumers
 	if err := orch.createConsumers(); err != nil {
 		logger.Fatal().Err(err).Msg("Failed to create consumers")
 	}
 
-	// Step 4: Start metrics server
+	// Step 5: Start metrics server
 	metricsPort := 2112
 	if cfg.Ingestor.MetricsPort != 0 {
 		metricsPort = cfg.Ingestor.MetricsPort
@@ -132,24 +143,24 @@ func main() {
 	orch.metricsServer = orch.startMetricsServer(metricsPort)
 	logger.Info().Int("port", metricsPort).Msg("Metrics server started")
 
-	// Step 5: Start all consumers in parallel goroutines
+	// Step 6: Start all consumers in parallel goroutines
 	if err := orch.startAllConsumers(); err != nil {
 		logger.Fatal().Err(err).Msg("Failed to start consumers")
 	}
 
-	// Step 6: Start health monitoring
+	// Step 7: Start health monitoring
 	orch.startHealthMonitoring()
 
 	logger.Info().Msg("All consumers started successfully — processor is running")
 
-	// Step 7: Wait for shutdown signal
+	// Step 8: Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	sig := <-sigChan
 	logger.Info().Str("signal", sig.String()).Msg("Received shutdown signal")
 
-	// Step 8: Graceful shutdown
+	// Step 9: Graceful shutdown
 	orch.gracefulShutdown()
 
 	logger.Info().Msg("WikiSurge Processor shutdown complete")
@@ -229,6 +240,13 @@ func (o *processorOrchestrator) initProcessors() {
 		o.logger.Info().Msg("Initialized SelectiveIndexer")
 		o.registerComponent("selective-indexer")
 	}
+
+	// WebSocket Forwarder
+	if o.wsHub != nil {
+		o.wsForwarder = processor.NewWebSocketForwarder(o.wsHub, o.logger)
+		o.logger.Info().Msg("Initialized WebSocketForwarder")
+		o.registerComponent("websocket-forwarder")
+	}
 }
 
 // createConsumers creates all Kafka consumers with separate consumer groups
@@ -274,6 +292,14 @@ func (o *processorOrchestrator) createConsumers() error {
 		}
 	}
 
+	// WebSocket forwarder consumer
+	if o.wsForwarder != nil {
+		o.wsConsumer, err = kafka.NewConsumer(o.cfg, baseConsumerCfg("websocket-forwarder"), o.wsForwarder, o.logger)
+		if err != nil {
+			return fmt.Errorf("failed to create websocket forwarder consumer: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -292,6 +318,10 @@ func (o *processorOrchestrator) startAllConsumers() error {
 
 	if o.indexerConsumer != nil {
 		consumers = append(consumers, consumerEntry{"elasticsearch-indexer", o.indexerConsumer})
+	}
+
+	if o.wsConsumer != nil {
+		consumers = append(consumers, consumerEntry{"websocket-forwarder", o.wsConsumer})
 	}
 
 	for _, c := range consumers {
@@ -505,6 +535,11 @@ func (o *processorOrchestrator) gracefulShutdown() {
 		go stopConsumer("elasticsearch-indexer", o.indexerConsumer)
 	}
 
+	if o.wsConsumer != nil {
+		consumerWg.Add(1)
+		go stopConsumer("websocket-forwarder", o.wsConsumer)
+	}
+
 	consumerWg.Wait()
 	o.logger.Info().Msg("All Kafka consumers stopped")
 
@@ -535,6 +570,12 @@ func (o *processorOrchestrator) gracefulShutdown() {
 	}
 
 	// 6. Close connections
+	if o.wsHub != nil {
+		o.logger.Info().Msg("Stopping WebSocket hub...")
+		o.wsHub.Stop()
+		o.logger.Info().Msg("WebSocket hub stopped")
+	}
+
 	if err := o.redisClient.Close(); err != nil {
 		o.logger.Error().Err(err).Msg("Error closing Redis connection")
 	} else {

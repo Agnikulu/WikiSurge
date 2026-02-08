@@ -136,6 +136,22 @@ var (
 		[]string{},
 	)
 
+	WebSocketMessagesBroadcast = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_messages_broadcast_total",
+			Help: "Total messages broadcast to WebSocket clients",
+		},
+		[]string{"type"},
+	)
+
+	WebSocketMessagesDropped = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_messages_dropped_total",
+			Help: "Messages dropped due to full buffers",
+		},
+		[]string{},
+	)
+
 	RateLimitHitsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "rate_limit_hits_total",
@@ -360,6 +376,12 @@ func InitMetrics() {
 
 	prometheus.MustRegister(WebSocketDisconnectionsTotal)
 	metricsRegistry["websocket_disconnections_total"] = WebSocketDisconnectionsTotal
+
+	prometheus.MustRegister(WebSocketMessagesBroadcast)
+	metricsRegistry["websocket_messages_broadcast_total"] = WebSocketMessagesBroadcast
+
+	prometheus.MustRegister(WebSocketMessagesDropped)
+	metricsRegistry["websocket_messages_dropped_total"] = WebSocketMessagesDropped
 
 	prometheus.MustRegister(RateLimitHitsTotal)
 	metricsRegistry["rate_limit_hits_total"] = RateLimitHitsTotal

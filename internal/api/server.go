@@ -26,6 +26,7 @@ type APIServer struct {
 	startTime      time.Time
 	cache          *responseCache
 	rateLimiter    *RateLimiter
+	wsHub          *WebSocketHub
 
 	// Stats cache
 	statsMu        sync.RWMutex
@@ -62,6 +63,10 @@ func NewAPIServer(
 		s.logger.Info().Msg("Redis sliding-window rate limiter enabled")
 	}
 
+	// WebSocket hub.
+	s.wsHub = NewWebSocketHub(s.logger)
+	go s.wsHub.Run()
+
 	s.setupRoutes()
 	return s
 }
@@ -77,6 +82,10 @@ func (s *APIServer) setupRoutes() {
 	s.router.HandleFunc("GET /api/alerts", s.handleGetAlerts)
 	s.router.HandleFunc("GET /api/edit-wars", s.handleGetEditWars)
 	s.router.HandleFunc("GET /api/search", s.handleSearch)
+
+	// WebSocket routes
+	s.router.HandleFunc("/ws/feed", s.WebSocketFeed)
+	s.router.HandleFunc("/ws/alerts", s.WebSocketAlerts)
 }
 
 // Handler returns the full middleware-wrapped HTTP handler.
@@ -120,8 +129,16 @@ func (s *APIServer) ListenAndServe(addr string) *http.Server {
 	return srv
 }
 
+// Hub returns the WebSocket hub for external integration (e.g., processor broadcasting).
+func (s *APIServer) Hub() *WebSocketHub {
+	return s.wsHub
+}
+
 // Shutdown performs graceful shutdown of API-specific resources.
 func (s *APIServer) Shutdown(ctx context.Context) error {
 	s.logger.Info().Msg("API server shutting down")
+	if s.wsHub != nil {
+		s.wsHub.Stop()
+	}
 	return nil
 }
