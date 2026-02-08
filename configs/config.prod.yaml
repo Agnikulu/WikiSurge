@@ -52,6 +52,17 @@ api:
   port: 8080
   rate_limit: 10000
   max_websocket_connections: 5000
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 10000
+    burst_size: 500
+    key_type: "ip"
+    whitelist:
+      - "127.0.0.1"
+      - "::1"
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
 
 logging:
   level: "warn"

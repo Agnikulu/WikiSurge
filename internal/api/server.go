@@ -25,6 +25,7 @@ type APIServer struct {
 	logger         zerolog.Logger
 	startTime      time.Time
 	cache          *responseCache
+	rateLimiter    *RateLimiter
 
 	// Stats cache
 	statsMu        sync.RWMutex
@@ -55,6 +56,12 @@ func NewAPIServer(
 		cache:     newResponseCache(),
 	}
 
+	// Initialise Redis-backed rate limiter.
+	if cfg.API.RateLimiting.Enabled {
+		s.rateLimiter = NewRateLimiter(redisClient, cfg.API.RateLimiting, s.logger)
+		s.logger.Info().Msg("Redis sliding-window rate limiter enabled")
+	}
+
 	s.setupRoutes()
 	return s
 }
@@ -78,9 +85,19 @@ func (s *APIServer) Handler() http.Handler {
 
 	// Wrap in middleware (innermost first)
 	h = MetricsMiddleware(h)
-	h = RateLimitMiddleware(s.config.API.RateLimit, h)
+
+	// Rate limiting: prefer Redis sliding-window when available.
+	if s.rateLimiter != nil {
+		h = s.rateLimiter.Middleware(h)
+	} else {
+		h = RateLimitMiddleware(s.config.API.RateLimit, h)
+	}
+
+	h = RequestValidationMiddleware(h)
+	h = SecurityHeadersMiddleware(h)
 	h = CORSMiddleware(h)
 	h = RecoveryMiddleware(s.logger, h)
+	h = RequestIDMiddleware(s.logger, h)
 	h = LoggerMiddleware(s.logger, h)
 
 	return h

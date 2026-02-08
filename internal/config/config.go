@@ -93,9 +93,19 @@ type Kafka struct {
 
 // API configuration
 type API struct {
-	Port                    int `yaml:"port"`
-	RateLimit               int `yaml:"rate_limit"`
-	MaxWebsocketConnections int `yaml:"max_websocket_connections"`
+	Port                    int             `yaml:"port"`
+	RateLimit               int             `yaml:"rate_limit"`
+	MaxWebsocketConnections int             `yaml:"max_websocket_connections"`
+	RateLimiting            APIRateLimiting `yaml:"rate_limiting"`
+}
+
+// APIRateLimiting configures the Redis-backed sliding-window rate limiter.
+type APIRateLimiting struct {
+	Enabled           bool     `yaml:"enabled"`
+	RequestsPerMinute int      `yaml:"requests_per_minute"`
+	BurstSize         int      `yaml:"burst_size"`
+	KeyType           string   `yaml:"key_type"`
+	Whitelist         []string `yaml:"whitelist"`
 }
 
 // Logging configuration
@@ -223,6 +233,17 @@ func setDefaults(config *Config) {
 	}
 	if config.API.MaxWebsocketConnections == 0 {
 		config.API.MaxWebsocketConnections = 1000
+	}
+
+	// Rate limiting defaults
+	if config.API.RateLimiting.RequestsPerMinute == 0 {
+		config.API.RateLimiting.RequestsPerMinute = 1000
+	}
+	if config.API.RateLimiting.BurstSize == 0 {
+		config.API.RateLimiting.BurstSize = 100
+	}
+	if config.API.RateLimiting.KeyType == "" {
+		config.API.RateLimiting.KeyType = "ip"
 	}
 
 	// Logging defaults
