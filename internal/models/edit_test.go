@@ -185,7 +185,7 @@ func TestWikipediaEdit_ToJSON(t *testing.T) {
 		Bot:       false,
 		Wiki:      "enwiki",
 		ServerURL: "en.wikipedia.org",
-		Timestamp: time.Now().Unix() * 1000,
+		Timestamp: time.Now().Add(-1*time.Hour).Unix(), // 1 hour ago
 		Length: struct {
 			Old int `json:"old"`
 			New int `json:"new"`
@@ -226,7 +226,7 @@ func TestWikipediaEdit_Validate(t *testing.T) {
 		Bot:       false,
 		Wiki:      "enwiki",
 		ServerURL: "en.wikipedia.org",
-		Timestamp: time.Now().Unix() * 1000,
+		Timestamp: time.Now().Add(-1*time.Hour).Unix(), // 1 hour ago
 		Length: struct {
 			Old int `json:"old"`
 			New int `json:"new"`
