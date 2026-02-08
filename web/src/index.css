@@ -96,6 +96,11 @@
   }
 }
 
+@keyframes pulse-border {
+  0%, 100% { border-color: currentColor; }
+  50% { border-color: transparent; }
+}
+
 .animate-feed-in {
   animation: feed-in 0.25s ease-out;
 }
@@ -110,6 +115,10 @@
 
 .animate-slide-down {
   animation: slide-down 0.2s ease-out;
+}
+
+.animate-pulse-border {
+  animation: pulse-border 2s ease-in-out infinite;
 }
 
 /* ------------------------------------------------------------------ */
