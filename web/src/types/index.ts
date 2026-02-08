@@ -66,7 +66,24 @@ export interface Stats {
   hot_pages_count: number;
   trending_count: number;
   active_alerts: number;
+  top_language?: string;
+  top_languages?: LanguageStat[];
+  edits_by_type?: { human: number; bot: number };
 }
+
+export interface LanguageStat {
+  language: string;
+  count: number;
+  percentage: number;
+}
+
+export interface TimeSeriesPoint {
+  timestamp: number;
+  value: number;
+  label?: string;
+}
+
+export type TimeRange = '1h' | '6h' | '24h';
 
 export type Alert = SpikeAlert | EditWarAlert;
 

@@ -1,6 +1,8 @@
 import { Header } from './components/Layout/Header';
 import { Footer } from './components/Layout/Footer';
 import { StatsOverview } from './components/Stats/StatsOverview';
+import { EditsTimelineChart } from './components/Stats/EditsTimelineChart';
+import { LanguageDistributionChart } from './components/Stats/LanguageDistributionChart';
 import { AlertsPanel } from './components/Alerts/AlertsPanel';
 import { TrendingList } from './components/Trending/TrendingList';
 import { SearchInterface } from './components/Search/SearchInterface';
@@ -36,6 +38,12 @@ function DashboardView() {
     <div className="space-y-6">
       {/* Stats - full width */}
       <StatsOverview />
+
+      {/* Charts - 2 columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <EditsTimelineChart />
+        <LanguageDistributionChart />
+      </div>
 
       {/* Alerts + Trending - 2 columns */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
