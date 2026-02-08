@@ -67,6 +67,10 @@ func main() {
 	// Initialize SpikeDetector
 	spikeDetector := processor.NewSpikeDetector(hotPageTracker, redisClient, cfg, logger)
 	logger.Info().Msg("Initialized SpikeDetector")
+
+	// Initialize EditWarDetector
+	editWarDetector := processor.NewEditWarDetector(hotPageTracker, redisClient, cfg, logger)
+	logger.Info().Msg("Initialized EditWarDetector")
 	
 	// Initialize TrendingAggregator
 	trendingAggregator := processor.NewTrendingAggregator(trendingScorer, cfg, logger)
@@ -134,6 +138,23 @@ func main() {
 		logger.Fatal().Err(err).Msg("Failed to create trending aggregation Kafka consumer")
 	}
 
+	// Initialize Kafka consumer for edit war detection
+	editWarConsumerCfg := kafka.ConsumerConfig{
+		Brokers:        cfg.Kafka.Brokers,
+		Topic:          "wikipedia.edits",
+		GroupID:        "edit-war-detector",
+		StartOffset:    kafkago.FirstOffset,
+		MinBytes:       1024,
+		MaxBytes:       10 * 1024 * 1024,
+		CommitInterval: time.Second,
+		MaxWait:        500 * time.Millisecond,
+	}
+
+	editWarConsumer, err := kafka.NewConsumer(cfg, editWarConsumerCfg, editWarDetector, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to create edit war detection Kafka consumer")
+	}
+
 	// Initialize Kafka consumer for elasticsearch indexing (if enabled)
 	var indexerConsumer *kafka.Consumer
 	if selectiveIndexer != nil {
@@ -175,6 +196,11 @@ func main() {
 	}
 	logger.Info().Msg("Trending aggregation Kafka consumer started")
 
+	if err := editWarConsumer.Start(); err != nil {
+		logger.Fatal().Err(err).Msg("Failed to start edit war detection Kafka consumer")
+	}
+	logger.Info().Msg("Edit war detection Kafka consumer started")
+
 	// Start indexer consumer (if enabled)
 	if indexerConsumer != nil {
 		if err := indexerConsumer.Start(); err != nil {
@@ -207,6 +233,12 @@ func main() {
 		logger.Error().Err(err).Msg("Error stopping trending aggregation Kafka consumer")
 	} else {
 		logger.Info().Msg("Trending aggregation Kafka consumer stopped")
+	}
+
+	if err := editWarConsumer.Stop(); err != nil {
+		logger.Error().Err(err).Msg("Error stopping edit war detection Kafka consumer")
+	} else {
+		logger.Info().Msg("Edit war detection Kafka consumer stopped")
 	}
 
 	// Stop indexer consumer
