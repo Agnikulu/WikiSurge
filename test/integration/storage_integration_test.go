@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/Agnikulu/WikiSurge/internal/config"
 	"github.com/Agnikulu/WikiSurge/internal/models"
+	"github.com/Agnikulu/WikiSurge/internal/storage"
 )
 
 // Integration tests require Redis and Elasticsearch to be running
@@ -60,10 +61,10 @@ func TestStorageIntegration(t *testing.T) {
 	}
 
 	// Create storage components
-	hotPages := NewRedisHotPages(redisClient, hotPagesConfig)
-	trending := NewRedisTrending(redisClient, trendingConfig)
-	alerts := NewRedisAlerts(redisClient)
-	strategy := NewIndexingStrategy(selectiveConfig, redisClient, trending, hotPages)
+	hotPages := storage.NewHotPageTracker(redisClient, hotPagesConfig)
+	trending := storage.NewRedisTrending(redisClient, trendingConfig)
+	alerts := storage.NewRedisAlerts(redisClient)
+	strategy := storage.NewIndexingStrategy(selectiveConfig, redisClient, trending, hotPages)
 
 	t.Run("HotPagesTracking", func(t *testing.T) {
 		testHotPagesTracking(t, ctx, hotPages)
@@ -86,7 +87,7 @@ func TestStorageIntegration(t *testing.T) {
 	})
 }
 
-func testHotPagesTracking(t *testing.T, ctx context.Context, hotPages *RedisHotPages) {
+func testHotPagesTracking(t *testing.T, ctx context.Context, hotPages *storage.HotPageTracker) {
 	// Create test edit
 	edit := &models.WikipediaEdit{
 		Title: "Integration Test Page",
@@ -148,7 +149,7 @@ func testHotPagesTracking(t *testing.T, ctx context.Context, hotPages *RedisHotP
 	}
 }
 
-func testTrendingTracking(t *testing.T, ctx context.Context, trending *RedisTrending) {
+func testTrendingTracking(t *testing.T, ctx context.Context, trending *storage.RedisTrending) {
 	// Create test edits for trending
 	baseEdit := &models.WikipediaEdit{
 		Title: "Trending Test Page",
@@ -214,7 +215,7 @@ func testTrendingTracking(t *testing.T, ctx context.Context, trending *RedisTren
 	}
 }
 
-func testAlertStreaming(t *testing.T, ctx context.Context, alerts *RedisAlerts) {
+func testAlertStreaming(t *testing.T, ctx context.Context, alerts *storage.RedisAlerts) {
 	// Test spike alert
 	err := alerts.PublishSpikeAlert(ctx, "testwiki", "Alert Test Page", 3.5, 15)
 	if err != nil {
@@ -267,7 +268,7 @@ func testAlertStreaming(t *testing.T, ctx context.Context, alerts *RedisAlerts) 
 	}
 }
 
-func testIndexingStrategy(t *testing.T, ctx context.Context, strategy *IndexingStrategy, hotPages *RedisHotPages, trending *RedisTrending) {
+func testIndexingStrategy(t *testing.T, ctx context.Context, strategy *storage.IndexingStrategy, hotPages *storage.HotPageTracker, trending *storage.RedisTrending) {
 	// Add a page to watchlist
 	err := strategy.AddToWatchlist(ctx, "testwiki", "Watchlist Page")
 	if err != nil {
@@ -353,7 +354,7 @@ func testIndexingStrategy(t *testing.T, ctx context.Context, strategy *IndexingS
 	}
 }
 
-func testEndToEndFlow(t *testing.T, ctx context.Context, hotPages *RedisHotPages, trending *RedisTrending, alerts *RedisAlerts, strategy *IndexingStrategy) {
+func testEndToEndFlow(t *testing.T, ctx context.Context, hotPages *storage.HotPageTracker, trending *storage.RedisTrending, alerts *storage.RedisAlerts, strategy *storage.IndexingStrategy) {
 	// Simulate a page getting significant activity
 	pageTitle := "End to End Test Page"
 	pageWiki := "testwiki"
