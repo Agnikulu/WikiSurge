@@ -1,14 +1,35 @@
 // WikiSurge Data Types
 
+/**
+ * Edit represents a Wikipedia edit. There are two shapes:
+ * - WebSocket (`WikipediaEdit`): numeric id/timestamp, length/revision objects
+ * - Search API (`EditDocument`): string id, ISO timestamp string, direct byte_change
+ * This type accommodates both.
+ */
 export interface Edit {
-  id: string;
+  id: number | string;
+  type?: string;
   title: string;
   user: string;
   wiki: string;
-  byte_change: number;
-  timestamp: string;
   bot: boolean;
+  server_url?: string;
+  /** Unix seconds (WebSocket) or ISO string (Search API) */
+  timestamp: number | string;
+  /** WebSocket shape */
+  length?: {
+    old: number;
+    new: number;
+  };
+  /** WebSocket shape */
+  revision?: {
+    old: number;
+    new: number;
+  };
+  /** Direct byte change – present in search results */
+  byte_change?: number;
   comment: string;
+  language?: string;
 }
 
 export interface TrendingPage {

@@ -11,6 +11,7 @@ export function buildWebSocketUrl(path: string, params?: Record<string, string>)
 }
 
 export const WS_ENDPOINTS = {
-  edits: '/ws/edits',
+  feed: '/ws/feed',
+  edits: '/ws/feed',
   alerts: '/ws/alerts',
 } as const;
