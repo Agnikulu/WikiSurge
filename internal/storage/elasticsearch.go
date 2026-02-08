@@ -450,3 +450,8 @@ func (es *ElasticsearchClient) DeleteOldIndices() error {
 func (es *ElasticsearchClient) getIndexName(timestamp time.Time) string {
 	return fmt.Sprintf("%s-%s", es.indexPattern, timestamp.Format("2006-01-02"))
 }
+
+// RawClient returns the underlying elasticsearch.Client for advanced queries.
+func (es *ElasticsearchClient) RawClient() *elasticsearch.Client {
+	return es.client
+}

@@ -7,11 +7,17 @@ import (
 	"time"
 )
 
-// ErrorResponse is the standard error envelope.
+// ErrorResponse is the legacy error envelope (kept for backward compatibility).
+// New code should use APIErrorResponse from errors.go.
 type ErrorResponse struct {
 	Error   string `json:"error"`
 	Code    string `json:"code"`
 	Details string `json:"details,omitempty"`
+}
+
+// respondStandardError writes the new standardised error format with request_id.
+func respondStandardError(w http.ResponseWriter, r *http.Request, status int, message, code, details string) {
+	writeAPIError(w, r, status, message, code, details)
 }
 
 // PaginationInfo carries pagination metadata in responses.

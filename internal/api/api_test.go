@@ -80,11 +80,14 @@ func TestHealth_OK(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var resp HealthResponse
+	var resp DetailedHealthResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, "ok", resp.Status)
-	assert.Equal(t, "connected", resp.Redis)
 	assert.Greater(t, resp.Uptime, int64(-1))
+	assert.NotEmpty(t, resp.Components)
+	if redis, ok := resp.Components["redis"]; ok {
+		assert.Equal(t, "healthy", redis.Status)
+	}
 }
 
 func TestHealth_RedisDown(t *testing.T) {
@@ -94,9 +97,9 @@ func TestHealth_RedisDown(t *testing.T) {
 	rec := doRequest(srv, "GET", "/health")
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 
-	var resp HealthResponse
+	var resp DetailedHealthResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Contains(t, resp.Status, "degraded")
+	assert.Contains(t, resp.Status, "error")
 }
 
 // ---------------------------------------------------------------------------
@@ -138,9 +141,9 @@ func TestTrending_InvalidLimit(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
-	var errResp ErrorResponse
+	var errResp APIErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errResp))
-	assert.Equal(t, "INVALID_PARAM", errResp.Code)
+	assert.Equal(t, "INVALID_PARAMETER", errResp.Error.Code)
 }
 
 func TestTrending_NegativeLimit(t *testing.T) {
@@ -416,10 +419,10 @@ func TestSearch_MissingQuery(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
-	var errResp ErrorResponse
+	var errResp APIErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errResp))
-	assert.Equal(t, "INVALID_PARAM", errResp.Code)
-	assert.Contains(t, errResp.Error, "'q'")
+	assert.Equal(t, "INVALID_PARAMETER", errResp.Error.Code)
+	assert.Contains(t, errResp.Error.Message, "required")
 }
 
 func TestSearch_ESDisabled(t *testing.T) {
@@ -463,9 +466,9 @@ func TestSearch_FromAfterTo(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
-	var errResp ErrorResponse
+	var errResp APIErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errResp))
-	assert.Contains(t, errResp.Error, "'from' must be before 'to'")
+	assert.Contains(t, errResp.Error.Message, "before")
 }
 
 func TestSearch_NegativeLimit(t *testing.T) {
@@ -675,9 +678,9 @@ func TestRecovery_PanicHandled(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
-	var errResp ErrorResponse
+	var errResp APIErrorResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errResp))
-	assert.Equal(t, "INTERNAL_ERROR", errResp.Code)
+	assert.Equal(t, "INTERNAL_ERROR", errResp.Error.Code)
 }
 
 func TestRateLimiter_AllowsNormal(t *testing.T) {

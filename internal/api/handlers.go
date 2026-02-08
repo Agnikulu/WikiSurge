@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,63 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Agnikulu/WikiSurge/internal/metrics"
 	"github.com/Agnikulu/WikiSurge/internal/storage"
 )
 
 // ---------------------------------------------------------------------------
-// Health
+// Health — moved to health.go for enhanced implementation
 // ---------------------------------------------------------------------------
-
-// HealthResponse is returned by GET /health.
-type HealthResponse struct {
-	Status        string `json:"status"`
-	Redis         string `json:"redis"`
-	Elasticsearch string `json:"elasticsearch"`
-	Uptime        int64  `json:"uptime"`
-}
-
-func (s *APIServer) handleHealth(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-	defer cancel()
-
-	redisStatus := "connected"
-	esStatus := "connected"
-
-	// Check Redis
-	if err := s.redis.Ping(ctx).Err(); err != nil {
-		redisStatus = fmt.Sprintf("error: %v", err)
-	}
-
-	// Check Elasticsearch
-	if s.es != nil {
-		esStatus = "connected"
-		// ES client doesn't expose a simple ping in our wrapper; mark connected if configured
-	} else if s.config.Elasticsearch.Enabled {
-		esStatus = "not_initialized"
-	} else {
-		esStatus = "disabled"
-	}
-
-	overall := "ok"
-	if redisStatus != "connected" {
-		overall = "degraded"
-	}
-	if redisStatus != "connected" && esStatus != "connected" && esStatus != "disabled" {
-		overall = "error"
-	}
-
-	status := http.StatusOK
-	if overall != "ok" {
-		status = http.StatusServiceUnavailable
-	}
-
-	respondJSON(w, status, HealthResponse{
-		Status:        overall,
-		Redis:         redisStatus,
-		Elasticsearch: esStatus,
-		Uptime:        int64(time.Since(s.startTime).Seconds()),
-	})
-}
 
 // ---------------------------------------------------------------------------
 // Trending
@@ -83,22 +32,25 @@ type TrendingPageResponse struct {
 }
 
 func (s *APIServer) handleGetTrending(w http.ResponseWriter, r *http.Request) {
-	limit, err := parseIntQuery(r, "limit", 20, 100)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'limit' parameter (must be 1-100)", "INVALID_PARAM")
+	params, verr := ParseTrendingParams(r)
+	if verr != nil {
+		writeValidationError(w, r, verr)
 		return
 	}
-	langFilter := r.URL.Query().Get("language")
 
 	if s.trending == nil {
-		respondError(w, http.StatusServiceUnavailable, "Trending service not available", "SERVICE_UNAVAILABLE")
+		writeAPIError(w, r, http.StatusServiceUnavailable,
+			"Trending service not available", ErrCodeServiceUnavailable, "")
 		return
 	}
 
-	entries, err := s.trending.GetTopTrending(limit)
+	entries, err := s.trending.GetTopTrending(params.Limit)
 	if err != nil {
-		s.logger.Error().Err(err).Msg("failed to get trending pages")
-		respondError(w, http.StatusInternalServerError, "Failed to retrieve trending pages", "INTERNAL_ERROR")
+		s.logger.Error().Err(err).
+			Str("request_id", GetRequestID(r.Context())).
+			Msg("failed to get trending pages")
+		writeAPIError(w, r, http.StatusInternalServerError,
+			"Failed to retrieve trending pages", ErrCodeInternalError, "")
 		return
 	}
 
@@ -109,7 +61,7 @@ func (s *APIServer) handleGetTrending(w http.ResponseWriter, r *http.Request) {
 		// Detect language from page title convention (e.g. "en.wikipedia.org:Page")
 		lang := extractLanguage(e.PageTitle)
 
-		if langFilter != "" && lang != langFilter {
+		if params.Language != "" && lang != params.Language {
 			continue
 		}
 
@@ -223,37 +175,12 @@ func (s *APIServer) handleGetStats(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
-	limit, err := parseIntQuery(r, "limit", 20, 100)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'limit' parameter (must be 1-100)", "INVALID_PARAM")
+	params, verr := ParseAndValidateAlertParams(r)
+	if verr != nil {
+		writeValidationError(w, r, verr)
 		return
 	}
 
-	offset, err := parseIntQuery(r, "offset", 0, 10000)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'offset' parameter", "INVALID_PARAM")
-		return
-	}
-
-	// Parse 'since' (default: 24h ago)
-	since, err := parseTimeQuery(r, "since", time.Now().Add(-24*time.Hour))
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'since' parameter (use RFC3339 or Unix timestamp)", "INVALID_PARAM")
-		return
-	}
-
-	severity := r.URL.Query().Get("severity")
-	if severity != "" {
-		validSeverities := map[string]bool{"low": true, "medium": true, "high": true, "critical": true}
-		if !validSeverities[severity] {
-			respondError(w, http.StatusBadRequest,
-				fmt.Sprintf("Invalid severity '%s'; valid values: low, medium, high, critical", severity),
-				"INVALID_PARAM")
-			return
-		}
-	}
-
-	alertType := r.URL.Query().Get("type")
 	validTypes := map[string]string{
 		"spike":    "spikes",
 		"edit_war": "editwars",
@@ -261,18 +188,11 @@ func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
 		"editwars": "editwars",
 	}
 
-	if alertType != "" {
-		if _, ok := validTypes[alertType]; !ok {
-			respondError(w, http.StatusBadRequest,
-				fmt.Sprintf("Invalid alert type '%s'; valid types: spike, edit_war", alertType),
-				"INVALID_PARAM")
-			return
-		}
-	}
-
 	// Check cache
-	ck := cacheKey("alerts", alertType, severity, since.Format(time.RFC3339), strconv.Itoa(limit), strconv.Itoa(offset))
+	ck := cacheKey("alerts", params.AlertType, params.Severity, params.Since.Format(time.RFC3339),
+		strconv.Itoa(params.Limit), strconv.Itoa(params.Offset))
 	if cached, ok := s.cache.Get(ck); ok {
+		metrics.APICacheHitsTotal.WithLabelValues().Inc()
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "max-age=5")
 		w.Header().Set("X-Cache", "HIT")
@@ -280,13 +200,14 @@ func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
 		w.Write(cached)
 		return
 	}
+	metrics.APICacheMissesTotal.WithLabelValues().Inc()
 
 	if s.alerts == nil {
 		respondJSON(w, http.StatusOK, AlertsResponse{
 			Alerts: []AlertEntry{},
 			Total:  0,
 			Pagination: PaginationInfo{
-				Total: 0, Limit: limit, Offset: offset, HasMore: false,
+				Total: 0, Limit: params.Limit, Offset: params.Offset, HasMore: false,
 			},
 		})
 		return
@@ -296,20 +217,22 @@ func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
 
 	// Decide which streams to query
 	streams := []string{}
-	if alertType == "" {
+	if params.AlertType == "" {
 		streams = []string{"spikes", "editwars"}
 	} else {
-		streams = []string{validTypes[alertType]}
+		streams = []string{validTypes[params.AlertType]}
 	}
 
 	// Fetch a larger batch to allow for filtering + offset
-	fetchCount := int64(limit + offset + 100)
+	fetchCount := int64(params.Limit + params.Offset + 100)
 	var allAlerts []storage.Alert
 
 	for _, stream := range streams {
-		alerts, err := s.alerts.GetAlertsSince(ctx, stream, since, severity, fetchCount)
+		alerts, err := s.alerts.GetAlertsSince(ctx, stream, params.Since, params.Severity, fetchCount)
 		if err != nil {
-			s.logger.Error().Err(err).Str("stream", stream).Msg("failed to get alerts")
+			s.logger.Error().Err(err).Str("stream", stream).
+				Str("request_id", GetRequestID(ctx)).
+				Msg("failed to get alerts")
 			continue
 		}
 		allAlerts = append(allAlerts, alerts...)
@@ -325,11 +248,11 @@ func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
 	entries := make([]AlertEntry, 0)
 
 	// Apply offset
-	start := offset
+	start := params.Offset
 	if start > len(allAlerts) {
 		start = len(allAlerts)
 	}
-	end := start + limit
+	end := start + params.Limit
 	if end > len(allAlerts) {
 		end = len(allAlerts)
 	}
@@ -374,8 +297,8 @@ func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
 		Total:  total,
 		Pagination: PaginationInfo{
 			Total:   int64(total),
-			Limit:   limit,
-			Offset:  offset,
+			Limit:   params.Limit,
+			Offset:  params.Offset,
 			HasMore: end < total,
 		},
 	}
@@ -396,7 +319,8 @@ func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
 func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 	limit, err := parseIntQuery(r, "limit", 20, 100)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'limit' parameter (must be 1-100)", "INVALID_PARAM")
+		writeAPIError(w, r, http.StatusBadRequest,
+			"Invalid 'limit' parameter (must be 1-100)", ErrCodeInvalidParameter, "field: limit")
 		return
 	}
 
@@ -413,8 +337,11 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 		// SCAN for editwar:editors:* keys to find currently active wars
 		activeWars, err := s.alerts.GetActiveEditWars(ctx, limit)
 		if err != nil {
-			s.logger.Error().Err(err).Msg("failed to scan active edit wars")
-			respondError(w, http.StatusInternalServerError, "Failed to retrieve active edit wars", "INTERNAL_ERROR")
+			s.logger.Error().Err(err).
+				Str("request_id", GetRequestID(ctx)).
+				Msg("failed to scan active edit wars")
+			writeAPIError(w, r, http.StatusInternalServerError,
+				"Failed to retrieve active edit wars", ErrCodeInternalError, "")
 			return
 		}
 
@@ -450,8 +377,11 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 	since := time.Now().Add(-7 * 24 * time.Hour) // last 7 days
 	historicalWars, err := s.alerts.GetEditWarAlertsSince(ctx, since, int64(limit))
 	if err != nil {
-		s.logger.Error().Err(err).Msg("failed to get historical edit wars")
-		respondError(w, http.StatusInternalServerError, "Failed to retrieve edit war history", "INTERNAL_ERROR")
+		s.logger.Error().Err(err).
+			Str("request_id", GetRequestID(ctx)).
+			Msg("failed to get historical edit wars")
+		writeAPIError(w, r, http.StatusInternalServerError,
+			"Failed to retrieve edit war history", ErrCodeInternalError, "")
 		return
 	}
 
@@ -496,56 +426,27 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func (s *APIServer) handleSearch(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
-	if query == "" {
-		respondError(w, http.StatusBadRequest, "Missing required 'q' parameter", "INVALID_PARAM")
+	params, parseErr := ParseSearchParams(r)
+	if parseErr != nil {
+		writeValidationError(w, r, parseErr)
 		return
 	}
-
-	limit, err := parseIntQuery(r, "limit", 50, 100)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'limit' parameter (must be 1-100)", "INVALID_PARAM")
-		return
-	}
-
-	offset, err := parseIntQuery(r, "offset", 0, 10000)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'offset' parameter", "INVALID_PARAM")
-		return
-	}
-
-	// Parse time range
-	defaultFrom := time.Now().Add(-7 * 24 * time.Hour) // 7 days ago
-	from, err := parseTimeQuery(r, "from", defaultFrom)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'from' parameter (use RFC3339 or Unix timestamp)", "INVALID_PARAM")
-		return
-	}
-
-	to, err := parseTimeQuery(r, "to", time.Now())
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid 'to' parameter (use RFC3339 or Unix timestamp)", "INVALID_PARAM")
-		return
-	}
-
-	if from.After(to) {
-		respondError(w, http.StatusBadRequest, "'from' must be before 'to'", "INVALID_PARAM")
+	if verr := ValidateSearchParams(params); verr != nil {
+		writeValidationError(w, r, verr)
 		return
 	}
 
 	if s.es == nil || !s.config.Elasticsearch.Enabled {
-		respondError(w, http.StatusServiceUnavailable, "Search is not available (Elasticsearch disabled)", "SERVICE_UNAVAILABLE")
+		writeAPIError(w, r, http.StatusServiceUnavailable,
+			"Search is not available (Elasticsearch disabled)", ErrCodeServiceUnavailable, "")
 		return
 	}
 
-	// Optional filters
-	language := r.URL.Query().Get("language")
-	botFilter := r.URL.Query().Get("bot")
-
 	// Check cache
-	ck := cacheKey("search", query, from.Format(time.RFC3339), to.Format(time.RFC3339),
-		strconv.Itoa(limit), strconv.Itoa(offset), language, botFilter)
+	ck := cacheKey("search", params.Query, params.From.Format(time.RFC3339), params.To.Format(time.RFC3339),
+		strconv.Itoa(params.Limit), strconv.Itoa(params.Offset), params.Language, params.Bot)
 	if cached, ok := s.cache.Get(ck); ok {
+		metrics.APICacheHitsTotal.WithLabelValues().Inc()
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "max-age=10")
 		w.Header().Set("X-Cache", "HIT")
@@ -553,23 +454,28 @@ func (s *APIServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 		w.Write(cached)
 		return
 	}
+	metrics.APICacheMissesTotal.WithLabelValues().Inc()
 
 	// Build Elasticsearch query
-	searchQuery := s.buildSearchQuery(query, from, to, limit, offset, language, botFilter)
+	searchQuery := s.buildSearchQuery(params.Query, params.From, params.To, params.Limit, params.Offset, params.Language, params.Bot)
 
 	result, err := s.es.Search(searchQuery, "wikipedia-edits-*")
 	if err != nil {
 		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "context deadline exceeded") {
-			respondError(w, http.StatusGatewayTimeout, "Search timed out", "TIMEOUT")
+			writeAPIError(w, r, http.StatusGatewayTimeout,
+				"Search timed out", ErrCodeTimeout, "")
 			return
 		}
-		s.logger.Error().Err(err).Str("query", query).Msg("Elasticsearch search failed")
-		respondError(w, http.StatusInternalServerError, "Search failed", "INTERNAL_ERROR")
+		s.logger.Error().Err(err).Str("query", params.Query).
+			Str("request_id", GetRequestID(r.Context())).
+			Msg("Elasticsearch search failed")
+		writeAPIError(w, r, http.StatusInternalServerError,
+			"Search failed", ErrCodeInternalError, "")
 		return
 	}
 
 	// Parse ES response
-	resp := s.parseSearchResponse(result, query, limit, offset)
+	resp := s.parseSearchResponse(result, params.Query, params.Limit, params.Offset)
 
 	// Cache the response
 	respBytes, _ := json.Marshal(resp)

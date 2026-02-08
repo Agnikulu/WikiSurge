@@ -27,6 +27,7 @@ type APIServer struct {
 	cache          *responseCache
 	rateLimiter    *RateLimiter
 	wsHub          *WebSocketHub
+	version        string
 
 	// Stats cache
 	statsMu        sync.RWMutex
@@ -55,6 +56,7 @@ func NewAPIServer(
 		logger:    logger.With().Str("component", "api").Logger(),
 		startTime: time.Now(),
 		cache:     newResponseCache(),
+		version:   "1.0.0",
 	}
 
 	// Initialise Redis-backed rate limiter.
@@ -75,6 +77,8 @@ func NewAPIServer(
 func (s *APIServer) setupRoutes() {
 	// Health (no /api prefix)
 	s.router.HandleFunc("GET /health", s.handleHealth)
+	s.router.HandleFunc("GET /health/live", s.handleLiveness)
+	s.router.HandleFunc("GET /health/ready", s.handleReadiness)
 
 	// API routes
 	s.router.HandleFunc("GET /api/trending", s.handleGetTrending)
@@ -82,6 +86,10 @@ func (s *APIServer) setupRoutes() {
 	s.router.HandleFunc("GET /api/alerts", s.handleGetAlerts)
 	s.router.HandleFunc("GET /api/edit-wars", s.handleGetEditWars)
 	s.router.HandleFunc("GET /api/search", s.handleSearch)
+
+	// Documentation routes
+	s.router.HandleFunc("GET /api/docs", s.handleAPIDocs)
+	s.router.HandleFunc("GET /api/docs/openapi.yaml", s.handleOpenAPISpec)
 
 	// WebSocket routes
 	s.router.HandleFunc("/ws/feed", s.WebSocketFeed)
@@ -105,6 +113,8 @@ func (s *APIServer) Handler() http.Handler {
 	h = RequestValidationMiddleware(h)
 	h = SecurityHeadersMiddleware(h)
 	h = CORSMiddleware(h)
+	h = ETagMiddleware(h)
+	h = GzipMiddleware(h)
 	h = RecoveryMiddleware(s.logger, h)
 	h = RequestIDMiddleware(s.logger, h)
 	h = LoggerMiddleware(s.logger, h)

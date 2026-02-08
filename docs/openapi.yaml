@@ -1,0 +1,445 @@
+openapi: "3.0.3"
+
+info:
+  title: WikiSurge API
+  version: "1.0.0"
+  description: |
+    WikiSurge is a real-time Wikipedia edit analytics platform.
+    This API exposes trending pages, spike and edit-war alerts,
+    full-text search over indexed edits, and live WebSocket feeds.
+  contact:
+    name: WikiSurge
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://api.wikisurge.example.com
+    description: Production
+
+tags:
+  - name: Health
+    description: Service health and readiness
+  - name: Trending
+    description: Trending Wikipedia pages
+  - name: Stats
+    description: Platform statistics
+  - name: Alerts
+    description: Spike and edit-war alerts
+  - name: Edit Wars
+    description: Edit war monitoring
+  - name: Search
+    description: Full-text search over indexed edits
+  - name: WebSocket
+    description: Real-time data feeds
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Detailed health check
+      description: Returns component-level health for Redis, Elasticsearch, and Kafka.
+      responses:
+        '200':
+          description: All components healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailedHealthResponse'
+        '503':
+          description: One or more components unhealthy
+
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      description: Simple alive check.
+      responses:
+        '200':
+          description: Alive
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      description: Full dependency check.
+      responses:
+        '200':
+          description: Ready
+        '503':
+          description: Not ready
+
+  /api/trending:
+    get:
+      tags: [Trending]
+      summary: Get trending pages
+      description: Returns top trending Wikipedia pages based on recent edit activity.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: language
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrendingPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/stats:
+    get:
+      tags: [Stats]
+      summary: Platform statistics
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+
+  /api/alerts:
+    get:
+      tags: [Alerts]
+      summary: Get alerts
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: since
+          in: query
+          schema:
+            type: string
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [spike, edit_war]
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/edit-wars:
+    get:
+      tags: [Edit Wars]
+      summary: Get edit wars
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: active
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EditWarEntry'
+
+  /api/search:
+    get:
+      tags: [Search]
+      summary: Search edits
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: bot
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /ws/feed:
+    get:
+      tags: [WebSocket]
+      summary: Live edit feed (WebSocket)
+      parameters:
+        - name: languages
+          in: query
+          schema:
+            type: string
+        - name: exclude_bots
+          in: query
+          schema:
+            type: boolean
+        - name: page_pattern
+          in: query
+          schema:
+            type: string
+        - name: min_byte_change
+          in: query
+          schema:
+            type: integer
+      responses:
+        '101':
+          description: WebSocket upgrade
+
+  /ws/alerts:
+    get:
+      tags: [WebSocket]
+      summary: Live alert feed (WebSocket)
+      responses:
+        '101':
+          description: WebSocket upgrade
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            code:
+              type: string
+            details:
+              type: string
+            request_id:
+              type: string
+
+    TrendingPage:
+      type: object
+      properties:
+        title:
+          type: string
+        score:
+          type: number
+        edits_1h:
+          type: integer
+        last_edit:
+          type: string
+        rank:
+          type: integer
+        language:
+          type: string
+
+    StatsResponse:
+      type: object
+      properties:
+        edits_per_second:
+          type: number
+        hot_pages_count:
+          type: integer
+        trending_count:
+          type: integer
+        active_alerts:
+          type: integer
+        uptime:
+          type: integer
+        top_languages:
+          type: array
+          items:
+            type: object
+            properties:
+              language:
+                type: string
+              count:
+                type: integer
+
+    AlertsResponse:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertEntry'
+        total:
+          type: integer
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    AlertEntry:
+      type: object
+      properties:
+        type:
+          type: string
+        page_title:
+          type: string
+        spike_ratio:
+          type: number
+        severity:
+          type: string
+        timestamp:
+          type: string
+        edits_5min:
+          type: integer
+        editor_count:
+          type: integer
+
+    EditWarEntry:
+      type: object
+      properties:
+        page_title:
+          type: string
+        editor_count:
+          type: integer
+        edit_count:
+          type: integer
+        revert_count:
+          type: integer
+        severity:
+          type: string
+        editors:
+          type: array
+          items:
+            type: string
+        active:
+          type: boolean
+
+    SearchResponse:
+      type: object
+      properties:
+        hits:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchHit'
+        total:
+          type: integer
+        query:
+          type: string
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    SearchHit:
+      type: object
+      properties:
+        title:
+          type: string
+        user:
+          type: string
+        timestamp:
+          type: string
+        comment:
+          type: string
+        byte_change:
+          type: integer
+        wiki:
+          type: string
+        score:
+          type: number
+
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_more:
+          type: boolean
+
+    DetailedHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        timestamp:
+          type: string
+        uptime:
+          type: integer
+        version:
+          type: string
+        components:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ServiceUnavailable:
+      description: Service unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

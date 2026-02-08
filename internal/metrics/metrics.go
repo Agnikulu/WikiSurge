@@ -168,6 +168,47 @@ var (
 		[]string{},
 	)
 
+	// API-specific counters (Task 17.8)
+	APIErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "api_errors_total",
+			Help: "API errors by error code",
+		},
+		[]string{"error_code"},
+	)
+
+	APICacheHitsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "api_cache_hits_total",
+			Help: "API response cache hits",
+		},
+		[]string{},
+	)
+
+	APICacheMissesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "api_cache_misses_total",
+			Help: "API response cache misses",
+		},
+		[]string{},
+	)
+
+	WebSocketMessagesSentTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_messages_sent_total",
+			Help: "WebSocket messages sent to clients",
+		},
+		[]string{},
+	)
+
+	WebSocketMessagesReceivedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_messages_received_total",
+			Help: "WebSocket messages received from clients",
+		},
+		[]string{},
+	)
+
 	// Gauges
 	KafkaConsumerLag = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -309,6 +350,15 @@ var (
 		[]string{"endpoint"},
 	)
 
+	APIResponseSizeBytes = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "api_response_size_bytes",
+			Help:    "API response size in bytes",
+			Buckets: []float64{100, 500, 1000, 5000, 10000, 50000, 100000, 500000},
+		},
+		[]string{"endpoint"},
+	)
+
 	ElasticsearchQueryDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "elasticsearch_query_duration_seconds",
@@ -389,6 +439,21 @@ func InitMetrics() {
 	prometheus.MustRegister(SSEReconnectionsTotal)
 	metricsRegistry["sse_reconnections_total"] = SSEReconnectionsTotal
 
+	prometheus.MustRegister(APIErrorsTotal)
+	metricsRegistry["api_errors_total"] = APIErrorsTotal
+
+	prometheus.MustRegister(APICacheHitsTotal)
+	metricsRegistry["api_cache_hits_total"] = APICacheHitsTotal
+
+	prometheus.MustRegister(APICacheMissesTotal)
+	metricsRegistry["api_cache_misses_total"] = APICacheMissesTotal
+
+	prometheus.MustRegister(WebSocketMessagesSentTotal)
+	metricsRegistry["websocket_messages_sent_total"] = WebSocketMessagesSentTotal
+
+	prometheus.MustRegister(WebSocketMessagesReceivedTotal)
+	metricsRegistry["websocket_messages_received_total"] = WebSocketMessagesReceivedTotal
+
 	// Register all gauges
 	prometheus.MustRegister(KafkaConsumerLag)
 	metricsRegistry["kafka_consumer_lag"] = KafkaConsumerLag
@@ -441,6 +506,9 @@ func InitMetrics() {
 
 	prometheus.MustRegister(APIRequestDuration)
 	metricsRegistry["api_request_duration_seconds"] = APIRequestDuration
+
+	prometheus.MustRegister(APIResponseSizeBytes)
+	metricsRegistry["api_response_size_bytes"] = APIResponseSizeBytes
 
 	prometheus.MustRegister(ElasticsearchQueryDuration)
 	metricsRegistry["elasticsearch_query_duration_seconds"] = ElasticsearchQueryDuration
