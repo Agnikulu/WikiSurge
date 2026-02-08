@@ -56,12 +56,24 @@ func main() {
 	hotPageTracker := storage.NewHotPageTracker(redisClient, &cfg.Redis.HotPages)
 	logger.Info().Msg("Initialized HotPageTracker")
 
+	// Initialize TrendingScorer
+	trendingScorer := storage.NewTrendingScorer(redisClient, &cfg.Redis.Trending)
+	logger.Info().Msg("Initialized TrendingScorer")
+	
+	// Start trending pruning
+	trendingScorer.StartPruning()
+	logger.Info().Msg("Started trending pruning scheduler")
+
 	// Initialize SpikeDetector
 	spikeDetector := processor.NewSpikeDetector(hotPageTracker, redisClient, cfg, logger)
 	logger.Info().Msg("Initialized SpikeDetector")
+	
+	// Initialize TrendingAggregator
+	trendingAggregator := processor.NewTrendingAggregator(trendingScorer, cfg, logger)
+	logger.Info().Msg("Initialized TrendingAggregator")
 
-	// Initialize Kafka consumer
-	consumerCfg := kafka.ConsumerConfig{
+	// Initialize Kafka consumer for spike detection
+	spikeConsumerCfg := kafka.ConsumerConfig{
 		Brokers:        cfg.Kafka.Brokers,
 		Topic:          "wikipedia.edits",
 		GroupID:        "spike-detector",
@@ -72,9 +84,26 @@ func main() {
 		MaxWait:        500 * time.Millisecond,
 	}
 
-	consumer, err := kafka.NewConsumer(cfg, consumerCfg, spikeDetector, logger)
+	spikeConsumer, err := kafka.NewConsumer(cfg, spikeConsumerCfg, spikeDetector, logger)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to create Kafka consumer")
+		logger.Fatal().Err(err).Msg("Failed to create spike detection Kafka consumer")
+	}
+
+	// Initialize Kafka consumer for trending aggregation
+	trendingConsumerCfg := kafka.ConsumerConfig{
+		Brokers:        cfg.Kafka.Brokers,
+		Topic:          "wikipedia.edits",
+		GroupID:        "trending-aggregator", // Different consumer group
+		StartOffset:    kafkago.FirstOffset, 
+		MinBytes:       1024,                
+		MaxBytes:       10 * 1024 * 1024,    
+		CommitInterval: time.Second,
+		MaxWait:        500 * time.Millisecond,
+	}
+
+	trendingConsumer, err := kafka.NewConsumer(cfg, trendingConsumerCfg, trendingAggregator, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to create trending aggregation Kafka consumer")
 	}
 
 	// Start metrics server
@@ -86,11 +115,16 @@ func main() {
 	metricsServer := startMetricsServer(metricsPort, logger)
 	logger.Info().Int("port", metricsPort).Msg("Metrics server started")
 
-	// Start consumer
-	if err := consumer.Start(); err != nil {
-		logger.Fatal().Err(err).Msg("Failed to start Kafka consumer")
+	// Start consumers
+	if err := spikeConsumer.Start(); err != nil {
+		logger.Fatal().Err(err).Msg("Failed to start spike detection Kafka consumer")
 	}
-	logger.Info().Msg("Kafka consumer started")
+	logger.Info().Msg("Spike detection Kafka consumer started")
+	
+	if err := trendingConsumer.Start(); err != nil {
+		logger.Fatal().Err(err).Msg("Failed to start trending aggregation Kafka consumer")
+	}
+	logger.Info().Msg("Trending aggregation Kafka consumer started")
 
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -104,13 +138,24 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
-	// Stop consumer
-	logger.Info().Msg("Stopping Kafka consumer...")
-	if err := consumer.Stop(); err != nil {
-		logger.Error().Err(err).Msg("Error stopping Kafka consumer")
+	// Stop consumers
+	logger.Info().Msg("Stopping Kafka consumers...")
+	if err := spikeConsumer.Stop(); err != nil {
+		logger.Error().Err(err).Msg("Error stopping spike detection Kafka consumer")
 	} else {
-		logger.Info().Msg("Kafka consumer stopped")
+		logger.Info().Msg("Spike detection Kafka consumer stopped")
 	}
+	
+	if err := trendingConsumer.Stop(); err != nil {
+		logger.Error().Err(err).Msg("Error stopping trending aggregation Kafka consumer")
+	} else {
+		logger.Info().Msg("Trending aggregation Kafka consumer stopped")
+	}
+	
+	// Stop trending scorer
+	logger.Info().Msg("Stopping trending scorer...")
+	trendingScorer.Stop()
+	logger.Info().Msg("Trending scorer stopped")
 
 	// Stop metrics server
 	logger.Info().Msg("Stopping metrics server...")

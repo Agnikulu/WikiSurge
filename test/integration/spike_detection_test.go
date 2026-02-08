@@ -50,8 +50,20 @@ func TestSpikeDetectorIntegration(t *testing.T) {
 	})
 	defer redisClient.Close()
 
+	// Check Redis is available
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		t.Skip("Redis not available for integration tests")
+	}
+
+	// Check Kafka is available
+	conn, err := net.DialTimeout("tcp", "localhost:9092", 2*time.Second)
+	if err != nil {
+		t.Skip("Kafka not available for integration tests")
+	}
+	conn.Close()
+
 	// Clear test database
-	err := redisClient.FlushDB(context.Background()).Err()
+	err = redisClient.FlushDB(context.Background()).Err()
 	require.NoError(t, err)
 
 	// Test Redis connection

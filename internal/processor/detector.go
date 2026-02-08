@@ -15,6 +15,11 @@ import (
 	"github.com/rs/zerolog"
 )
 
+var (
+	spikeDetectorMetricsOnce sync.Once
+	sharedSpikeMetrics       *SpikeDetectorMetrics
+)
+
 // SpikeDetector handles real-time spike detection using hot page windows
 type SpikeDetector struct {
 	hotPages             *storage.HotPageTracker
@@ -50,14 +55,15 @@ type SpikeDetectorMetrics struct {
 
 // NewSpikeDetector creates a new spike detector instance
 func NewSpikeDetector(hotPages *storage.HotPageTracker, redis *redis.Client, cfg *config.Config, logger zerolog.Logger) *SpikeDetector {
-	metrics := &SpikeDetectorMetrics{
-		SpikesDetected: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "spikes_detected_total",
-				Help: "Total number of spikes detected",
-			},
-			[]string{"severity"},
-		),
+	spikeDetectorMetricsOnce.Do(func() {
+		sharedSpikeMetrics = &SpikeDetectorMetrics{
+			SpikesDetected: prometheus.NewCounterVec(
+				prometheus.CounterOpts{
+					Name: "spikes_detected_total",
+					Help: "Total number of spikes detected",
+				},
+				[]string{"severity"},
+			),
 		ProcessedEdits: prometheus.NewCounter(
 			prometheus.CounterOpts{
 				Name: "processed_edits_total",
@@ -77,29 +83,30 @@ func NewSpikeDetector(hotPages *storage.HotPageTracker, redis *redis.Client, cfg
 				Buckets: prometheus.LinearBuckets(0.001, 0.001, 10),
 			},
 		),
-		SpikeRatioGauge: prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Name: "last_spike_ratio",
-				Help: "Ratio of the last detected spike",
-			},
-		),
-	}
+			SpikeRatioGauge: prometheus.NewGauge(
+				prometheus.GaugeOpts{
+					Name: "last_spike_ratio",
+					Help: "Ratio of the last detected spike",
+				},
+			),
+		}
 
-	// Register metrics
-	prometheus.MustRegister(
-		metrics.SpikesDetected,
-		metrics.ProcessedEdits,
-		metrics.AlertsPublished,
-		metrics.ProcessingTime,
-		metrics.SpikeRatioGauge,
-	)
+		// Register metrics
+		prometheus.MustRegister(
+			sharedSpikeMetrics.SpikesDetected,
+			sharedSpikeMetrics.ProcessedEdits,
+			sharedSpikeMetrics.AlertsPublished,
+			sharedSpikeMetrics.ProcessingTime,
+			sharedSpikeMetrics.SpikeRatioGauge,
+		)
+	})
 
 	return &SpikeDetector{
 		hotPages:             hotPages,
 		redis:                redis,
 		config:               cfg,
 		alertStream:          "alerts:spikes",
-		metrics:              metrics,
+		metrics:              sharedSpikeMetrics,
 		spikeRatioThreshold:  5.0, // Default threshold
 		minimumEdits:         3,   // Minimum edits in 5 minutes to consider
 		logger:               logger.With().Str("component", "spike_detector").Logger(),

@@ -138,15 +138,21 @@ func (h *HotPageTracker) promoteToHot(ctx context.Context, edit *models.Wikipedi
 	
 	windowKey := fmt.Sprintf("hot:window:%s", edit.Title)
 	metadataKey := fmt.Sprintf("hot:meta:%s", edit.Title)
+	
+	// Use edit's timestamp if available, otherwise use current time
 	timestamp := time.Now().Unix()
+	if edit.Timestamp > 0 {
+		timestamp = edit.Timestamp
+	}
 	
 	// Use Redis pipeline for atomic operations
 	pipe := h.redis.Pipeline()
 	
-	// Create member string: timestamp:edit_id
-	member := fmt.Sprintf("%d:%d", timestamp, edit.ID)
+	// Create member string: nanosecond timestamp:edit_id for uniqueness
+	nanoTs := time.Now().UnixNano()
+	member := fmt.Sprintf("%d:%d", nanoTs, edit.ID)
 	
-	// ZADD to window (score=timestamp, member=timestamp:edit_id)
+	// ZADD to window (score=timestamp, member=nanoTs:edit_id)
 	pipe.ZAdd(ctx, windowKey, redis.Z{Score: float64(timestamp), Member: member})
 	
 	// ZREMRANGEBYSCORE to remove old entries (before window_duration)
@@ -184,6 +190,13 @@ func (h *HotPageTracker) promoteToHot(ctx context.Context, edit *models.Wikipedi
 		return fmt.Errorf("failed to execute promotion pipeline: %w", err)
 	}
 	
+	// Invalidate hot pages cache so GetHotPagesCount reflects the new page
+	h.mu.Lock()
+	if h.hotPagesCache != nil {
+		h.hotPagesCache[edit.Title] = true
+	}
+	h.mu.Unlock()
+	
 	// Increment hot pages promoted metric
 	metrics.HotPagesPromotedTotal.WithLabelValues().Inc()
 	
@@ -208,10 +221,16 @@ func (h *HotPageTracker) AddEditToWindow(ctx context.Context, pageTitle string, 
 	}
 	
 	metadataKey := fmt.Sprintf("hot:meta:%s", pageTitle)
-	timestamp := time.Now().Unix()
 	
-	// Create member string: "{timestamp}:{edit_id}"
-	member := fmt.Sprintf("%d:%d", timestamp, edit.ID)
+	// Use edit's timestamp if available, otherwise use current time
+	timestamp := time.Now().Unix()
+	if edit.Timestamp > 0 {
+		timestamp = edit.Timestamp
+	}
+	
+	// Create member string: "{nanoTs}:{edit_id}" for uniqueness
+	nanoTs := time.Now().UnixNano()
+	member := fmt.Sprintf("%d:%d", nanoTs, edit.ID)
 	
 	// Pipeline operations
 	pipe := h.redis.Pipeline()

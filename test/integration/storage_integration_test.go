@@ -62,7 +62,7 @@ func TestStorageIntegration(t *testing.T) {
 
 	// Create storage components
 	hotPages := storage.NewHotPageTracker(redisClient, hotPagesConfig)
-	trending := storage.NewRedisTrending(redisClient, trendingConfig)
+	trending := storage.NewTrendingScorer(redisClient, trendingConfig)
 	alerts := storage.NewRedisAlerts(redisClient)
 	strategy := storage.NewIndexingStrategy(selectiveConfig, redisClient, trending, hotPages)
 
@@ -134,9 +134,8 @@ func testHotPagesTracking(t *testing.T, ctx context.Context, hotPages *storage.H
 
 	// Verify our page is in the list
 	found := false
-	expectedPageName := fmt.Sprintf("%s:%s", edit.Wiki, edit.Title)
 	for _, page := range hotPagesList {
-		if page.PageName == expectedPageName {
+		if page.PageName == edit.Title {
 			found = true
 			if page.EditCount < 5 {
 				t.Errorf("Expected edit count >= 5, got %d", page.EditCount)
@@ -149,7 +148,7 @@ func testHotPagesTracking(t *testing.T, ctx context.Context, hotPages *storage.H
 	}
 }
 
-func testTrendingTracking(t *testing.T, ctx context.Context, trending *storage.RedisTrending) {
+func testTrendingTracking(t *testing.T, ctx context.Context, trending *storage.TrendingScorer) {
 	// Create test edits for trending
 	baseEdit := &models.WikipediaEdit{
 		Title: "Trending Test Page",
@@ -166,14 +165,14 @@ func testTrendingTracking(t *testing.T, ctx context.Context, trending *storage.R
 	// Add multiple edits to build trending score
 	for i := 0; i < 5; i++ {
 		baseEdit.User = fmt.Sprintf("TrendingUser%d", i+1)
-		err := trending.UpdateScore(ctx, baseEdit)
+		err := trending.ProcessEdit(baseEdit)
 		if err != nil {
 			t.Fatalf("Failed to update trending score %d: %v", i, err)
 		}
 	}
 
 	// Get trending pages
-	trendingPages, err := trending.GetTrendingPages(ctx, 10)
+	trendingPages, err := trending.GetTopTrending(10)
 	if err != nil {
 		t.Fatalf("Failed to get trending pages: %v", err)
 	}
@@ -181,14 +180,12 @@ func testTrendingTracking(t *testing.T, ctx context.Context, trending *storage.R
 	// Verify our page is trending
 	found := false
 	for _, page := range trendingPages {
-		if page.Wiki == baseEdit.Wiki && page.Title == baseEdit.Title {
+		if page.PageTitle == baseEdit.Title {
 			found = true
-			if page.Score <= 0 {
-				t.Errorf("Expected positive trending score, got %f", page.Score)
+			if page.CurrentScore <= 0 {
+				t.Errorf("Expected positive trending score, got %f", page.CurrentScore)
 			}
-			if page.EditCount != 5 {
-				t.Errorf("Expected edit count 5, got %d", page.EditCount)
-			}
+			// Note: EditCount is not tracked in TrendingEntry, skip this check
 			break
 		}
 	}
@@ -206,12 +203,14 @@ func testTrendingTracking(t *testing.T, ctx context.Context, trending *storage.R
 	}
 
 	// Test top trending check
-	isTopTrending, err := trending.IsTopTrending(ctx, baseEdit.Wiki, baseEdit.Title, 5)
+	rank, err = trending.GetTrendingRank(baseEdit.Title) 
 	if err != nil {
 		t.Fatalf("Failed to check top trending: %v", err)
 	}
+	// GetTrendingRank returns 0-based rank (0 = top), -1 = not found
+	isTopTrending := rank >= 0 && rank < 5
 	if !isTopTrending {
-		t.Errorf("Page should be in top 5 trending")
+		t.Errorf("Page should be in top 5 trending, but rank is %d", rank)
 	}
 }
 
@@ -268,7 +267,7 @@ func testAlertStreaming(t *testing.T, ctx context.Context, alerts *storage.Redis
 	}
 }
 
-func testIndexingStrategy(t *testing.T, ctx context.Context, strategy *storage.IndexingStrategy, hotPages *storage.HotPageTracker, trending *storage.RedisTrending) {
+func testIndexingStrategy(t *testing.T, ctx context.Context, strategy *storage.IndexingStrategy, hotPages *storage.HotPageTracker, trending *storage.TrendingScorer) {
 	// Add a page to watchlist
 	err := strategy.AddToWatchlist(ctx, "testwiki", "Watchlist Page")
 	if err != nil {
@@ -309,7 +308,7 @@ func testIndexingStrategy(t *testing.T, ctx context.Context, strategy *storage.I
 	// Build trending score
 	for i := 0; i < 10; i++ {
 		trendingEdit.User = fmt.Sprintf("StrategyUser%d", i+1)
-		trending.UpdateScore(ctx, trendingEdit)
+		trending.ProcessEdit(trendingEdit)
 	}
 
 	// Test trending indexing decision
@@ -354,7 +353,7 @@ func testIndexingStrategy(t *testing.T, ctx context.Context, strategy *storage.I
 	}
 }
 
-func testEndToEndFlow(t *testing.T, ctx context.Context, hotPages *storage.HotPageTracker, trending *storage.RedisTrending, alerts *storage.RedisAlerts, strategy *storage.IndexingStrategy) {
+func testEndToEndFlow(t *testing.T, ctx context.Context, hotPages *storage.HotPageTracker, trending *storage.TrendingScorer, alerts *storage.RedisAlerts, strategy *storage.IndexingStrategy) {
 	// Simulate a page getting significant activity
 	pageTitle := "End to End Test Page"
 	pageWiki := "testwiki"
@@ -379,7 +378,7 @@ func testEndToEndFlow(t *testing.T, ctx context.Context, hotPages *storage.HotPa
 		}
 
 		// Update trending score
-		err = trending.UpdateScore(ctx, edit)
+		err = trending.ProcessEdit(edit)
 		if err != nil {
 			t.Fatalf("Failed to update trending score: %v", err)
 		}

@@ -3,345 +3,473 @@ package storage
 import (
 	"context"
 	"fmt"
-	"log"
 	"math"
 	"strconv"
-	"strings"
+	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"github.com/Agnikulu/WikiSurge/internal/config"
 	"github.com/Agnikulu/WikiSurge/internal/models"
 )
 
-// RedisTrending manages trending page scoring and tracking in Redis
-type RedisTrending struct {
-	client   *redis.Client
-	config   *config.TrendingConfig
-	halfLife float64 // Half-life in seconds
+// TimeProvider allows for mockable time in tests
+type TimeProvider interface {
+	Now() time.Time
 }
 
-// NewRedisTrending creates a new Redis trending pages tracker
-func NewRedisTrending(client *redis.Client, cfg *config.TrendingConfig) *RedisTrending {
-	halfLife := cfg.HalfLifeMinutes * 60 // Convert minutes to seconds
+// RealTimeProvider uses actual system time
+type RealTimeProvider struct{}
+
+func (r *RealTimeProvider) Now() time.Time {
+	return time.Now()
+}
+
+// MockTimeProvider allows setting custom time for tests
+type MockTimeProvider struct {
+	currentTime time.Time
+}
+
+// NewMockTimeProvider creates a new mock time provider starting at the current time
+func NewMockTimeProvider() *MockTimeProvider {
+	return &MockTimeProvider{currentTime: time.Now()}
+}
+
+func (m *MockTimeProvider) Now() time.Time {
+	return m.currentTime
+}
+
+func (m *MockTimeProvider) SetTime(t time.Time) {
+	m.currentTime = t
+}
+
+func (m *MockTimeProvider) FastForward(d time.Duration) {
+	m.currentTime = m.currentTime.Add(d)
+}
+
+// AdvanceTime is an alias for FastForward
+func (m *MockTimeProvider) AdvanceTime(d time.Duration) {
+	m.FastForward(d)
+}
+
+// TrendingScorer manages trending page scoring and tracking in Redis with lazy decay
+type TrendingScorer struct {
+	redis            *redis.Client
+	config           *config.TrendingConfig
+	timeProvider     TimeProvider
+	halfLifeMinutes  float64
+	maxPages         int
+	pruneInterval    time.Duration
+	metrics          *TrendingMetrics
+	ctx              context.Context
+	cancel           context.CancelFunc
+	pruneWg          sync.WaitGroup
+}
+
+// TrendingEntry represents a trending page entry with computed scores
+type TrendingEntry struct {
+	PageTitle    string  `json:"page_title"`
+	RawScore     float64 `json:"raw_score"`
+	LastUpdated  int64   `json:"last_updated"`
+	CurrentScore float64 `json:"current_score"`
+}
+
+// TrendingMetrics groups all trending-related Prometheus metrics
+type TrendingMetrics struct {
+	UpdatesTotal    prometheus.Counter
+	PruneRunsTotal  prometheus.Counter
+	PruneCountTotal prometheus.Counter
+}
+
+// NewTrendingScorer creates a new trending scorer with lazy decay
+func NewTrendingScorer(redis *redis.Client, config *config.TrendingConfig) *TrendingScorer {
+	return newTrendingScorer(redis, config, &RealTimeProvider{}, true)
+}
+
+// NewTrendingScorerForTest creates a new trending scorer for tests (no metrics registration)
+func NewTrendingScorerForTest(redis *redis.Client, config *config.TrendingConfig) *TrendingScorer {
+	return newTrendingScorer(redis, config, &RealTimeProvider{}, false)
+}
+
+// NewTrendingScorerWithTimeProvider creates a trending scorer with custom time provider for testing
+func NewTrendingScorerWithTimeProvider(redis *redis.Client, config *config.TrendingConfig, timeProvider TimeProvider) *TrendingScorer {
+	return newTrendingScorer(redis, config, timeProvider, false)
+}
+
+// newTrendingScorer is the internal constructor
+func newTrendingScorer(redis *redis.Client, config *config.TrendingConfig, timeProvider TimeProvider, registerMetrics bool) *TrendingScorer {
+	ctx, cancel := context.WithCancel(context.Background())
 	
-	return &RedisTrending{
-		client:   client,
-		config:   cfg,
-		halfLife: halfLife,
+	// Set defaults
+	halfLifeMinutes := 30.0
+	if config.HalfLifeMinutes > 0 {
+		halfLifeMinutes = config.HalfLifeMinutes
+	}
+	
+	maxPages := 1000
+	if config.MaxPages > 0 {
+		maxPages = config.MaxPages
+	}
+	
+	pruneInterval := 10 * time.Minute
+	if config.PruneInterval > 0 {
+		pruneInterval = config.PruneInterval
+	}
+	
+	// Initialize metrics
+	trendingMetrics := &TrendingMetrics{
+		UpdatesTotal: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "trending_updates_total",
+			Help: "Total trending score updates",
+		}),
+		PruneRunsTotal: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "trending_prune_runs_total", 
+			Help: "Total trending prune runs",
+		}),
+		PruneCountTotal: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "trending_pruned_total",
+			Help: "Total trending entries pruned",
+		}),
+	}
+	
+	// Only register metrics if requested
+	if registerMetrics {
+		prometheus.MustRegister(trendingMetrics.UpdatesTotal)
+		prometheus.MustRegister(trendingMetrics.PruneRunsTotal)
+		prometheus.MustRegister(trendingMetrics.PruneCountTotal)
+	}
+	
+	return &TrendingScorer{
+		redis:           redis,
+		config:          config,
+		timeProvider:    timeProvider,
+		halfLifeMinutes: halfLifeMinutes,
+		maxPages:        maxPages,
+		pruneInterval:   pruneInterval,
+		metrics:         trendingMetrics,
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 }
 
-// UpdateScore updates the trending score for a page based on an edit
-func (r *RedisTrending) UpdateScore(ctx context.Context, edit *models.WikipediaEdit) error {
-	if !r.config.Enabled {
-		return nil
-	}
+// Stop gracefully shuts down the trending scorer
+func (t *TrendingScorer) Stop() {
+	t.cancel()
+	t.pruneWg.Wait()
+}
 
-	pageKey := fmt.Sprintf("%s:%s", edit.Wiki, edit.Title)
-	trendingKey := "trending:global"
+// IncrementScore adds score for an edit, applying decay lazily
+func (t *TrendingScorer) IncrementScore(pageTitle string, scoreIncrement float64) error {
+	now := t.timeProvider.Now().Unix()
 	
-	now := float64(time.Now().Unix())
+	// Keys
+	pageKey := fmt.Sprintf("trending:%s", pageTitle)
+	globalKey := "trending:global"
 	
-	// Calculate score increment based on edit significance
-	scoreIncrement := r.calculateScoreIncrement(edit)
+	// Get current values
+	ctx := context.Background()
+	pipe := t.redis.Pipeline()
 	
-	// Get current score and last update time
-	currentScore, lastUpdate, err := r.getCurrentScore(ctx, pageKey)
-	if err != nil {
-		return fmt.Errorf("failed to get current score: %w", err)
+	rawScoreCmd := pipe.HGet(ctx, pageKey, "raw_score")
+	lastUpdatedCmd := pipe.HGet(ctx, pageKey, "last_updated")
+	
+	_, err := pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		return fmt.Errorf("failed to get current values: %w", err)
 	}
 	
-	// Apply decay based on time elapsed
-	if lastUpdate > 0 {
-		timeDelta := now - lastUpdate
-		decayFactor := math.Exp(-timeDelta * math.Ln2 / r.halfLife)
-		currentScore *= decayFactor
+	// Parse existing values
+	var rawScore float64
+	var lastUpdated int64
+	
+	if rawScoreCmd.Err() == nil {
+		rawScore, _ = strconv.ParseFloat(rawScoreCmd.Val(), 64)
 	}
 	
-	// Add new score increment
-	newScore := currentScore + scoreIncrement
+	if lastUpdatedCmd.Err() == nil {
+		lastUpdated, _ = strconv.ParseInt(lastUpdatedCmd.Val(), 10, 64)
+	}
 	
-	// Update the trending zset
-	err = r.client.ZAdd(ctx, trendingKey, redis.Z{
-		Score:  newScore,
-		Member: pageKey,
-	}).Err()
+	// Apply lazy decay if entry exists
+	if lastUpdated > 0 {
+		elapsedMinutes := float64(now-lastUpdated) / 60.0
+		decayFactor := math.Pow(0.5, elapsedMinutes/t.halfLifeMinutes)
+		rawScore *= decayFactor
+	}
 	
+	// Add increment
+	rawScore += scoreIncrement
+	
+	// Update Redis with pipeline
+	pipe2 := t.redis.Pipeline()
+	pipe2.HSet(ctx, pageKey, "raw_score", rawScore)
+	pipe2.HSet(ctx, pageKey, "last_updated", now)
+	pipe2.Expire(ctx, pageKey, 24*time.Hour)
+	pipe2.ZAdd(ctx, globalKey, redis.Z{Score: rawScore, Member: pageTitle})
+	
+	_, err = pipe2.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update trending score: %w", err)
 	}
 	
-	// Store metadata about the page's score
-	metadataKey := fmt.Sprintf("trending:meta:%s", pageKey)
-	metadata := map[string]interface{}{
-		"last_update": now,
-		"edit_count":  1, // Will be incremented if exists
-	}
-	
-	// Update edit count if metadata exists
-	if r.client.Exists(ctx, metadataKey).Val() == 1 {
-		r.client.HIncrBy(ctx, metadataKey, "edit_count", 1)
-		r.client.HSet(ctx, metadataKey, "last_update", now)
-	} else {
-		r.client.HMSet(ctx, metadataKey, metadata)
-	}
-	
-	// Set TTL for metadata (longer than trending window)
-	r.client.Expire(ctx, metadataKey, time.Duration(r.halfLife*5)*time.Second)
-	
-	log.Printf("Updated trending score for %s: %.2f (increment: %.2f)", 
-		pageKey, newScore, scoreIncrement)
+	// Update metrics
+	t.metrics.UpdatesTotal.Inc()
 	
 	return nil
 }
 
-// GetTrendingPages returns the top trending pages
-func (r *RedisTrending) GetTrendingPages(ctx context.Context, limit int) ([]TrendingPage, error) {
-	trendingKey := "trending:global"
+// GetTopTrending returns the top N trending pages with current decayed scores
+func (t *TrendingScorer) GetTopTrending(limit int) ([]*TrendingEntry, error) {
+	ctx := context.Background()
+	globalKey := "trending:global"
+	now := t.timeProvider.Now().Unix()
 	
-	// Get top trending pages with scores
-	results, err := r.client.ZRevRangeWithScores(ctx, trendingKey, 0, int64(limit-1)).Result()
+	// Get top pages from sorted set (may have stale scores)
+	results, err := t.redis.ZRevRangeWithScores(ctx, globalKey, 0, int64(limit*2-1)).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get trending pages: %w", err)
 	}
 	
-	trendingPages := make([]TrendingPage, 0, len(results))
+	entries := make([]*TrendingEntry, 0, len(results))
 	
-	for i, result := range results {
-		pageKey := result.Member.(string)
-		score := result.Score
+	// Get fresh data for each page
+	for _, result := range results {
+		pageTitle := result.Member.(string)
+		pageKey := fmt.Sprintf("trending:%s", pageTitle)
 		
-		// Parse wiki and title from page key
-		parts := strings.SplitN(pageKey, ":", 2)
-		if len(parts) != 2 {
+		// Get raw data
+		data, err := t.redis.HGetAll(ctx, pageKey).Result()
+		if err != nil {
+			continue // Skip pages that no longer exist
+		}
+		
+		rawScore, err := strconv.ParseFloat(data["raw_score"], 64)
+		if err != nil {
 			continue
 		}
 		
-		wiki := parts[0]
-		title := parts[1]
-		
-		// Get additional metadata
-		metadataKey := fmt.Sprintf("trending:meta:%s", pageKey)
-		metadata, err := r.client.HGetAll(ctx, metadataKey).Result()
+		lastUpdated, err := strconv.ParseInt(data["last_updated"], 10, 64)
 		if err != nil {
-			log.Printf("Failed to get metadata for %s: %v", pageKey, err)
-			metadata = make(map[string]string)
+			continue
 		}
 		
-		editCount := 0
-		if countStr, exists := metadata["edit_count"]; exists {
-			editCount, _ = strconv.Atoi(countStr)
-		}
+		// Calculate current decayed score
+		elapsedMinutes := float64(now-lastUpdated) / 60.0
+		decayFactor := math.Pow(0.5, elapsedMinutes/t.halfLifeMinutes)
+		currentScore := rawScore * decayFactor
 		
-		var lastUpdate time.Time
-		if updateStr, exists := metadata["last_update"]; exists {
-			if timestamp, err := strconv.ParseFloat(updateStr, 64); err == nil {
-				lastUpdate = time.Unix(int64(timestamp), 0)
+		entries = append(entries, &TrendingEntry{
+			PageTitle:    pageTitle,
+			RawScore:     rawScore,
+			LastUpdated:  lastUpdated,
+			CurrentScore: currentScore,
+		})
+	}
+	
+	// Sort by current score (may differ from stored score due to decay)
+	for i := 0; i < len(entries); i++ {
+		for j := i + 1; j < len(entries); j++ {
+			if entries[i].CurrentScore < entries[j].CurrentScore {
+				entries[i], entries[j] = entries[j], entries[i]
 			}
 		}
-		
-		trendingPages = append(trendingPages, TrendingPage{
-			Rank:       i + 1,
-			Wiki:       wiki,
-			Title:      title,
-			Score:      score,
-			EditCount:  editCount,
-			LastUpdate: lastUpdate,
-		})
 	}
 	
-	return trendingPages, nil
+	// Return only requested limit
+	if len(entries) > limit {
+		entries = entries[:limit]
+	}
+	
+	return entries, nil
 }
 
-// GetPageRank returns the current trending rank for a specific page (1-based)
-func (r *RedisTrending) GetPageRank(ctx context.Context, wiki, title string) (int, error) {
-	trendingKey := "trending:global"
-	pageKey := fmt.Sprintf("%s:%s", wiki, title)
+// GetTrendingRank returns the rank of a specific page (0-indexed, -1 if not found)
+func (t *TrendingScorer) GetTrendingRank(pageTitle string) (int, error) {
+	ctx := context.Background()
+	globalKey := "trending:global"
 	
-	rank, err := r.client.ZRevRank(ctx, trendingKey, pageKey).Result()
+	rank, err := t.redis.ZRevRank(ctx, globalKey, pageTitle).Result()
 	if err == redis.Nil {
-		return 0, nil // Page not in trending list
+		return -1, nil // Page not found
 	}
 	if err != nil {
-		return 0, fmt.Errorf("failed to get page rank: %w", err)
+		return -1, fmt.Errorf("failed to get trending rank: %w", err)
 	}
 	
-	return int(rank) + 1, nil // Convert to 1-based rank
+	return int(rank), nil
 }
 
-// IsTopTrending checks if a page is in the top N trending pages
-func (r *RedisTrending) IsTopTrending(ctx context.Context, wiki, title string, topN int) (bool, error) {
-	rank, err := r.GetPageRank(ctx, wiki, title)
+// GetPageRank returns the trending rank for a page (compatibility method for indexing strategy)
+// Returns 1-based rank (like the old RedisTrending), or 0 if not found
+func (t *TrendingScorer) GetPageRank(ctx context.Context, wiki, title string) (int, error) {
+	// Create page key - in our new system we just use title, but keeping compatibility
+	pageTitle := title
+	rank, err := t.GetTrendingRank(pageTitle)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	
-	return rank > 0 && rank <= topN, nil
+	if rank == -1 {
+		return 0, nil // Not found
+	}
+	return rank + 1, nil // Convert to 1-based rank
 }
 
-// PruneTrending removes old entries and applies decay to all scores
-func (r *RedisTrending) PruneTrending(ctx context.Context) error {
-	if !r.config.Enabled {
-		return nil
+// calculateIncrement determines score to add for an edit
+func (t *TrendingScorer) calculateIncrement(edit *models.WikipediaEdit) float64 {
+	baseScore := 1.0
+	
+	// Large edit bonus
+	byteChange := edit.ByteChange()
+	if byteChange < 0 {
+		byteChange = -byteChange
+	}
+	if byteChange > 1000 {
+		baseScore *= 1.5
 	}
 	
-	trendingKey := "trending:global"
-	now := float64(time.Now().Unix())
-	
-	// Get all pages with scores
-	results, err := r.client.ZRangeWithScores(ctx, trendingKey, 0, -1).Result()
-	if err != nil {
-		return fmt.Errorf("failed to get all trending pages: %w", err)
+	// Bot penalty
+	if edit.Bot {
+		baseScore *= 0.5
 	}
 	
-	// Process each page: apply decay and remove if score too low
-	for _, result := range results {
-		pageKey := result.Member.(string)
-		currentScore := result.Score
-		
-		// Get last update time
-		metadataKey := fmt.Sprintf("trending:meta:%s", pageKey)
-		lastUpdateStr, err := r.client.HGet(ctx, metadataKey, "last_update").Result()
-		if err != nil {
-			// If no metadata, remove the page
-			r.client.ZRem(ctx, trendingKey, pageKey)
-			continue
-		}
-		
-		lastUpdate, err := strconv.ParseFloat(lastUpdateStr, 64)
-		if err != nil {
-			// Invalid timestamp, remove the page
-			r.client.ZRem(ctx, trendingKey, pageKey)
-			r.client.Del(ctx, metadataKey)
-			continue
-		}
-		
-		// Apply decay
-		timeDelta := now - lastUpdate
-		decayFactor := math.Exp(-timeDelta * math.Ln2 / r.halfLife)
-		newScore := currentScore * decayFactor
-		
-		// Remove if score is too low (less than 0.1)
-		if newScore < 0.1 {
-			r.client.ZRem(ctx, trendingKey, pageKey)
-			r.client.Del(ctx, metadataKey)
-			continue
-		}
-		
-		// Update with decayed score
-		r.client.ZAdd(ctx, trendingKey, redis.Z{
-			Score:  newScore,
-			Member: pageKey,
-		})
+	// New page bonus
+	if edit.Type == "new" {
+		baseScore *= 2.0
 	}
 	
-	// Limit to max pages to prevent unbounded growth
-	count, err := r.client.ZCard(ctx, trendingKey).Result()
-	if err != nil {
-		return fmt.Errorf("failed to get trending count: %w", err)
-	}
-	
-	if count > int64(r.config.MaxPages) {
-		// Remove lowest scoring pages
-		toRemove := count - int64(r.config.MaxPages)
-		r.client.ZRemRangeByRank(ctx, trendingKey, 0, toRemove-1)
-	}
-	
-	log.Printf("Pruned trending pages: %d entries processed", len(results))
-	return nil
+	return baseScore
 }
 
-// StartPruningScheduler starts a background goroutine for periodic pruning
-func (r *RedisTrending) StartPruningScheduler(ctx context.Context) {
-	if !r.config.Enabled {
+// StartPruning starts background cleanup task
+func (t *TrendingScorer) StartPruning() {
+	if !t.config.Enabled {
 		return
 	}
 	
-	ticker := time.NewTicker(r.config.PruneInterval)
-	
+	t.pruneWg.Add(1)
 	go func() {
+		defer t.pruneWg.Done()
+		ticker := time.NewTicker(t.pruneInterval)
 		defer ticker.Stop()
 		
 		for {
 			select {
 			case <-ticker.C:
-				if err := r.PruneTrending(ctx); err != nil {
-					log.Printf("Error during trending pruning: %v", err)
+				count, err := t.pruneTrendingSet()
+				if err != nil {
+					// Log error but continue
+					continue
 				}
-			case <-ctx.Done():
+				t.metrics.PruneRunsTotal.Inc()
+				t.metrics.PruneCountTotal.Add(float64(count))
+				
+			case <-t.ctx.Done():
 				return
 			}
 		}
 	}()
 }
 
-// getCurrentScore retrieves current score and last update time for a page
-func (r *RedisTrending) getCurrentScore(ctx context.Context, pageKey string) (float64, float64, error) {
-	trendingKey := "trending:global"
+// pruneTrendingSet removes dead/low-score entries
+func (t *TrendingScorer) pruneTrendingSet() (int, error) {
+	ctx := context.Background()
+	globalKey := "trending:global"
+	now := t.timeProvider.Now().Unix()
+	pruneCount := 0
 	
-	// Get current score
-	score, err := r.client.ZScore(ctx, trendingKey, pageKey).Result()
-	if err == redis.Nil {
-		return 0, 0, nil // Page not in trending list
-	}
+	// Remove very low scores from global set
+	removed, err := t.redis.ZRemRangeByScore(ctx, globalKey, "-inf", "0.01").Result()
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get current score: %w", err)
+		return 0, fmt.Errorf("failed to remove low scores: %w", err)
 	}
+	pruneCount += int(removed)
 	
-	// Get last update time
-	metadataKey := fmt.Sprintf("trending:meta:%s", pageKey)
-	lastUpdateStr, err := r.client.HGet(ctx, metadataKey, "last_update").Result()
-	if err == redis.Nil {
-		return score, 0, nil // No metadata yet
-	}
+	// Cap set to max pages
+	count, err := t.redis.ZCard(ctx, globalKey).Result()
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get last update: %w", err)
+		return pruneCount, fmt.Errorf("failed to get set size: %w", err)
 	}
 	
-	lastUpdate, err := strconv.ParseFloat(lastUpdateStr, 64)
-	if err != nil {
-		return score, 0, nil // Invalid timestamp
+	if count > int64(t.maxPages) {
+		toRemove := count - int64(t.maxPages)
+		removed, err := t.redis.ZRemRangeByRank(ctx, globalKey, 0, toRemove-1).Result()
+		if err != nil {
+			return pruneCount, fmt.Errorf("failed to cap set size: %w", err)
+		}
+		pruneCount += int(removed)
 	}
 	
-	return score, lastUpdate, nil
+	// Clean up individual page keys for very old entries
+	pattern := "trending:*"
+	iter := t.redis.Scan(ctx, 0, pattern, 100).Iterator()
+	
+	for iter.Next(ctx) {
+		pageKey := iter.Val()
+		if pageKey == globalKey {
+			continue
+		}
+		
+		// Get page data
+		data, err := t.redis.HGetAll(ctx, pageKey).Result()
+		if err != nil {
+			continue
+		}
+		
+		rawScoreStr, hasScore := data["raw_score"]
+		lastUpdatedStr, hasTime := data["last_updated"]
+		
+		if !hasScore || !hasTime {
+			// Invalid data, remove it
+			t.redis.Del(ctx, pageKey)
+			pruneCount++
+			continue
+		}
+		
+		rawScore, err := strconv.ParseFloat(rawScoreStr, 64)
+		if err != nil {
+			t.redis.Del(ctx, pageKey)
+			pruneCount++
+			continue
+		}
+		
+		lastUpdated, err := strconv.ParseInt(lastUpdatedStr, 10, 64)
+		if err != nil {
+			t.redis.Del(ctx, pageKey)
+			pruneCount++
+			continue
+		}
+		
+		// Calculate current score
+		elapsedMinutes := float64(now-lastUpdated) / 60.0
+		decayFactor := math.Pow(0.5, elapsedMinutes/t.halfLifeMinutes)
+		currentScore := rawScore * decayFactor
+		
+		// Remove if score too low
+		if currentScore < 0.01 {
+			// Extract page title from key
+			pageTitle := pageKey[9:] // Remove "trending:" prefix
+			
+			// Remove from both places
+			t.redis.Del(ctx, pageKey)
+			t.redis.ZRem(ctx, globalKey, pageTitle)
+			pruneCount++
+		}
+	}
+	
+	if err := iter.Err(); err != nil {
+		return pruneCount, fmt.Errorf("scan error: %w", err)
+	}
+	
+	return pruneCount, nil
 }
 
-// calculateScoreIncrement determines score increment based on edit characteristics
-func (r *RedisTrending) calculateScoreIncrement(edit *models.WikipediaEdit) float64 {
-	baseScore := 1.0
-	
-	// Larger edits get higher scores
-	byteChange := edit.ByteChange()
-	if byteChange < 0 {
-		byteChange = -byteChange // Use absolute value
+// ProcessEdit processes an edit and updates trending scores (for aggregator)
+func (t *TrendingScorer) ProcessEdit(edit *models.WikipediaEdit) error {
+	if !t.config.Enabled {
+		return nil
 	}
 	
-	// Scale based on byte change (logarithmic scaling)
-	if byteChange > 100 {
-		sizeMultiplier := 1.0 + math.Log10(float64(byteChange)/100.0)
-		baseScore *= sizeMultiplier
-	}
-	
-	// Bot edits get reduced score
-	if edit.Bot {
-		baseScore *= 0.5
-	}
-	
-	// New pages get bonus score (detected by looking for "new" in type)
-	if edit.Type == "new" {
-		baseScore *= 1.5
-	}
-	
-	return baseScore
-}
-
-// TrendingPage represents a trending page with metadata
-type TrendingPage struct {
-	Rank       int       `json:"rank"`
-	Wiki       string    `json:"wiki"`
-	Title      string    `json:"title"`
-	Score      float64   `json:"score"`
-	EditCount  int       `json:"edit_count"`
-	LastUpdate time.Time `json:"last_update"`
+	increment := t.calculateIncrement(edit)
+	return t.IncrementScore(edit.Title, increment)
 }

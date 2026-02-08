@@ -17,7 +17,7 @@ import (
 type IndexingStrategy struct {
 	config            *config.SelectiveCriteria
 	redis             *redis.Client
-	trending          *RedisTrending
+	trending          *TrendingScorer
 	hotPages          *HotPageTracker
 	watchlist         map[string]bool
 	watchlistMu       sync.RWMutex
@@ -45,7 +45,7 @@ type IndexingDecision struct {
 }
 
 // NewIndexingStrategy creates a new indexing strategy
-func NewIndexingStrategy(cfg *config.SelectiveCriteria, redisClient *redis.Client, trending *RedisTrending, hotPages *HotPageTracker) *IndexingStrategy {
+func NewIndexingStrategy(cfg *config.SelectiveCriteria, redisClient *redis.Client, trending *TrendingScorer, hotPages *HotPageTracker) *IndexingStrategy {
 	strategy := &IndexingStrategy{
 		config:          cfg,
 		redis:           redisClient,
