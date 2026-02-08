@@ -15,6 +15,20 @@ import (
 	"github.com/segmentio/kafka-go/compress"
 )
 
+// ProducerInterface defines the interface for producing messages to Kafka
+type ProducerInterface interface {
+	Produce(edit *models.WikipediaEdit) error
+	Close() error 
+	Start() error
+	GetStats() map[string]interface{}
+}
+
+// WriterInterface defines the interface for writing messages to Kafka
+type WriterInterface interface {
+	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
+}
+
 const (
 	DefaultTopic         = "wikipedia.edits"
 	DefaultBufferSize    = 1000
@@ -26,7 +40,7 @@ const (
 
 // Producer handles asynchronous message production to Kafka
 type Producer struct {
-	writer        *kafka.Writer
+	writer        WriterInterface
 	config        *config.Config
 	logger        zerolog.Logger
 	buffer        chan *models.WikipediaEdit

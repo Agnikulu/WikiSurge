@@ -60,6 +60,136 @@ WikiSurge is a high-performance system that monitors Wikipedia changes in real-t
 - **Kafka**: localhost:9092
 - **Redis**: localhost:6379
 
+## Ingestion Layer
+
+WikiSurge's ingestion layer is the entry point for real-time Wikipedia data. It connects to Wikipedia's Server-Sent Events (SSE) stream and processes edit events for downstream consumption.
+
+### Quick Start - Ingestion Only
+
+To run just the ingestion pipeline:
+
+```bash
+# Start Kafka and dependencies
+docker-compose up -d kafka zookeeper prometheus
+
+# Configure and start ingestion
+make build
+./bin/ingestor -config configs/config.dev.yaml
+
+# Monitor ingestion metrics
+curl localhost:2112/metrics | grep edits_ingested
+```
+
+### Key Features
+
+- **Real-time Processing**: Processes Wikipedia edits as they happen
+- **Intelligent Filtering**: Configurable bot, language, and edit type filters
+- **Rate Limiting**: Prevents system overload with configurable rate limits
+- **Auto-reconnection**: Robust connection handling with exponential backoff
+- **Batched Production**: Efficient Kafka message production with batching
+- **Comprehensive Monitoring**: Detailed Prometheus metrics and Grafana dashboards
+
+### Configuration
+
+Configure ingestion behavior in your config file:
+
+```yaml
+ingestor:
+  exclude_bots: true                    # Filter bot edits
+  allowed_languages: ["en", "es", "fr"] # Language whitelist  
+  rate_limit: 50                        # Max events per second
+  burst_limit: 100                      # Burst capacity
+  reconnect_delay: 1s                   # Reconnection delay
+  metrics_port: 2112                    # Metrics endpoint port
+```
+
+### Monitoring Dashboard
+
+Import the Grafana dashboard for ingestion monitoring:
+
+```bash
+# Import ingestion dashboard
+curl -X POST \
+  http://admin:admin@localhost:3000/api/dashboards/db \
+  -H 'Content-Type: application/json' \
+  -d @monitoring/ingestion-dashboard.json
+```
+
+The dashboard provides real-time visibility into:
+- Ingestion rate (events per second)
+- Filter effectiveness (bot, language, type filters)
+- Kafka production latency and throughput
+- Error rates and buffer usage
+- Connection health and reconnection statistics
+
+### Performance Testing
+
+Run load tests to validate system performance:
+
+```bash
+# Normal load test (10 eps for 5 minutes)
+./test/load/simulate_sse.sh --rate=10 --duration=300
+
+# Spike test (ramp 5→50 eps over 2 minutes)
+./test/load/simulate_sse.sh --scenario=spike --duration=120
+
+# Sustained high load (30 eps for 10 minutes) 
+./test/load/simulate_sse.sh --rate=30 --duration=600
+
+# Bursty load (alternate 5/50 eps every 30s)
+./test/load/simulate_sse.sh --scenario=bursty --duration=300
+```
+
+### Testing
+
+Comprehensive test suite for ingestion components:
+
+```bash
+# Unit tests
+go test ./internal/ingestor/...
+go test ./internal/kafka/...
+
+# Integration tests
+go test ./test/integration/...
+
+# Benchmarks (performance validation)
+go test -bench=. -benchmem ./test/benchmark/...
+```
+
+### Troubleshooting
+
+Common issues and solutions:
+
+**High Latency (p99 > 100ms)**
+```bash
+# Check Kafka broker health
+kafka-topics --bootstrap-server localhost:9092 --list
+
+# Monitor batch sizes and production rate
+curl -s localhost:2112/metrics | grep kafka_produce_latency
+```
+
+**Production Errors**
+```bash
+# Check Kafka connectivity
+kafka-console-producer --bootstrap-server localhost:9092 --topic wikipedia.edits
+
+# Verify topic exists
+kafka-topics --bootstrap-server localhost:9092 --describe --topic wikipedia.edits
+```
+
+**Connection Issues**
+```bash
+# Test Wikipedia SSE directly
+curl -H "Accept: text/event-stream" \
+     https://stream.wikimedia.org/v2/stream/recentchange
+
+# Check reconnection metrics
+curl -s localhost:2112/metrics | grep sse_reconnections_total
+```
+
+For detailed troubleshooting and configuration options, see [docs/INGESTION.md](docs/INGESTION.md).
+
 ## Development
 
 The project follows a modular structure:

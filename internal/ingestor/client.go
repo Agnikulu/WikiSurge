@@ -29,7 +29,7 @@ type WikiStreamClient struct {
 	config            *config.Config
 	logger            zerolog.Logger
 	rateLimiter       *rate.Limiter
-	producer          *kafka.Producer
+	producer          kafka.ProducerInterface
 	stopChan          chan struct{}
 	reconnectDelay    time.Duration
 	wg                sync.WaitGroup
@@ -39,7 +39,7 @@ type WikiStreamClient struct {
 }
 
 // NewWikiStreamClient creates a new Wikipedia SSE client
-func NewWikiStreamClient(cfg *config.Config, logger zerolog.Logger, producer *kafka.Producer) *WikiStreamClient {
+func NewWikiStreamClient(cfg *config.Config, logger zerolog.Logger, producer kafka.ProducerInterface) *WikiStreamClient {
 	// Create rate limiter with configured limits
 	rateLimiter := rate.NewLimiter(rate.Limit(cfg.Ingestor.RateLimit), cfg.Ingestor.BurstLimit)
 	
@@ -274,6 +274,11 @@ func (w *WikiStreamClient) processEvent(event *sse.Event) error {
 
 // shouldProcess applies filters to determine if an edit should be processed
 func (w *WikiStreamClient) shouldProcess(edit *models.WikipediaEdit) bool {
+	return w.ShouldProcess(edit)
+}
+
+// ShouldProcess is a public version for testing
+func (w *WikiStreamClient) ShouldProcess(edit *models.WikipediaEdit) bool {
 	// Filter by bot status
 	if w.config.Ingestor.ExcludeBots && edit.Bot {
 		metrics.EditsFilteredTotal.WithLabelValues("bot").Inc()
