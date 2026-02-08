@@ -1,48 +1,136 @@
 package main
 
 import (
-	"log"
+	"context"
+	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Agnikulu/WikiSurge/internal/api"
+	"github.com/Agnikulu/WikiSurge/internal/config"
+	"github.com/Agnikulu/WikiSurge/internal/metrics"
+	"github.com/Agnikulu/WikiSurge/internal/storage"
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 )
 
 func main() {
-	log.Println("Starting WikiSurge API Server...")
-	
-	// TODO: Initialize configuration
-	// TODO: Setup database connections
-	// TODO: Setup routes and handlers
-	// TODO: Setup middleware (CORS, logging, etc.)
-	
-	// Placeholder HTTP server
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"healthy","service":"wikisurge-api"}`))
-	})
-	
-	server := &http.Server{
-		Addr:         ":8080",
-		Handler:      mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+	// ---- Flags ----
+	configPath := flag.String("config", "configs/config.dev.yaml", "Path to configuration file")
+	portOverride := flag.Int("port", 0, "Override API port (default from config)")
+	flag.Parse()
+
+	// ---- Configuration ----
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
 	}
-	
-	// Start server in goroutine
+
+	if *portOverride > 0 {
+		cfg.API.Port = *portOverride
+	}
+
+	// ---- Logger ----
+	level, _ := zerolog.ParseLevel(cfg.Logging.Level)
+	logger := zerolog.New(os.Stdout).With().Timestamp().Str("service", "wikisurge-api").Logger().Level(level)
+	logger.Info().Str("config", *configPath).Int("port", cfg.API.Port).Msg("Starting WikiSurge API Server")
+
+	// ---- Metrics ----
+	metrics.InitMetrics()
+	metricsServer := metrics.NewServer(cfg.Ingestor.MetricsPort)
+	if err := metricsServer.Start(); err != nil {
+		logger.Fatal().Err(err).Msg("Failed to start metrics server")
+	}
+	logger.Info().Int("port", cfg.Ingestor.MetricsPort).Msg("Metrics server started")
+
+	// ---- Redis ----
+	redisAddr := strings.TrimPrefix(cfg.Redis.URL, "redis://")
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:         redisAddr,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+		PoolSize:     20,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		logger.Warn().Err(err).Msg("Redis not reachable at startup (will retry on requests)")
+	} else {
+		logger.Info().Str("addr", redisAddr).Msg("Connected to Redis")
+	}
+	cancel()
+
+	// ---- Elasticsearch (optional) ----
+	var esClient *storage.ElasticsearchClient
+	if cfg.Elasticsearch.Enabled {
+		esClient, err = storage.NewElasticsearchClient(&cfg.Elasticsearch)
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to connect to Elasticsearch (search disabled)")
+		} else {
+			logger.Info().Str("url", cfg.Elasticsearch.URL).Msg("Connected to Elasticsearch")
+		}
+	}
+
+	// ---- Storage components ----
+	hotPageTracker := storage.NewHotPageTracker(redisClient, &cfg.Redis.HotPages)
+	trendingScorer := storage.NewTrendingScorer(redisClient, &cfg.Redis.Trending)
+	alerts := storage.NewRedisAlerts(redisClient)
+
+	// ---- API Server ----
+	apiServer := api.NewAPIServer(redisClient, esClient, trendingScorer, hotPageTracker, alerts, cfg, logger)
+	addr := fmt.Sprintf(":%d", cfg.API.Port)
+	httpServer := apiServer.ListenAndServe(addr)
+
+	// Start HTTP server
 	go func() {
-		log.Println("API Server listening on :8080")
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+		logger.Info().Str("addr", addr).Msg("API server listening")
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal().Err(err).Msg("API server failed")
 		}
 	}()
-	
-	// Graceful shutdown
+
+	// ---- Wait for shutdown signal ----
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	
-	<-sigChan
-	log.Println("Shutting down WikiSurge API Server...")
+	sig := <-sigChan
+	logger.Info().Str("signal", sig.String()).Msg("Shutdown signal received")
+
+	// ---- Graceful shutdown ----
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	// Stop accepting new requests, wait for in-flight
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error().Err(err).Msg("HTTP server shutdown error")
+	}
+
+	// Stop metrics server
+	if err := metricsServer.Stop(shutdownCtx); err != nil {
+		logger.Error().Err(err).Msg("Metrics server shutdown error")
+	}
+
+	// Stop storage components
+	hotPageTracker.Shutdown()
+	trendingScorer.Stop()
+
+	// Close Redis
+	if err := redisClient.Close(); err != nil {
+		logger.Error().Err(err).Msg("Redis close error")
+	}
+
+	// Close ES
+	if esClient != nil {
+		esClient.Stop()
+	}
+
+	_ = apiServer.Shutdown(shutdownCtx)
+
+	logger.Info().Msg("WikiSurge API Server stopped")
 }

@@ -71,6 +71,16 @@ test-bench:
 	@echo "Running benchmarks..."
 	@go test ./test/benchmark/... -bench=. -benchtime=5s -benchmem
 
+# Run API unit tests
+test-api:
+	@echo "Running API unit tests..."
+	@go test ./internal/api/... -v -count=1
+
+# Run the API server
+api:
+	@echo "Starting API server..."
+	@go run ./cmd/api/main.go
+
 # Test infrastructure components
 test-infra:
 	@echo "Testing infrastructure components..."
