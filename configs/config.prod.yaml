@@ -33,6 +33,8 @@ redis:
     promotion_threshold: 10
     window_duration: 30m
     max_members_per_page: 200
+    hot_threshold: 3
+    cleanup_interval: 2m
   trending:
     enabled: true
     max_pages: 10000

@@ -18,7 +18,7 @@ type IndexingStrategy struct {
 	config            *config.SelectiveCriteria
 	redis             *redis.Client
 	trending          *RedisTrending
-	hotPages          *RedisHotPages
+	hotPages          *HotPageTracker
 	watchlist         map[string]bool
 	watchlistMu       sync.RWMutex
 	contextCache      map[string]*PageContext
@@ -45,7 +45,7 @@ type IndexingDecision struct {
 }
 
 // NewIndexingStrategy creates a new indexing strategy
-func NewIndexingStrategy(cfg *config.SelectiveCriteria, redisClient *redis.Client, trending *RedisTrending, hotPages *RedisHotPages) *IndexingStrategy {
+func NewIndexingStrategy(cfg *config.SelectiveCriteria, redisClient *redis.Client, trending *RedisTrending, hotPages *HotPageTracker) *IndexingStrategy {
 	strategy := &IndexingStrategy{
 		config:          cfg,
 		redis:           redisClient,

@@ -201,6 +201,46 @@ var (
 		[]string{},
 	)
 
+	ActivityCounterTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "activity_counter_total",
+			Help: "Total activity counter increments",
+		},
+		[]string{},
+	)
+
+	HotPagesPromotedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "hot_pages_promoted_total",
+			Help: "Total pages promoted to hot tracking",
+		},
+		[]string{},
+	)
+
+	PromotionRejectedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "promotion_rejected_total",
+			Help: "Total promotions rejected due to circuit breaker",
+		},
+		[]string{},
+	)
+
+	HotPagesExpiredTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "hot_pages_expired_total",
+			Help: "Total hot pages expired and cleaned up",
+		},
+		[]string{},
+	)
+
+	CleanupRunsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cleanup_runs_total",
+			Help: "Total cleanup operations completed",
+		},
+		[]string{},
+	)
+
 	TrendingPagesTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "trending_pages_total",
@@ -345,6 +385,21 @@ func InitMetrics() {
 
 	prometheus.MustRegister(HotPagesTracked)
 	metricsRegistry["hot_pages_tracked"] = HotPagesTracked
+
+	prometheus.MustRegister(ActivityCounterTotal)
+	metricsRegistry["activity_counter_total"] = ActivityCounterTotal
+
+	prometheus.MustRegister(HotPagesPromotedTotal)
+	metricsRegistry["hot_pages_promoted_total"] = HotPagesPromotedTotal
+
+	prometheus.MustRegister(PromotionRejectedTotal)
+	metricsRegistry["promotion_rejected_total"] = PromotionRejectedTotal
+
+	prometheus.MustRegister(HotPagesExpiredTotal)
+	metricsRegistry["hot_pages_expired_total"] = HotPagesExpiredTotal
+
+	prometheus.MustRegister(CleanupRunsTotal)
+	metricsRegistry["cleanup_runs_total"] = CleanupRunsTotal
 
 	prometheus.MustRegister(TrendingPagesTotal)
 	metricsRegistry["trending_pages_total"] = TrendingPagesTotal

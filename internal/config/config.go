@@ -71,6 +71,8 @@ type HotPages struct {
 	PromotionThreshold  int           `yaml:"promotion_threshold"`
 	WindowDuration      time.Duration `yaml:"window_duration"`
 	MaxMembersPerPage   int           `yaml:"max_members_per_page"`
+	HotThreshold        int           `yaml:"hot_threshold"`
+	CleanupInterval     time.Duration `yaml:"cleanup_interval"`
 }
 
 // TrendingConfig for trending page functionality
