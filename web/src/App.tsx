@@ -8,6 +8,7 @@ import { TrendingList } from './components/Trending/TrendingList';
 import { SearchInterface } from './components/Search/SearchInterface';
 import { LiveFeed } from './components/LiveFeed/LiveFeed';
 import { EditWarsList } from './components/EditWars/EditWarsList';
+import { HistoricalEditWars } from './components/EditWars/HistoricalEditWars';
 import { useAppStore } from './store/appStore';
 
 function App() {
@@ -93,8 +94,9 @@ function SearchView() {
 /** Edit Wars view */
 function EditWarsView() {
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto space-y-6">
       <EditWarsList />
+      <HistoricalEditWars />
     </div>
   );
 }

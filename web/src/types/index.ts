@@ -98,6 +98,40 @@ export interface EditWar {
   active: boolean;
 }
 
+/** Extended edit-war detail with per-editor breakdown and timeline entries */
+export interface EditWarDetail extends EditWar {
+  /** Per-editor stats */
+  editor_stats?: EditorStat[];
+  /** Individual edit timeline entries */
+  timeline?: EditWarTimelineEntry[];
+  /** Revert relationships */
+  reverts?: RevertEdge[];
+  /** Duration in seconds */
+  duration_seconds?: number;
+}
+
+export interface EditorStat {
+  name: string;
+  edits: number;
+  reverts: number;
+  bytes_added: number;
+}
+
+export interface EditWarTimelineEntry {
+  timestamp: string;
+  editor: string;
+  action: 'edit' | 'revert';
+  byte_change: number;
+  comment?: string;
+  revision_id?: number;
+}
+
+export interface RevertEdge {
+  from: string;
+  to: string;
+  count: number;
+}
+
 export interface SearchResult {
   edits: Edit[];
   total: number;
