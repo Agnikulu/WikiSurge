@@ -54,6 +54,22 @@ health:
 # Run all tests (placeholder)
 test:
 	@echo "Running tests..."
+	@go test ./... -v -count=1
+
+# Run integration tests
+test-integration:
+	@echo "Running integration tests..."
+	@go test ./test/integration/... -v -count=1
+
+# Run resource limit tests
+test-resource:
+	@echo "Running resource limit tests..."
+	@go test ./test/resource/... -v -count=1
+
+# Run benchmarks
+test-bench:
+	@echo "Running benchmarks..."
+	@go test ./test/benchmark/... -bench=. -benchtime=5s -benchmem
 
 # Test infrastructure components
 test-infra:

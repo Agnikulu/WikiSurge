@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"testing"
 	"time"
 

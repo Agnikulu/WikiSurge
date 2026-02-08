@@ -1,0 +1,518 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "WikiSurge Processing Pipeline — Consumer Coordination & Health",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Processing Rate by Consumer",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(edits_processed_total[1m])",
+          "legendFormat": "{{consumer}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(processed_edits_total[1m])",
+          "legendFormat": "spike-detector",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(trending_edits_processed_total[1m])",
+          "legendFormat": "trending-aggregator",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(edit_war_processed_edits_total[1m])",
+          "legendFormat": "edit-war-detector",
+          "refId": "D"
+        },
+        {
+          "expr": "rate(indexer_edits_received_total[1m])",
+          "legendFormat": "selective-indexer",
+          "refId": "E"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "title": "Kafka Consumer Lag",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "kafka_consumer_lag",
+          "legendFormat": "{{consumer}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "stacking": { "mode": "normal" },
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 500 },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "alert": {
+        "name": "High Consumer Lag",
+        "conditions": [
+          {
+            "evaluator": { "params": [1000], "type": "gt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "params": [], "type": "avg" },
+            "type": "query"
+          }
+        ],
+        "frequency": "1m",
+        "for": "5m"
+      }
+    },
+    {
+      "title": "Hot Pages Tracked",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "id": 3,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "hot_pages_tracked",
+          "legendFormat": "Hot Pages",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 800 },
+              { "color": "red", "value": 1000 }
+            ]
+          },
+          "max": 1200
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+    {
+      "title": "Trending Pages Count",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "id": 4,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "trending_pages_total",
+          "legendFormat": "Trending Pages",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 800 },
+              { "color": "red", "value": 1000 }
+            ]
+          },
+          "max": 1200
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+    {
+      "title": "Indexing Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "id": 5,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(docs_indexed_total[1m])",
+          "legendFormat": "Docs Indexed/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(indexer_edits_indexed_total[1m])",
+          "legendFormat": "Selective Index ({{reason}})",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(indexer_edits_skipped_total[1m])",
+          "legendFormat": "Edits Skipped/sec",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean"] },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "title": "Alert Rates",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "id": 6,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(spikes_detected_total[1m])",
+          "legendFormat": "Spikes Detected/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(edit_wars_detected_total[1m])",
+          "legendFormat": "Edit Wars Detected/sec",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(edit_war_detections_total[1m])",
+          "legendFormat": "Edit War Detections ({{severity}})",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(alerts_published_total[1m])",
+          "legendFormat": "Alerts Published/sec",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "title": "Error Rates",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "id": 7,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(processing_errors_total[1m])",
+          "legendFormat": "Processing Errors ({{consumer}})",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(kafka_processing_errors_total[1m])",
+          "legendFormat": "Kafka Processing Errors",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(trending_process_errors_total[1m])",
+          "legendFormat": "Trending Errors",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(indexer_index_errors_total[1m])",
+          "legendFormat": "Indexing Errors",
+          "refId": "D"
+        },
+        {
+          "expr": "rate(processor_component_failures_total[1m])",
+          "legendFormat": "Component Failures ({{component}})",
+          "refId": "E"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.1 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "alert": {
+        "name": "High Error Rate",
+        "conditions": [
+          {
+            "evaluator": { "params": [0.1], "type": "gt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "params": [], "type": "avg" },
+            "type": "query"
+          }
+        ],
+        "frequency": "1m",
+        "for": "5m"
+      }
+    },
+    {
+      "title": "Resource Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "id": 8,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "redis_memory_bytes",
+          "legendFormat": "Redis Memory",
+          "refId": "A"
+        },
+        {
+          "expr": "elasticsearch_index_size_bytes",
+          "legendFormat": "ES Index Size",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max"] },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "title": "Component Health",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 32 },
+      "id": 9,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "processor_component_healthy",
+          "legendFormat": "{{component}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "UNHEALTHY", "color": "red" }, "1": { "text": "HEALTHY", "color": "green" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "background"
+      }
+    },
+    {
+      "title": "Processing Latency Distribution",
+      "type": "histogram",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 36 },
+      "id": 10,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(spike_detection_processing_seconds_bucket[5m]))",
+          "legendFormat": "Spike p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(spike_detection_processing_seconds_bucket[5m]))",
+          "legendFormat": "Spike p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(spike_detection_processing_seconds_bucket[5m]))",
+          "legendFormat": "Spike p99",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(trending_update_duration_seconds_bucket[5m]))",
+          "legendFormat": "Trending p99",
+          "refId": "D"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(edit_war_processing_seconds_bucket[5m]))",
+          "legendFormat": "EditWar p99",
+          "refId": "E"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "title": "Hot Page Promotion & Cleanup",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 36 },
+      "id": 11,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(hot_pages_promoted_total[5m])",
+          "legendFormat": "Promoted/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(promotion_rejected_total[5m])",
+          "legendFormat": "Promotion Rejected/sec",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(hot_pages_expired_total[5m])",
+          "legendFormat": "Expired/sec",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(cleanup_runs_total[5m])",
+          "legendFormat": "Cleanup Runs/sec",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean"] }
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["wikisurge", "processing", "consumers"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "WikiSurge Processing Pipeline",
+  "uid": "wikisurge-processing",
+  "version": 1,
+  "refresh": "10s"
+}
