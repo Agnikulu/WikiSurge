@@ -1,223 +1,93 @@
-{"level":"info","component":"ingestor","config_path":"configs/config.dev.yaml","verbose":false,"time":"2026-02-09T13:08:16-05:00","message":"Starting Wikipedia ingestor"}
-{"level":"info","component":"ingestor","time":"2026-02-09T13:08:16-05:00","message":"Metrics initialized"}
-{"level":"info","component":"ingestor","component":"kafka-producer","brokers":["localhost:19092"],"topic":"wikipedia.edits","buffer_size":1000,"batch_size":100,"flush_interval":100,"time":"2026-02-09T13:08:16-05:00","message":"Kafka producer created"}
-{"level":"info","component":"ingestor","component":"kafka-producer","time":"2026-02-09T13:08:16-05:00","message":"Kafka producer started"}
-{"level":"info","component":"ingestor","component":"sse-client","time":"2026-02-09T13:08:16-05:00","message":"Establishing SSE connection to Wikipedia EventStreams"}
-{"level":"info","component":"ingestor","port":2112,"time":"2026-02-09T13:08:16-05:00","message":"Starting metrics server"}
-2026/02/09 13:08:16 Starting metrics server on port 2112
-{"level":"info","component":"ingestor","component":"sse-client","time":"2026-02-09T13:08:16-05:00","message":"SSE connection established successfully"}
-{"level":"info","component":"ingestor","component":"sse-client","time":"2026-02-09T13:08:16-05:00","message":"Starting Wikipedia SSE client"}
-{"level":"info","component":"ingestor","component":"sse-client","time":"2026-02-09T13:08:16-05:00","message":"Started processing SSE events"}
-{"level":"info","component":"ingestor","time":"2026-02-09T13:08:16-05:00","message":"Wikipedia ingestor started successfully"}
-{"level":"info","component":"ingestor","metrics_url":"http://localhost:2112/metrics","time":"2026-02-09T13:08:16-05:00","message":"Metrics available at endpoint"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":100,"time":"2026-02-09T13:08:19-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":200,"time":"2026-02-09T13:08:22-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":300,"time":"2026-02-09T13:08:26-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":400,"time":"2026-02-09T13:08:28-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":500,"time":"2026-02-09T13:08:32-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":600,"time":"2026-02-09T13:08:35-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":700,"time":"2026-02-09T13:08:36-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":800,"time":"2026-02-09T13:08:40-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":900,"time":"2026-02-09T13:08:43-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":1000,"time":"2026-02-09T13:08:45-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":1100,"time":"2026-02-09T13:08:47-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":1200,"time":"2026-02-09T13:08:50-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":1300,"time":"2026-02-09T13:08:53-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":1400,"time":"2026-02-09T13:08:58-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":1500,"time":"2026-02-09T13:09:01-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":1600,"time":"2026-02-09T13:09:03-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":1700,"time":"2026-02-09T13:09:07-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":1800,"time":"2026-02-09T13:09:09-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":1900,"time":"2026-02-09T13:09:12-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":2000,"time":"2026-02-09T13:09:14-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":2100,"time":"2026-02-09T13:09:16-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":2200,"time":"2026-02-09T13:09:18-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":2300,"time":"2026-02-09T13:09:20-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":2400,"time":"2026-02-09T13:09:23-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":2500,"time":"2026-02-09T13:09:25-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":2600,"time":"2026-02-09T13:09:27-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":2700,"time":"2026-02-09T13:09:33-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":2800,"time":"2026-02-09T13:09:37-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":2900,"time":"2026-02-09T13:09:39-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":3000,"time":"2026-02-09T13:09:42-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":3100,"time":"2026-02-09T13:09:44-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":3200,"time":"2026-02-09T13:09:47-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":3300,"time":"2026-02-09T13:09:51-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":3400,"time":"2026-02-09T13:09:53-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":3500,"time":"2026-02-09T13:09:56-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":3600,"time":"2026-02-09T13:10:00-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":3700,"time":"2026-02-09T13:10:05-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":3800,"time":"2026-02-09T13:10:07-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":3900,"time":"2026-02-09T13:10:10-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":4000,"time":"2026-02-09T13:10:13-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":4100,"time":"2026-02-09T13:10:15-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":4200,"time":"2026-02-09T13:10:17-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":4300,"time":"2026-02-09T13:10:19-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":4400,"time":"2026-02-09T13:10:21-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":4500,"time":"2026-02-09T13:10:24-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":4600,"time":"2026-02-09T13:10:26-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":4700,"time":"2026-02-09T13:10:29-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":4800,"time":"2026-02-09T13:10:31-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":4900,"time":"2026-02-09T13:10:33-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":5000,"time":"2026-02-09T13:10:40-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":5100,"time":"2026-02-09T13:10:42-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":5200,"time":"2026-02-09T13:10:45-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":5300,"time":"2026-02-09T13:10:47-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":5400,"time":"2026-02-09T13:10:50-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":5500,"time":"2026-02-09T13:10:53-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":5600,"time":"2026-02-09T13:10:55-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":5700,"time":"2026-02-09T13:10:57-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":5800,"time":"2026-02-09T13:11:00-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":5900,"time":"2026-02-09T13:11:03-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":6000,"time":"2026-02-09T13:11:05-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":6100,"time":"2026-02-09T13:11:07-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":6200,"time":"2026-02-09T13:11:13-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":6300,"time":"2026-02-09T13:11:15-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":6400,"time":"2026-02-09T13:11:18-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":6500,"time":"2026-02-09T13:11:20-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":6600,"time":"2026-02-09T13:11:22-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":6700,"time":"2026-02-09T13:11:25-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":6800,"time":"2026-02-09T13:11:28-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":6900,"time":"2026-02-09T13:11:31-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":7000,"time":"2026-02-09T13:11:32-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":7100,"time":"2026-02-09T13:11:35-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":7200,"time":"2026-02-09T13:11:37-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":7300,"time":"2026-02-09T13:11:40-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":7400,"time":"2026-02-09T13:11:46-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":7500,"time":"2026-02-09T13:11:48-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":7600,"time":"2026-02-09T13:11:51-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":7700,"time":"2026-02-09T13:11:53-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":7800,"time":"2026-02-09T13:11:55-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":7900,"time":"2026-02-09T13:11:57-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":8000,"time":"2026-02-09T13:11:59-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":8100,"time":"2026-02-09T13:12:02-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":8200,"time":"2026-02-09T13:12:04-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":8300,"time":"2026-02-09T13:12:08-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":8400,"time":"2026-02-09T13:12:09-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":8500,"time":"2026-02-09T13:12:11-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":8600,"time":"2026-02-09T13:12:17-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":8700,"time":"2026-02-09T13:12:20-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":8800,"time":"2026-02-09T13:12:22-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":8900,"time":"2026-02-09T13:12:24-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":9000,"time":"2026-02-09T13:12:27-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":9100,"time":"2026-02-09T13:12:29-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":9200,"time":"2026-02-09T13:12:32-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":9300,"time":"2026-02-09T13:12:34-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":9400,"time":"2026-02-09T13:12:37-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":9500,"time":"2026-02-09T13:12:40-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":9600,"time":"2026-02-09T13:12:43-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":9700,"time":"2026-02-09T13:12:47-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":9800,"time":"2026-02-09T13:12:51-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":9900,"time":"2026-02-09T13:12:54-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":10000,"time":"2026-02-09T13:12:57-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":10100,"time":"2026-02-09T13:12:59-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":10200,"time":"2026-02-09T13:13:00-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":10300,"time":"2026-02-09T13:13:03-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":10400,"time":"2026-02-09T13:13:06-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":10500,"time":"2026-02-09T13:13:09-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":10600,"time":"2026-02-09T13:13:11-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":10700,"time":"2026-02-09T13:13:14-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":10800,"time":"2026-02-09T13:13:16-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":10900,"time":"2026-02-09T13:13:18-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":11000,"time":"2026-02-09T13:13:24-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":11100,"time":"2026-02-09T13:13:28-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":11200,"time":"2026-02-09T13:13:30-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":11300,"time":"2026-02-09T13:13:33-05:00","message":"Rate limiter hit 100 times"}
-{"level":"error","component":"ingestor","component":"sse-client","error":"SSE stream idle for 2m0s, forcing reconnect","time":"2026-02-09T13:15:46-05:00","message":"Stream processing failed, will reconnect"}
-{"level":"info","component":"ingestor","component":"sse-client","delay":2000,"time":"2026-02-09T13:15:47-05:00","message":"Attempting to reconnect"}
-{"level":"info","component":"ingestor","component":"sse-client","time":"2026-02-09T13:15:47-05:00","message":"Started processing SSE events"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":11400,"time":"2026-02-09T13:15:51-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":11500,"time":"2026-02-09T13:15:53-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":11600,"time":"2026-02-09T13:15:56-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":11700,"time":"2026-02-09T13:16:00-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":11800,"time":"2026-02-09T13:16:03-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":11900,"time":"2026-02-09T13:16:10-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":12000,"time":"2026-02-09T13:16:13-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":12100,"time":"2026-02-09T13:16:16-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":12200,"time":"2026-02-09T13:16:19-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":12300,"time":"2026-02-09T13:16:22-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":12400,"time":"2026-02-09T13:16:25-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":12500,"time":"2026-02-09T13:16:28-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":12600,"time":"2026-02-09T13:16:31-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":12700,"time":"2026-02-09T13:16:33-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":12800,"time":"2026-02-09T13:16:36-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":12900,"time":"2026-02-09T13:16:38-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":13000,"time":"2026-02-09T13:16:44-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":13100,"time":"2026-02-09T13:16:47-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":13200,"time":"2026-02-09T13:16:50-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":13300,"time":"2026-02-09T13:16:54-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":13400,"time":"2026-02-09T13:16:58-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":13500,"time":"2026-02-09T13:17:01-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":13600,"time":"2026-02-09T13:17:03-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":13700,"time":"2026-02-09T13:17:07-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":13800,"time":"2026-02-09T13:17:11-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":13900,"time":"2026-02-09T13:17:17-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":14000,"time":"2026-02-09T13:17:20-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":14100,"time":"2026-02-09T13:17:23-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":14200,"time":"2026-02-09T13:17:26-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":14300,"time":"2026-02-09T13:17:30-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":14400,"time":"2026-02-09T13:17:31-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":14500,"time":"2026-02-09T13:17:34-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":14600,"time":"2026-02-09T13:17:37-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":14700,"time":"2026-02-09T13:17:41-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":14800,"time":"2026-02-09T13:17:44-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":14900,"time":"2026-02-09T13:17:49-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":15000,"time":"2026-02-09T13:17:53-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":15100,"time":"2026-02-09T13:17:56-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":15200,"time":"2026-02-09T13:17:59-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":15300,"time":"2026-02-09T13:18:02-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":15400,"time":"2026-02-09T13:18:03-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":15500,"time":"2026-02-09T13:18:06-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":15600,"time":"2026-02-09T13:18:08-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":15700,"time":"2026-02-09T13:18:12-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":15800,"time":"2026-02-09T13:18:13-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":15900,"time":"2026-02-09T13:18:18-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":16000,"time":"2026-02-09T13:18:24-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":16100,"time":"2026-02-09T13:18:26-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":16200,"time":"2026-02-09T13:18:29-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":16300,"time":"2026-02-09T13:18:31-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":16400,"time":"2026-02-09T13:18:34-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":16500,"time":"2026-02-09T13:18:36-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":16600,"time":"2026-02-09T13:18:39-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":16700,"time":"2026-02-09T13:18:41-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":16800,"time":"2026-02-09T13:18:45-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":16900,"time":"2026-02-09T13:18:48-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":17000,"time":"2026-02-09T13:18:51-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":17100,"time":"2026-02-09T13:18:56-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":17200,"time":"2026-02-09T13:18:59-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":17300,"time":"2026-02-09T13:19:01-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":17400,"time":"2026-02-09T13:19:03-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":17500,"time":"2026-02-09T13:19:05-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":17600,"time":"2026-02-09T13:19:08-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":17700,"time":"2026-02-09T13:19:11-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":17800,"time":"2026-02-09T13:19:14-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":17900,"time":"2026-02-09T13:19:16-05:00","message":"Rate limiter hit 100 times"}
-{"level":"error","component":"ingestor","component":"sse-client","error":"SSE stream idle for 2m0s, forcing reconnect","time":"2026-02-09T13:21:29-05:00","message":"Stream processing failed, will reconnect"}
-{"level":"info","component":"ingestor","component":"sse-client","delay":4000,"time":"2026-02-09T13:21:31-05:00","message":"Attempting to reconnect"}
-{"level":"info","component":"ingestor","component":"sse-client","time":"2026-02-09T13:21:31-05:00","message":"Started processing SSE events"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":18000,"time":"2026-02-09T13:21:34-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":18100,"time":"2026-02-09T13:21:41-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":18200,"time":"2026-02-09T13:21:43-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":18300,"time":"2026-02-09T13:21:46-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":18400,"time":"2026-02-09T13:21:48-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":18500,"time":"2026-02-09T13:21:52-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":18600,"time":"2026-02-09T13:21:53-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":18700,"time":"2026-02-09T13:21:56-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":18800,"time":"2026-02-09T13:21:58-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":18900,"time":"2026-02-09T13:22:02-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":19000,"time":"2026-02-09T13:22:03-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":19100,"time":"2026-02-09T13:22:06-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":19200,"time":"2026-02-09T13:22:08-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":19300,"time":"2026-02-09T13:22:14-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":19400,"time":"2026-02-09T13:22:16-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":19500,"time":"2026-02-09T13:22:19-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":19600,"time":"2026-02-09T13:22:21-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":19700,"time":"2026-02-09T13:22:24-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":19800,"time":"2026-02-09T13:22:27-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":19900,"time":"2026-02-09T13:22:29-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":20000,"time":"2026-02-09T13:22:32-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":20100,"time":"2026-02-09T13:22:35-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":20200,"time":"2026-02-09T13:22:39-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":20300,"time":"2026-02-09T13:22:42-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":20400,"time":"2026-02-09T13:22:47-05:00","message":"Rate limiter hit 100 times"}
-{"level":"warn","component":"ingestor","component":"sse-client","hits":20500,"time":"2026-02-09T13:22:49-05:00","message":"Rate limiter hit 100 times"}
+{"level":"info","component":"ingestor","config_path":"configs/config.dev.yaml","verbose":false,"time":"2026-02-09T14:24:39-05:00","message":"Starting Wikipedia ingestor"}
+{"level":"info","component":"ingestor","time":"2026-02-09T14:24:39-05:00","message":"Metrics initialized"}
+{"level":"info","component":"ingestor","component":"kafka-producer","brokers":["localhost:19092"],"topic":"wikipedia.edits","buffer_size":1000,"batch_size":100,"flush_interval":100,"time":"2026-02-09T14:24:39-05:00","message":"Kafka producer created"}
+{"level":"info","component":"ingestor","component":"kafka-producer","time":"2026-02-09T14:24:39-05:00","message":"Kafka producer started"}
+{"level":"info","component":"ingestor","component":"sse-client","time":"2026-02-09T14:24:39-05:00","message":"Establishing SSE connection to Wikipedia EventStreams"}
+{"level":"info","component":"ingestor","port":2112,"time":"2026-02-09T14:24:39-05:00","message":"Starting metrics server"}
+2026/02/09 14:24:39 Starting metrics server on port 2112
+{"level":"info","component":"ingestor","component":"sse-client","time":"2026-02-09T14:24:39-05:00","message":"SSE connection established successfully"}
+{"level":"info","component":"ingestor","component":"sse-client","time":"2026-02-09T14:24:39-05:00","message":"Starting Wikipedia SSE client"}
+{"level":"info","component":"ingestor","time":"2026-02-09T14:24:39-05:00","message":"Wikipedia ingestor started successfully"}
+{"level":"info","component":"ingestor","metrics_url":"http://localhost:2112/metrics","time":"2026-02-09T14:24:39-05:00","message":"Metrics available at endpoint"}
+{"level":"info","component":"ingestor","component":"sse-client","time":"2026-02-09T14:24:39-05:00","message":"Started processing SSE events"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":100,"time":"2026-02-09T14:24:42-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":200,"time":"2026-02-09T14:24:44-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":300,"time":"2026-02-09T14:24:46-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":400,"time":"2026-02-09T14:24:50-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":500,"time":"2026-02-09T14:24:53-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":600,"time":"2026-02-09T14:24:56-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":700,"time":"2026-02-09T14:24:59-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":800,"time":"2026-02-09T14:25:02-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":900,"time":"2026-02-09T14:25:09-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":1000,"time":"2026-02-09T14:25:12-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":1100,"time":"2026-02-09T14:25:14-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":1200,"time":"2026-02-09T14:25:16-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":1300,"time":"2026-02-09T14:25:19-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":1400,"time":"2026-02-09T14:25:22-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":1500,"time":"2026-02-09T14:25:25-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":1600,"time":"2026-02-09T14:25:28-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":1700,"time":"2026-02-09T14:25:30-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":1800,"time":"2026-02-09T14:25:33-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":1900,"time":"2026-02-09T14:25:35-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":2000,"time":"2026-02-09T14:25:37-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":2100,"time":"2026-02-09T14:25:42-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":2200,"time":"2026-02-09T14:25:44-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":2300,"time":"2026-02-09T14:25:47-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":2400,"time":"2026-02-09T14:25:49-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":2500,"time":"2026-02-09T14:25:53-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":2600,"time":"2026-02-09T14:25:56-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":2700,"time":"2026-02-09T14:25:57-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":2800,"time":"2026-02-09T14:25:59-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":2900,"time":"2026-02-09T14:26:02-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":3000,"time":"2026-02-09T14:26:05-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":3100,"time":"2026-02-09T14:26:07-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":3200,"time":"2026-02-09T14:26:10-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":3300,"time":"2026-02-09T14:26:16-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":3400,"time":"2026-02-09T14:26:18-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":3500,"time":"2026-02-09T14:26:21-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":3600,"time":"2026-02-09T14:26:24-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":3700,"time":"2026-02-09T14:26:25-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":3800,"time":"2026-02-09T14:26:28-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":3900,"time":"2026-02-09T14:26:30-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":4000,"time":"2026-02-09T14:26:33-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":4100,"time":"2026-02-09T14:26:35-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":4200,"time":"2026-02-09T14:26:37-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":4300,"time":"2026-02-09T14:26:40-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":4400,"time":"2026-02-09T14:26:42-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":4500,"time":"2026-02-09T14:26:48-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":4600,"time":"2026-02-09T14:26:51-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":4700,"time":"2026-02-09T14:26:53-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":4800,"time":"2026-02-09T14:26:55-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":4900,"time":"2026-02-09T14:26:58-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":5000,"time":"2026-02-09T14:27:00-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":5100,"time":"2026-02-09T14:27:02-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":5200,"time":"2026-02-09T14:27:05-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":5300,"time":"2026-02-09T14:27:07-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":5400,"time":"2026-02-09T14:27:09-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":5500,"time":"2026-02-09T14:27:12-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":5600,"time":"2026-02-09T14:27:14-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":5700,"time":"2026-02-09T14:27:15-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":5800,"time":"2026-02-09T14:27:21-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":5900,"time":"2026-02-09T14:27:23-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":6000,"time":"2026-02-09T14:27:26-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":6100,"time":"2026-02-09T14:27:27-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":6200,"time":"2026-02-09T14:27:29-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":6300,"time":"2026-02-09T14:27:31-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":6400,"time":"2026-02-09T14:27:33-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":6500,"time":"2026-02-09T14:27:34-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":6600,"time":"2026-02-09T14:27:37-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":6700,"time":"2026-02-09T14:27:39-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":6800,"time":"2026-02-09T14:27:41-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":6900,"time":"2026-02-09T14:27:44-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":7000,"time":"2026-02-09T14:27:46-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":7100,"time":"2026-02-09T14:27:49-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":7200,"time":"2026-02-09T14:27:54-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":7300,"time":"2026-02-09T14:27:57-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":7400,"time":"2026-02-09T14:27:59-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":7500,"time":"2026-02-09T14:28:01-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":7600,"time":"2026-02-09T14:28:04-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":7700,"time":"2026-02-09T14:28:06-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":7800,"time":"2026-02-09T14:28:09-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":7900,"time":"2026-02-09T14:28:13-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":8000,"time":"2026-02-09T14:28:15-05:00","message":"Rate limiter hit 100 times"}
+{"level":"warn","component":"ingestor","component":"sse-client","hits":8100,"time":"2026-02-09T14:28:16-05:00","message":"Rate limiter hit 100 times"}

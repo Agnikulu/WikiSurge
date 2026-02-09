@@ -125,13 +125,13 @@ export function SearchInput({ onSearch, loading, initialQuery = '' }: SearchInpu
           onFocus={() => recentSearches.length > 0 && setShowRecent(true)}
           placeholder="SEARCH PAGES, USERS, OR COMMENTS..."
           aria-label="Search pages, users, or comments"
-          className="w-full pl-12 pr-24 py-3 text-base rounded-xl focus:outline-none focus:ring-1 transition-all duration-200"
+          className="w-full pl-12 pr-36 py-3 text-base rounded-xl focus:outline-none focus:ring-1 transition-all duration-200"
           style={{ background: 'rgba(0,255,136,0.05)', border: '2px solid rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }}
         />
 
         {/* Character count */}
         {query.length > 0 && (
-          <span className="absolute right-28 text-xs select-none" style={{ color: 'rgba(0,255,136,0.3)', fontFamily: 'monospace' }} aria-hidden="true">
+          <span className="absolute right-36 text-xs select-none" style={{ color: 'rgba(0,255,136,0.3)', fontFamily: 'monospace' }} aria-hidden="true">
             {query.length}
           </span>
         )}
@@ -141,7 +141,7 @@ export function SearchInput({ onSearch, loading, initialQuery = '' }: SearchInpu
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-20 p-1 rounded-full transition-colors"
+            className="absolute right-28 p-1 rounded-full transition-colors"
             style={{ color: 'rgba(0,255,136,0.4)' }}
             aria-label="Clear search"
           >

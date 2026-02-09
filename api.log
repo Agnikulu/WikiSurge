@@ -1,99 +1,54 @@
-{"level":"info","service":"wikisurge-api","config":"configs/config.dev.yaml","port":8080,"time":"2026-02-09T13:08:16-05:00","message":"Starting WikiSurge API Server"}
-2026/02/09 13:08:16 Starting metrics server on port 2114
-{"level":"info","service":"wikisurge-api","port":2114,"time":"2026-02-09T13:08:16-05:00","message":"Metrics server started"}
-{"level":"info","service":"wikisurge-api","addr":"localhost:6379","time":"2026-02-09T13:08:16-05:00","message":"Connected to Redis"}
-{"level":"info","service":"wikisurge-api","url":"http://localhost:9200","time":"2026-02-09T13:08:16-05:00","message":"Connected to Elasticsearch"}
-{"level":"info","service":"wikisurge-api","component":"api","time":"2026-02-09T13:08:16-05:00","message":"Redis sliding-window rate limiter enabled"}
-2026/02/09 13:08:16 Hot pages cleanup started with interval: 5m0s
-{"level":"info","service":"wikisurge-api","component":"api","component":"alert-hub","time":"2026-02-09T13:08:16-05:00","message":"Alert hub started — single shared subscription"}
-{"level":"info","service":"wikisurge-api","addr":":8080","time":"2026-02-09T13:08:16-05:00","message":"API server listening"}
-{"level":"info","service":"wikisurge-api","component":"api","time":"2026-02-09T13:08:16-05:00","message":"Edit relay started — subscribing to Redis pub/sub for live edits"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:44118","time":"2026-02-09T13:08:17-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"cfad6d6f-e6db-4df3-a6b0-1c6c5d14eb76","ip":"[::1]","total":1,"time":"2026-02-09T13:08:17-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"8e323e76-c9b8-4f3f-8e0b-7f82939c6c9f","ip":"[::1]","total":2,"time":"2026-02-09T13:08:17-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:44152","time":"2026-02-09T13:08:17-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:44160","time":"2026-02-09T13:08:17-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:44166","time":"2026-02-09T13:08:17-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"31a6ebeb-f264-4f03-b214-9c17c7ba35d1","ip":"[::1]","total":3,"time":"2026-02-09T13:08:19-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48782","time":"2026-02-09T13:08:20-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"269579ab-65d7-4cfc-a0e5-d195654d1661","ip":"[::1]","total":4,"time":"2026-02-09T13:08:21-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"cfad6d6f-e6db-4df3-a6b0-1c6c5d14eb76","total":3,"time":"2026-02-09T13:08:26-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"8e323e76-c9b8-4f3f-8e0b-7f82939c6c9f","total":2,"time":"2026-02-09T13:08:26-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"31a6ebeb-f264-4f03-b214-9c17c7ba35d1","total":1,"time":"2026-02-09T13:08:26-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"269579ab-65d7-4cfc-a0e5-d195654d1661","total":0,"time":"2026-02-09T13:08:26-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48802","time":"2026-02-09T13:08:27-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"902b3d94-74ca-4280-8cdb-64d36b92b0c4","ip":"[::1]","total":1,"time":"2026-02-09T13:08:27-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"902b3d94-74ca-4280-8cdb-64d36b92b0c4","total":0,"time":"2026-02-09T13:08:27-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48822","time":"2026-02-09T13:08:27-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"6220f31d-b5c0-4c46-bed3-3d945b493316","ip":"[::1]","total":1,"time":"2026-02-09T13:08:27-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48840","time":"2026-02-09T13:08:27-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/edit-wars","ip":"127.0.0.1:34916","status":200,"duration":0.592692,"response_bytes":3,"request_id":"","time":"2026-02-09T13:08:27-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48854","time":"2026-02-09T13:08:30-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"d7e261bd-9404-47f5-ae44-77e8b7c9d97b","ip":"[::1]","total":2,"time":"2026-02-09T13:08:30-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48868","time":"2026-02-09T13:08:30-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/search","ip":"127.0.0.1:43556","status":200,"duration":67.543255,"response_bytes":98,"request_id":"","time":"2026-02-09T13:08:34-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"d7e261bd-9404-47f5-ae44-77e8b7c9d97b","total":1,"time":"2026-02-09T13:08:45-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48602","time":"2026-02-09T13:08:45-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48606","time":"2026-02-09T13:08:45-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"d4a98826-c6d0-4fd1-82fa-9bc6d0ee7c80","ip":"[::1]","total":2,"time":"2026-02-09T13:08:47-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48618","time":"2026-02-09T13:08:47-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48632","time":"2026-02-09T13:08:47-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48640","time":"2026-02-09T13:08:49-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:48642","time":"2026-02-09T13:08:53-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"3c5e2aaa-c1b8-451f-b8df-78f9f1978346","ip":"[::1]","total":3,"time":"2026-02-09T13:08:53-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"3c5e2aaa-c1b8-451f-b8df-78f9f1978346","total":2,"time":"2026-02-09T13:08:53-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:41124","time":"2026-02-09T13:08:53-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"21a1ac8f-88b7-44db-aa0d-dbcb1b259543","ip":"[::1]","total":3,"time":"2026-02-09T13:08:53-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:41140","time":"2026-02-09T13:08:53-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/edit-wars","ip":"127.0.0.1:47736","status":200,"duration":0.719729,"response_bytes":3,"request_id":"","time":"2026-02-09T13:08:53-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:41154","time":"2026-02-09T13:08:59-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"227577d4-366e-40c6-a851-fcb66d592228","ip":"[::1]","total":4,"time":"2026-02-09T13:08:59-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:41180","time":"2026-02-09T13:08:59-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/search","ip":"127.0.0.1:39746","status":200,"duration":9.925699,"response_bytes":98,"request_id":"","time":"2026-02-09T13:09:08-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/trending","ip":"127.0.0.1:36320","status":200,"duration":8.619945,"response_bytes":862,"request_id":"","time":"2026-02-09T13:09:58-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/stats","ip":"127.0.0.1:58986","status":200,"duration":5.249302,"response_bytes":380,"request_id":"","time":"2026-02-09T13:10:12-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/stats","ip":"127.0.0.1:38870","status":200,"duration":3.6425,"response_bytes":378,"request_id":"","time":"2026-02-09T13:11:00-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/stats","ip":"127.0.0.1:48368","status":200,"duration":0.067211,"response_bytes":380,"request_id":"","time":"2026-02-09T13:11:46-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/trending","ip":"127.0.0.1:55970","status":200,"duration":8.257412,"response_bytes":939,"request_id":"","time":"2026-02-09T13:12:51-05:00","message":"request"}
-2026/02/09 13:13:47 Cleanup completed: removed 0 stale hot pages
-2026/02/09 13:19:19 Cleanup completed: removed 0 stale hot pages
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"d4a98826-c6d0-4fd1-82fa-9bc6d0ee7c80","total":3,"time":"2026-02-09T13:21:40-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"6220f31d-b5c0-4c46-bed3-3d945b493316","total":2,"time":"2026-02-09T13:21:40-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"21a1ac8f-88b7-44db-aa0d-dbcb1b259543","total":1,"time":"2026-02-09T13:21:40-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"227577d4-366e-40c6-a851-fcb66d592228","total":0,"time":"2026-02-09T13:21:40-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:49362","time":"2026-02-09T13:22:03-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"1ce5f3cd-6ff1-4af5-8e15-999981b3510b","ip":"[::1]","total":1,"time":"2026-02-09T13:22:03-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"1ce5f3cd-6ff1-4af5-8e15-999981b3510b","total":0,"time":"2026-02-09T13:22:03-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:49384","time":"2026-02-09T13:22:03-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"c8a0e609-ecd0-45df-85c3-3dc74b9c3c10","ip":"[::1]","total":1,"time":"2026-02-09T13:22:03-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:49394","time":"2026-02-09T13:22:03-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/alerts","ip":"127.0.0.1:45698","status":200,"duration":3.317087,"response_bytes":633,"request_id":"","time":"2026-02-09T13:22:04-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:49410","time":"2026-02-09T13:22:06-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/ws/alerts","ip":"[::1]:49410","status":200,"duration":0.155899,"response_bytes":0,"request_id":"","time":"2026-02-09T13:22:06-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"815073e2-40fd-4c34-b1a8-c09d7402bee8","ip":"[::1]","total":2,"time":"2026-02-09T13:22:06-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:49434","time":"2026-02-09T13:22:06-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"815073e2-40fd-4c34-b1a8-c09d7402bee8","total":1,"time":"2026-02-09T13:22:23-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56486","time":"2026-02-09T13:22:24-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56492","time":"2026-02-09T13:22:24-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56506","time":"2026-02-09T13:22:25-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56512","time":"2026-02-09T13:22:25-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56524","time":"2026-02-09T13:22:26-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56528","time":"2026-02-09T13:22:26-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"957ec109-6a16-48c1-9467-a03cea506ac9","ip":"[::1]","total":2,"time":"2026-02-09T13:22:26-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56540","time":"2026-02-09T13:22:26-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56544","time":"2026-02-09T13:22:26-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56552","time":"2026-02-09T13:22:27-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/trending","ip":"127.0.0.1:48792","status":200,"duration":8.900099,"response_bytes":947,"request_id":"","time":"2026-02-09T13:22:28-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56568","time":"2026-02-09T13:22:28-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"ff3c11e4-5195-4ee6-973d-a749a8c1a5d1","ip":"[::1]","total":3,"time":"2026-02-09T13:22:28-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"ff3c11e4-5195-4ee6-973d-a749a8c1a5d1","total":2,"time":"2026-02-09T13:22:28-05:00","message":"Client disconnected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56586","time":"2026-02-09T13:22:28-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"d286cc04-d6c9-4c09-bb45-221d87711d8c","ip":"[::1]","total":3,"time":"2026-02-09T13:22:28-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56604","time":"2026-02-09T13:22:28-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/stats","ip":"127.0.0.1:48794","status":200,"duration":11.982557,"response_bytes":389,"request_id":"","time":"2026-02-09T13:22:29-05:00","message":"request"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56606","time":"2026-02-09T13:22:29-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56610","time":"2026-02-09T13:22:30-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56618","time":"2026-02-09T13:22:31-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"26ee7297-12b8-4269-80fb-5278ead35dba","ip":"[::1]","total":4,"time":"2026-02-09T13:22:31-05:00","message":"Client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:56636","time":"2026-02-09T13:22:31-05:00","message":"Alerts WebSocket client connected"}
-{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/trending","ip":"127.0.0.1:47080","status":200,"duration":8.702163,"response_bytes":944,"request_id":"","time":"2026-02-09T13:22:50-05:00","message":"request"}
+{"level":"info","service":"wikisurge-api","config":"configs/config.dev.yaml","port":8080,"time":"2026-02-09T14:24:39-05:00","message":"Starting WikiSurge API Server"}
+2026/02/09 14:24:39 Starting metrics server on port 2114
+{"level":"info","service":"wikisurge-api","port":2114,"time":"2026-02-09T14:24:39-05:00","message":"Metrics server started"}
+{"level":"info","service":"wikisurge-api","addr":"localhost:6379","time":"2026-02-09T14:24:39-05:00","message":"Connected to Redis"}
+{"level":"info","service":"wikisurge-api","url":"http://localhost:9200","time":"2026-02-09T14:24:39-05:00","message":"Connected to Elasticsearch"}
+{"level":"info","service":"wikisurge-api","component":"api","time":"2026-02-09T14:24:39-05:00","message":"Redis sliding-window rate limiter enabled"}
+2026/02/09 14:24:39 Hot pages cleanup started with interval: 5m0s
+{"level":"info","service":"wikisurge-api","addr":":8080","time":"2026-02-09T14:24:39-05:00","message":"API server listening"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"alert-hub","time":"2026-02-09T14:24:39-05:00","message":"Alert hub started — single shared subscription"}
+{"level":"info","service":"wikisurge-api","component":"api","time":"2026-02-09T14:24:39-05:00","message":"Edit relay started — subscribing to Redis pub/sub for live edits"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"62666d80-0577-4102-8ba9-7f1ed01aa3b9","ip":"[::1]","total":1,"time":"2026-02-09T14:24:43-05:00","message":"Client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:42002","time":"2026-02-09T14:24:45-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:42018","time":"2026-02-09T14:24:47-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:60754","time":"2026-02-09T14:24:57-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"048ae170-16d3-48e3-b8b7-9fbadce8653a","ip":"[::1]","total":2,"time":"2026-02-09T14:24:59-05:00","message":"Client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:60784","time":"2026-02-09T14:25:00-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"62666d80-0577-4102-8ba9-7f1ed01aa3b9","total":1,"time":"2026-02-09T14:26:17-05:00","message":"Client disconnected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"048ae170-16d3-48e3-b8b7-9fbadce8653a","total":0,"time":"2026-02-09T14:26:17-05:00","message":"Client disconnected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:40620","time":"2026-02-09T14:26:19-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"c58b3aa0-924f-48b9-8323-a143fc742201","ip":"[::1]","total":1,"time":"2026-02-09T14:26:19-05:00","message":"Client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"c58b3aa0-924f-48b9-8323-a143fc742201","total":0,"time":"2026-02-09T14:26:19-05:00","message":"Client disconnected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:40638","time":"2026-02-09T14:26:19-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"1f1c7078-8ff4-421e-8b89-c1c7f4244e2a","ip":"[::1]","total":1,"time":"2026-02-09T14:26:19-05:00","message":"Client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:40648","time":"2026-02-09T14:26:19-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:40650","time":"2026-02-09T14:26:19-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:40654","time":"2026-02-09T14:26:22-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"96ac7db1-a20c-4645-b51e-2055e043ec05","ip":"[::1]","total":2,"time":"2026-02-09T14:26:22-05:00","message":"Client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:40672","time":"2026-02-09T14:26:22-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/trending","ip":"127.0.0.1:38906","status":200,"duration":5.301504,"response_bytes":878,"request_id":"","time":"2026-02-09T14:26:50-05:00","message":"request"}
+{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/edit-wars","ip":"127.0.0.1:56670","status":200,"duration":1.892949,"response_bytes":3,"request_id":"","time":"2026-02-09T14:26:59-05:00","message":"request"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"96ac7db1-a20c-4645-b51e-2055e043ec05","total":1,"time":"2026-02-09T14:27:46-05:00","message":"Client disconnected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:33692","time":"2026-02-09T14:27:46-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:33698","time":"2026-02-09T14:27:46-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/edit-wars","ip":"127.0.0.1:40540","status":200,"duration":2.236969,"response_bytes":3,"request_id":"","time":"2026-02-09T14:27:46-05:00","message":"request"}
+{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/edit-wars","ip":"127.0.0.1:40584","status":200,"duration":0.278645,"response_bytes":3,"request_id":"","time":"2026-02-09T14:27:47-05:00","message":"request"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:33710","time":"2026-02-09T14:27:47-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:33714","time":"2026-02-09T14:27:47-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:33728","time":"2026-02-09T14:27:48-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"09b97bc7-e874-4103-8099-7dc78a20fe11","ip":"[::1]","total":2,"time":"2026-02-09T14:27:48-05:00","message":"Client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"09b97bc7-e874-4103-8099-7dc78a20fe11","total":1,"time":"2026-02-09T14:27:48-05:00","message":"Client disconnected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:33746","time":"2026-02-09T14:27:48-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"a3ec0f69-9509-47cc-b335-b562318f3d90","ip":"[::1]","total":2,"time":"2026-02-09T14:27:48-05:00","message":"Client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:33760","time":"2026-02-09T14:27:48-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/edit-wars","ip":"127.0.0.1:40642","status":200,"duration":2.871815,"response_bytes":3,"request_id":"","time":"2026-02-09T14:27:48-05:00","message":"request"}
+{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/edit-wars","ip":"127.0.0.1:40678","status":200,"duration":1.030395,"response_bytes":3,"request_id":"","time":"2026-02-09T14:27:48-05:00","message":"request"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:45792","time":"2026-02-09T14:27:49-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"5d306588-1a43-491f-98ae-178a2a7e2e8f","ip":"[::1]","total":3,"time":"2026-02-09T14:27:49-05:00","message":"Client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:45816","time":"2026-02-09T14:27:49-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:45824","time":"2026-02-09T14:27:50-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:45826","time":"2026-02-09T14:27:50-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:45832","time":"2026-02-09T14:27:50-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","component":"websocket-hub","client":"5ee505c5-f045-443f-8fb0-04cabd50bcd7","ip":"[::1]","total":4,"time":"2026-02-09T14:27:52-05:00","message":"Client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","remote":"[::1]:45840","time":"2026-02-09T14:27:52-05:00","message":"Alerts WebSocket client connected"}
+{"level":"info","service":"wikisurge-api","component":"api","method":"GET","path":"/api/trending","ip":"127.0.0.1:51170","status":200,"duration":6.60387,"response_bytes":834,"request_id":"","time":"2026-02-09T14:28:10-05:00","message":"request"}

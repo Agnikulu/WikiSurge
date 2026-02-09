@@ -19,7 +19,7 @@ help:
 	@echo "Build & Test:"
 	@echo "  make build       - Build Go applications"
 	@echo "  make test        - Run all tests"
-	@echo "  make deps        - Install dependencies"
+	@echo "  make deps        - Install Go and web dependencies"
 	@echo ""
 	@echo "Monitoring:"
 	@echo "  make health      - Check service health"
@@ -27,7 +27,7 @@ help:
 	@echo "  make urls        - Show service URLs"
 	@echo ""
 	@echo "Cleanup:"
-	@echo "  make clean       - Remove containers and volumes"
+	@echo "  make clean       - Remove containers, volumes, logs, binaries, and web artifacts"
 	@echo ""
 
 # Stop all services including Go processes
@@ -84,6 +84,10 @@ dev-backend:
 # Start web app
 dev-web:
 	@echo "Starting web application..."
+	@if [ ! -d "web/node_modules" ]; then \
+		echo "Installing web dependencies..."; \
+		cd web && npm install; \
+	fi
 	@cd web && npm run dev
 
 # Setup infrastructure
@@ -111,6 +115,13 @@ clean:
 	@echo "Cleaning up services and volumes..."
 	@docker-compose down -v
 	@docker system prune -f
+	@echo "Removing log files..."
+	@rm -f *.log
+	@echo "Removing binaries..."
+	@rm -rf bin/
+	@echo "Removing web artifacts..."
+	@rm -rf web/node_modules web/dist
+	@echo "✅ Full cleanup complete!"
 
 # Tail logs from all services
 logs:
@@ -215,8 +226,11 @@ validate:
 # Install Go dependencies
 deps:
 	@echo "Installing dependencies..."
+	@echo "Installing Go dependencies..."
 	@go mod tidy
 	@go mod download
+	@echo "Installing web dependencies..."
+	@cd web && npm install
 
 # Show service URLs
 urls:

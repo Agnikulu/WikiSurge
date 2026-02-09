@@ -4,8 +4,8 @@ import type { TimeRange, TimeSeriesPoint } from '../../types';
 import { useAppStore } from '../../store/appStore';
 
 const RANGE_CONFIG: Record<TimeRange, { label: string; minutes: number; bucketSec: number }> = {
-  '1h':  { label: '1H',  minutes: 60,   bucketSec: 10 },
-  '6h':  { label: '6H',  minutes: 360,  bucketSec: 60 },
+  '1h':  { label: '1H',  minutes: 60,   bucketSec: 30 },
+  '6h':  { label: '6H',  minutes: 360,  bucketSec: 90 },
   '24h': { label: '24H', minutes: 1440, bucketSec: 300 },
 };
 
@@ -98,7 +98,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
       x: PAD.left + ((p.timestamp - tMin) / tRange) * chartW,
       y: PAD.top + chartH - (p.value / maxValue) * chartH,
     }));
-  }, [chartData, chartW, chartH, maxValue, config.minutes]);
+  }, [chartData, chartW, chartH, maxValue, config.minutes, Math.floor(tick / 1000)]);
 
   // Sharp line segments (ECG-style: straight lines between points)
   const linePath = useMemo(() => {
@@ -116,7 +116,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
     });
   }, [maxValue, chartH]);
 
-  // X-axis labels - show expected time range, update only every 10 seconds
+  // X-axis labels - show expected time range, update every second
   const xLabels = useMemo(() => {
     const now = Date.now();
     const rangeMs = config.minutes * 60 * 1000;
@@ -136,7 +136,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
         }),
       };
     });
-  }, [config.minutes, chartW, Math.floor(tick / 10000)]); // Only update every 10 seconds
+  }, [config.minutes, chartW, Math.floor(tick / 1000)]); // Update every second
 
   // Scan-line X position — sweeps across chart area every 4 seconds
   const scanX = useMemo(() => {
