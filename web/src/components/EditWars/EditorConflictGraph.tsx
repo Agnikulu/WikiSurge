@@ -19,14 +19,14 @@ const EDITOR_COLORS = [
 ];
 
 const EDITOR_BG_COLORS = [
-  'bg-blue-50 border-blue-200 text-blue-800',
-  'bg-red-50 border-red-200 text-red-800',
-  'bg-green-50 border-green-200 text-green-800',
-  'bg-purple-50 border-purple-200 text-purple-800',
-  'bg-orange-50 border-orange-200 text-orange-800',
-  'bg-teal-50 border-teal-200 text-teal-800',
-  'bg-pink-50 border-pink-200 text-pink-800',
-  'bg-yellow-50 border-yellow-200 text-yellow-800',
+  'bg-blue-50 border-blue-200',
+  'bg-red-50 border-red-200',
+  'bg-green-50 border-green-200',
+  'bg-purple-50 border-purple-200',
+  'bg-orange-50 border-orange-200',
+  'bg-teal-50 border-teal-200',
+  'bg-pink-50 border-pink-200',
+  'bg-yellow-50 border-yellow-200',
 ];
 
 /**
@@ -58,7 +58,7 @@ export function EditorConflictGraph({ war }: EditorConflictGraphProps) {
 
   if (editors.length === 0) {
     return (
-      <div className="text-sm text-gray-400 text-center py-4">
+      <div className="text-sm text-center py-4" style={{ color: 'rgba(0,255,136,0.4)' }}>
         No editor data available
       </div>
     );
@@ -67,7 +67,7 @@ export function EditorConflictGraph({ war }: EditorConflictGraphProps) {
   return (
     <div className="space-y-4">
       {/* Section title */}
-      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+      <h4 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}>
         Editor Conflict Map
       </h4>
 
@@ -99,13 +99,14 @@ export function EditorConflictGraph({ war }: EditorConflictGraphProps) {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-medium hover:underline truncate max-w-[90px] text-center"
+                style={{ color: 'rgba(0,255,136,0.7)' }}
                 title={editor}
               >
                 {editor}
               </a>
 
               {/* Stats */}
-              <div className="flex items-center gap-2 text-[10px] text-gray-500">
+              <div className="flex items-center gap-2 text-[10px]" style={{ color: 'rgba(0,255,136,0.5)' }}>
                 <span className="flex items-center gap-0.5">
                   <User className="h-2.5 w-2.5" />
                   ~{avgEdits} edits
@@ -125,7 +126,7 @@ export function EditorConflictGraph({ war }: EditorConflictGraphProps) {
       {/* Conflict edges */}
       {edges.length > 0 && (
         <div className="space-y-1">
-          <h5 className="text-[10px] font-semibold text-gray-400 uppercase">
+          <h5 className="text-[10px] font-semibold uppercase" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
             Revert Interactions
           </h5>
           <div className="flex flex-wrap gap-1.5">

@@ -86,7 +86,7 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
 
   if (timeline.length === 0) {
     return (
-      <div className="text-sm text-gray-400 text-center py-4">
+      <div className="text-sm text-center py-4" style={{ color: 'rgba(0,255,136,0.4)' }}>
         No timeline data available
       </div>
     );
@@ -96,7 +96,7 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
+        <h4 className="text-xs font-semibold uppercase tracking-wide flex items-center gap-1" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}>
           <Clock className="h-3 w-3" />
           Edit Timeline
         </h4>
@@ -109,7 +109,8 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
               onChange={(e) =>
                 setEditorFilter(e.target.value || null)
               }
-              className="text-[11px] border border-gray-200 rounded px-2 py-0.5 pr-5 bg-white text-gray-600 appearance-none cursor-pointer"
+              className="text-[11px] border border-gray-200 rounded px-2 py-0.5 pr-5 bg-white appearance-none cursor-pointer"
+              style={{ color: 'rgba(0,255,136,0.8)' }}
             >
               <option value="">All editors</option>
               {war.editors.map((ed) => (
@@ -118,13 +119,14 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
                 </option>
               ))}
             </select>
-            <Filter className="absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-gray-400 pointer-events-none" />
+            <Filter className="absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 pointer-events-none" style={{ color: 'rgba(0,255,136,0.4)' }} />
           </div>
 
           {/* Export */}
           <button
             onClick={handleExport}
-            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] text-gray-500 hover:text-gray-700 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+            style={{ color: '#00ff88' }}
             title="Export timeline as CSV"
           >
             <Download className="h-2.5 w-2.5" />
@@ -137,7 +139,7 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
       <TimelineStrip entries={filtered} editors={war.editors} />
 
       {/* Timeline list */}
-      <div className="relative ml-4 border-l-2 border-gray-200 space-y-0 max-h-64 overflow-y-auto scrollbar-thin">
+      <div className="relative ml-4 space-y-0 max-h-64 overflow-y-auto scrollbar-thin" style={{ borderLeft: '2px solid rgba(0,255,136,0.2)' }}>
         {filtered.map((entry, idx) => {
           const color = colorForEditor(entry.editor, war.editors);
           const isRevert = entry.action === 'revert';
@@ -145,7 +147,8 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
           return (
             <div
               key={idx}
-              className="relative pl-5 py-1.5 group hover:bg-gray-50 transition-colors"
+              className="relative pl-5 py-1.5 group transition-colors"
+              style={{ '&:hover': { background: 'rgba(0,255,136,0.03)' } }}
             >
               {/* Dot on timeline */}
               <span
@@ -157,7 +160,7 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
                 {isRevert ? (
                   <RotateCcw className="h-3 w-3 text-red-500 flex-shrink-0" />
                 ) : (
-                  <FileEdit className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                  <FileEdit className="h-3 w-3 flex-shrink-0" style={{ color: 'rgba(0,255,136,0.4)' }} />
                 )}
 
                 {/* Editor */}
@@ -169,9 +172,10 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                     isRevert
-                      ? 'bg-red-50 text-red-600'
-                      : 'bg-gray-100 text-gray-600'
+                      ? 'bg-red-50'
+                      : 'bg-gray-100'
                   }`}
+                  style={{ color: isRevert ? '#ff4444' : 'rgba(0,255,136,0.7)' }}
                 >
                   {isRevert ? 'Revert' : 'Edit'}
                 </span>
@@ -187,13 +191,13 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
                 </span>
 
                 {/* Timestamp */}
-                <span className="text-gray-400 ml-auto text-[10px]">
+                <span className="ml-auto text-[10px]" style={{ color: 'rgba(0,255,136,0.4)' }}>
                   {formatRelativeTime(entry.timestamp)}
                 </span>
               </div>
 
               {entry.comment && (
-                <p className="text-[10px] text-gray-400 mt-0.5 truncate pl-5">
+                <p className="text-[10px] mt-0.5 truncate pl-5" style={{ color: 'rgba(0,255,136,0.4)' }}>
                   {entry.comment}
                 </p>
               )}

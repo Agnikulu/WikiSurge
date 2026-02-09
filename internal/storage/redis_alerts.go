@@ -298,15 +298,32 @@ func (r *RedisAlerts) parseAlertMessage(message redis.XMessage) (Alert, error) {
 		return alert, fmt.Errorf("alert data field missing from message (tried 'data' and 'alert_data')")
 	}
 
-	err := json.Unmarshal([]byte(alertDataStr), &alert)
+	// First unmarshal into a generic map to handle both formats
+	var dataMap map[string]interface{}
+	err := json.Unmarshal([]byte(alertDataStr), &dataMap)
 	if err != nil {
 		return alert, fmt.Errorf("failed to unmarshal alert data: %w", err)
 	}
 
-	// Set message ID as fallback if alert ID is missing
-	if alert.ID == "" {
-		alert.ID = message.ID
+	// Extract timestamp
+	if tsStr, ok := dataMap["timestamp"].(string); ok {
+		ts, _ := time.Parse(time.RFC3339Nano, tsStr)
+		alert.Timestamp = ts
 	}
+
+	// Determine alert type from severity/page_title pattern (spike detector format)
+	// or from explicit type field (alert hub format)
+	if alertType, ok := dataMap["type"].(string); ok {
+		alert.Type = alertType
+	} else if _, hasSpike := dataMap["spike_ratio"]; hasSpike {
+		alert.Type = "spike"
+	} else if _, hasEditWar := dataMap["revert_count"]; hasEditWar {
+		alert.Type = "edit_war"
+	}
+
+	// Store all data fields
+	alert.Data = dataMap
+	alert.ID = message.ID
 
 	return alert, nil
 }

@@ -25,7 +25,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
   const [tick, setTick] = useState(0); // animation driver
   const [stats, setStats] = useState<Stats | null>(null);
 
-  // Fast polling for live feel — 2 seconds
+  // Smooth updates — 10 seconds
   useEffect(() => {
     let mounted = true;
     const fetchStats = async () => {
@@ -38,7 +38,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
       } catch { /* ignore */ }
     };
     fetchStats();
-    const interval = setInterval(fetchStats, 2_000);
+    const interval = setInterval(fetchStats, 10_000);
     return () => { mounted = false; clearInterval(interval); };
   }, []);
 
@@ -103,14 +103,18 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
 
   const points = useMemo(() => {
     if (chartData.length === 0) return [];
-    const tMin = chartData[0].timestamp;
-    const tMax = chartData[chartData.length - 1].timestamp;
-    const tRange = tMax - tMin || 1;
+    // Use fixed time window, not data range
+    const now = Date.now();
+    const rangeMs = config.minutes * 60 * 1000;
+    const tMin = now - rangeMs;
+    const tMax = now;
+    const tRange = rangeMs;
+    
     return chartData.map((p) => ({
       x: PAD.left + ((p.timestamp - tMin) / tRange) * chartW,
       y: PAD.top + chartH - (p.value / maxValue) * chartH,
     }));
-  }, [chartData, chartW, chartH, maxValue]);
+  }, [chartData, chartW, chartH, maxValue, config.minutes]);
 
   // Sharp line segments (ECG-style: straight lines between points)
   const linePath = useMemo(() => {
@@ -128,18 +132,27 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
     });
   }, [maxValue, chartH]);
 
-  // X-axis labels
+  // X-axis labels - show expected time range, not actual data range
   const xLabels = useMemo(() => {
-    if (chartData.length < 2) return [];
-    const count = Math.min(5, chartData.length);
+    const now = Date.now();
+    const rangeMs = config.minutes * 60 * 1000;
+    const startTime = now - rangeMs;
+    const count = 5;
+    
     return Array.from({ length: count }, (_, i) => {
-      const idx = Math.round((i / (count - 1)) * (chartData.length - 1));
+      const timestamp = startTime + (i / (count - 1)) * rangeMs;
+      const pct = i / (count - 1);
+      const x = PAD.left + pct * chartW;
+      
       return {
-        x: points[idx]?.x ?? 0,
-        label: new Date(chartData[idx].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        x,
+        label: new Date(timestamp).toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit'
+        }),
       };
     });
-  }, [chartData, points]);
+  }, [config.minutes, chartW, tick]); // Update with animation tick so labels move with time
 
   // Scan-line X position — sweeps across chart area every 4 seconds
   const scanX = useMemo(() => {

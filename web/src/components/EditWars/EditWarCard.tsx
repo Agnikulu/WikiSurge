@@ -87,7 +87,8 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
                 href={wikiUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-bold text-gray-900 hover:text-blue-600 hover:underline leading-tight block truncate"
+                className="text-sm font-bold hover:underline leading-tight block truncate"
+                style={{ color: '#00ff88' }}
                 title={war.page_title}
               >
                 {truncateTitle(war.page_title, 55)}
@@ -99,9 +100,10 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
                 <span
                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${
                     war.active
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-gray-100 text-gray-600'
+                      ? 'bg-red-100'
+                      : 'bg-gray-100'
                   }`}
+                  style={{ color: war.active ? '#ff4444' : 'rgba(0,255,136,0.7)' }}
                 >
                   <span
                     className={`inline-block w-1.5 h-1.5 rounded-full ${
@@ -161,7 +163,8 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
               href={`https://en.wikipedia.org/wiki/User:${encodeURIComponent(editor.replace(/ /g, '_'))}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/80 border border-gray-200 rounded-full text-xs text-gray-700 hover:border-blue-300 hover:text-blue-700 transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/80 border border-gray-200 rounded-full text-xs transition-colors"
+              style={{ color: '#00ddff' }}
               title={editor}
             >
               <span className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-[9px] text-white font-bold flex-shrink-0">
@@ -171,7 +174,7 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
             </a>
           ))}
           {war.editors.length > 6 && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs" style={{ color: 'rgba(0,255,136,0.5)' }}>
               +{war.editors.length - 6} more
             </span>
           )}

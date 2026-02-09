@@ -354,7 +354,10 @@ func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
 			Severity:  storage.DeriveSeverity(a),
 		}
 
-		if title, ok := a.Data["title"].(string); ok {
+		// Handle both field naming conventions (title vs page_title)
+		if title, ok := a.Data["page_title"].(string); ok {
+			entry.PageTitle = title
+		} else if title, ok := a.Data["title"].(string); ok {
 			entry.PageTitle = title
 		}
 		if wiki, ok := a.Data["wiki"].(string); ok {
@@ -363,10 +366,16 @@ func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
 		if ratio, ok := a.Data["spike_ratio"].(float64); ok {
 			entry.SpikeRatio = ratio
 		}
-		if editCount, ok := a.Data["edit_count"].(float64); ok {
+		// Handle both field naming conventions (edits_5min vs edit_count)
+		if editCount, ok := a.Data["edits_5min"].(float64); ok {
+			entry.Edits5Min = int(editCount)
+		} else if editCount, ok := a.Data["edit_count"].(float64); ok {
 			entry.Edits5Min = int(editCount)
 		}
-		if numEditors, ok := a.Data["num_editors"].(float64); ok {
+		// Handle both field naming conventions (unique_editors vs num_editors)
+		if numEditors, ok := a.Data["unique_editors"].(float64); ok {
+			entry.EditorCount = int(numEditors)
+		} else if numEditors, ok := a.Data["num_editors"].(float64); ok {
 			entry.EditorCount = int(numEditors)
 		}
 		if participants, ok := a.Data["participants"].([]interface{}); ok {

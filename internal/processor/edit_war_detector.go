@@ -114,7 +114,7 @@ func NewEditWarDetector(hotPages *storage.HotPageTracker, redisClient *redis.Cli
 		metrics:     sharedEditWarMetrics,
 		minEdits:    5,
 		minEditors:  2,
-		minReverts:  2,
+		minReverts:  1,
 		timeWindow:  10 * time.Minute,
 		logger:      logger.With().Str("component", "edit_war_detector").Logger(),
 	}
@@ -240,6 +240,13 @@ func (ewd *EditWarDetector) detectEditWar(ctx context.Context, pageTitle string)
 	// (this is a simple heuristic complement)
 
 	if revertCount < ewd.minReverts {
+		ewd.logger.Debug().
+			Str("page", pageTitle).
+			Int("editors", uniqueEditors).
+			Int("edits", totalEdits).
+			Int("reverts", revertCount).
+			Int("min_reverts", ewd.minReverts).
+			Msg("Edit war candidate failed: not enough reverts detected")
 		return nil, nil
 	}
 
@@ -297,29 +304,32 @@ func (ewd *EditWarDetector) countReverts(ctx context.Context, pageTitle string) 
 		prev := changes[i-1]
 		curr := changes[i]
 
-		// Skip zero changes
-		if prev == 0 || curr == 0 {
+		// For very small changes (including zeros), count alternating patterns
+		if prev == 0 && curr == 0 {
+			// Two consecutive zero-byte edits often indicate reverts
+			revertCount++
 			continue
 		}
 
 		// Check for opposite signs
 		if (prev > 0 && curr < 0) || (prev < 0 && curr > 0) {
-			// Check if magnitudes are similar (within 20% tolerance)
-			absPrev := math.Abs(float64(prev))
-			absCurr := math.Abs(float64(curr))
-
-			// Avoid division by zero on very small edits
-			if absPrev < 10 && absCurr < 10 {
+			// For very small edits, be lenient
+			if math.Abs(float64(prev)) < 10 && math.Abs(float64(curr)) < 10 {
+				revertCount++
 				continue
 			}
+
+			// Check if magnitudes are similar (within 30% tolerance for better detection)
+			absPrev := math.Abs(float64(prev))
+			absCurr := math.Abs(float64(curr))
 
 			ratio := absCurr / absPrev
 			if ratio > 1 {
 				ratio = absPrev / absCurr
 			}
 
-			// If magnitudes are within 20% of each other, likely a revert
-			if ratio >= 0.7 {
+			// If magnitudes are within 30% of each other, likely a revert
+			if ratio >= 0.6 {
 				revertCount++
 			}
 		}
