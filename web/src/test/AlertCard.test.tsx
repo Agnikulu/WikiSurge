@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AlertCard } from '../components/Alerts/AlertCard';
-import type { SpikeAlert, EditWarAlert, Alert } from '../types';
+import type { SpikeAlert, EditWarAlert } from '../types';
 
 const spikeAlert: SpikeAlert = {
   type: 'spike',

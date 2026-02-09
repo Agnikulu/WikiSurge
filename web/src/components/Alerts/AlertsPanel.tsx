@@ -136,7 +136,7 @@ export function AlertsPanel() {
     <div className="card">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-orange-500" />
           🔴 Breaking News Alerts
           {alerts.length > 0 && (
@@ -168,12 +168,12 @@ export function AlertsPanel() {
           {/* Sound toggle */}
           <button
             onClick={toggleSound}
-            className="p-1 rounded hover:bg-gray-100 transition-colors"
+            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             aria-label={soundOn ? 'Mute alert sounds' : 'Enable alert sounds'}
             title={soundOn ? 'Sound on' : 'Sound off'}
           >
             {soundOn ? (
-              <Bell className="h-3.5 w-3.5 text-gray-600" />
+              <Bell className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
             ) : (
               <BellOff className="h-3.5 w-3.5 text-gray-400" />
             )}
@@ -183,7 +183,7 @@ export function AlertsPanel() {
           {alerts.length > 0 && (
             <button
               onClick={handleClearAll}
-              className="p-1 rounded hover:bg-gray-100 transition-colors text-gray-400 hover:text-red-500"
+              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-400 hover:text-red-500"
               aria-label="Clear all alerts"
               title="Clear all"
             >
@@ -198,15 +198,15 @@ export function AlertsPanel() {
         {/* Severity filter */}
         <div className="flex items-center gap-1">
           <Filter className="h-3 w-3 text-gray-400" />
-          <span className="text-[11px] text-gray-500 mr-1">Severity:</span>
+          <span className="text-[11px] text-gray-500 dark:text-gray-400 mr-1">Severity:</span>
           {SEVERITY_OPTIONS.map((s) => (
             <button
               key={s}
               onClick={() => setSeverityFilter(s)}
               className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
                 severityFilter === s
-                  ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:ring-blue-700'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
               }`}
             >
               {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -216,15 +216,15 @@ export function AlertsPanel() {
 
         {/* Type filter */}
         <div className="flex items-center gap-1">
-          <span className="text-[11px] text-gray-500 mr-1">Type:</span>
+          <span className="text-[11px] text-gray-500 dark:text-gray-400 mr-1">Type:</span>
           {TYPE_OPTIONS.map((t) => (
             <button
               key={t}
               onClick={() => setTypeFilter(t)}
               className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
                 typeFilter === t
-                  ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:ring-blue-700'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
               }`}
             >
               {t === 'all' ? 'All' : t === 'spike' ? 'Spike' : 'Edit War'}
@@ -234,7 +234,7 @@ export function AlertsPanel() {
       </div>
 
       {/* ── Alert list ── */}
-      <div className="space-y-2 max-h-[500px] overflow-y-auto scrollbar-thin">
+      <div className="space-y-2 max-h-[500px] overflow-y-auto scrollbar-thin" role="log" aria-label="Alert notifications" aria-live="polite">
         {filteredAlerts.length > 0 ? (
           filteredAlerts.map((alert, index) => (
             <AlertCard

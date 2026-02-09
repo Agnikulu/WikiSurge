@@ -11,7 +11,6 @@ import {
   PieChart,
   Pie,
   Legend,
-  type TooltipProps,
 } from 'recharts';
 import { Globe } from 'lucide-react';
 import type { Stats, LanguageStat } from '../../types';
@@ -34,13 +33,14 @@ function deriveLanguages(stats: Stats): LanguageStat[] {
 }
 
 // ── Custom tooltip ────────────────────────────────────────────────
-function BarTooltip({ active, payload }: TooltipProps<number, string>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function BarTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload as LanguageStat;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-sm">
-      <p className="font-semibold text-gray-900">{d.language}</p>
-      <p className="text-gray-500">
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg px-3 py-2 text-sm">
+      <p className="font-semibold text-gray-900 dark:text-white">{d.language}</p>
+      <p className="text-gray-500 dark:text-gray-400">
         {d.count.toLocaleString()} edits ({d.percentage.toFixed(1)}%)
       </p>
     </div>
@@ -48,17 +48,8 @@ function BarTooltip({ active, payload }: TooltipProps<number, string>) {
 }
 
 // ── Custom pie label ──────────────────────────────────────────────
-interface PieLabelProps {
-  cx: number;
-  cy: number;
-  midAngle: number;
-  innerRadius: number;
-  outerRadius: number;
-  percent: number;
-  name: string;
-}
-
-function renderPieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }: PieLabelProps) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderPieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }: any) {
   if (percent < 0.05) return null; // skip tiny slices
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 1.3;
@@ -118,12 +109,13 @@ const EditDistributionPie = memo(function EditDistributionPie({
             verticalAlign="bottom"
             height={24}
             formatter={(value: string) => (
-              <span className="text-xs text-gray-600">{value}</span>
+              <span className="text-xs text-gray-600 dark:text-gray-400">{value}</span>
             )}
           />
           <Tooltip
-            formatter={(value: number, name: string) => [
-              `${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            formatter={(value: any, name: any) => [
+              `${Number(value).toLocaleString()} (${((Number(value) / total) * 100).toFixed(1)}%)`,
               name,
             ]}
           />
@@ -153,7 +145,7 @@ export const LanguageDistributionChart = memo(function LanguageDistributionChart
       {/* Header */}
       <div className="flex items-center gap-2">
         <Globe className="h-4 w-4 text-gray-400" />
-        <h3 className="text-sm font-semibold text-gray-700">Language Distribution</h3>
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Language Distribution</h3>
       </div>
 
       {loading && languages.length === 0 ? (
@@ -203,8 +195,8 @@ export const LanguageDistributionChart = memo(function LanguageDistributionChart
 
       {/* Human vs Bot pie */}
       {hasDistribution && (
-        <div className="border-t border-gray-100 pt-4">
-          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+        <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
+          <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
             Edit Type Distribution
           </h4>
           <EditDistributionPie

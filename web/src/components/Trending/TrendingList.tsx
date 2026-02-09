@@ -70,7 +70,7 @@ export function TrendingList() {
     return (
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-green-500" />
             📈 Trending Pages
           </h2>
@@ -78,12 +78,12 @@ export function TrendingList() {
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="animate-pulse flex items-center gap-3 p-3">
-              <div className="h-8 w-8 bg-gray-200 rounded-lg" />
+              <div className="h-8 w-8 bg-gray-200 dark:bg-gray-600 rounded-lg" />
               <div className="flex-1">
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-1" />
-                <div className="h-3 bg-gray-200 rounded w-1/2" />
+                <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-3/4 mb-1" />
+                <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded w-1/2" />
               </div>
-              <div className="h-4 w-12 bg-gray-200 rounded" />
+              <div className="h-4 w-12 bg-gray-200 dark:bg-gray-600 rounded" />
             </div>
           ))}
         </div>
@@ -96,13 +96,13 @@ export function TrendingList() {
     return (
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-green-500" />
             📈 Trending Pages
           </h2>
         </div>
         <div className="text-center py-6">
-          <p className="text-sm text-red-600 mb-2">Failed to load trending pages</p>
+          <p className="text-sm text-red-600 dark:text-red-400 mb-2">Failed to load trending pages</p>
           <button
             onClick={handleManualRefresh}
             className="text-sm text-blue-600 hover:underline"
@@ -118,7 +118,7 @@ export function TrendingList() {
     <div className="card">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-green-500" />
           📈 Trending Pages
         </h2>
@@ -132,7 +132,7 @@ export function TrendingList() {
           <button
             onClick={handleManualRefresh}
             disabled={refreshing}
-            className="p-1 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
+            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
             aria-label="Refresh trending"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
@@ -148,8 +148,8 @@ export function TrendingList() {
             onClick={() => setLangFilter(code)}
             className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all duration-150 ${
               activeLang === code || (code === '' && !activeLang)
-                ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:ring-blue-700'
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
             }`}
           >
             {label}
@@ -158,7 +158,7 @@ export function TrendingList() {
       </div>
 
       {/* ── List ── */}
-      <div className="space-y-1 max-h-[500px] overflow-y-auto scrollbar-thin">
+      <div className="space-y-1 max-h-[500px] overflow-y-auto scrollbar-thin" role="list" aria-label="Trending pages">
         {trending && trending.length > 0 ? (
           trending.map((page, idx) => (
             <TrendingCard
@@ -178,7 +178,7 @@ export function TrendingList() {
 
       {/* ── Footer summary ── */}
       {trending && trending.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-xs text-gray-400">
           <span>
             Showing top {trending.length} page{trending.length !== 1 ? 's' : ''}
           </span>

@@ -9,6 +9,11 @@ interface AppState {
   // UI state
   selectedPage: string | null;
   activeTab: string;
+  darkMode: boolean;
+
+  // Connection state
+  wsConnected: boolean;
+  apiHealthy: boolean;
 
   // Cached data
   trending: TrendingPage[];
@@ -18,6 +23,9 @@ interface AppState {
   setFilters: (filters: Partial<FilterState>) => void;
   setSelectedPage: (page: string | null) => void;
   setActiveTab: (tab: string) => void;
+  toggleDarkMode: () => void;
+  setWsConnected: (connected: boolean) => void;
+  setApiHealthy: (healthy: boolean) => void;
   updateTrending: (trending: TrendingPage[]) => void;
   updateStats: (stats: Stats) => void;
   resetFilters: () => void;
@@ -36,6 +44,9 @@ export const useAppStore = create<AppState>()(
       filters: { ...DEFAULT_FILTERS },
       selectedPage: null,
       activeTab: 'dashboard',
+      darkMode: false,
+      wsConnected: false,
+      apiHealthy: true,
       trending: [],
       stats: null,
 
@@ -49,6 +60,13 @@ export const useAppStore = create<AppState>()(
 
       setActiveTab: (tab) => set({ activeTab: tab }),
 
+      toggleDarkMode: () =>
+        set((state) => ({ darkMode: !state.darkMode })),
+
+      setWsConnected: (connected) => set({ wsConnected: connected }),
+
+      setApiHealthy: (healthy) => set({ apiHealthy: healthy }),
+
       updateTrending: (trending) => set({ trending }),
 
       updateStats: (stats) => set({ stats }),
@@ -60,6 +78,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         filters: state.filters,
         activeTab: state.activeTab,
+        darkMode: state.darkMode,
       }),
     }
   )

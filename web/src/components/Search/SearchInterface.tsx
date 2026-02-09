@@ -109,15 +109,15 @@ export function SearchInterface() {
   ).length > 0;
 
   return (
-    <div className="card">
+    <div className="card" role="search" aria-label="Search edits">
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg font-semibold text-gray-900">Search Edits</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Search Edits</h2>
         <button
           onClick={() => setAdvancedOpen(true)}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
             hasActiveFilters
-              ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
-              : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+              ? 'bg-primary-100 text-primary-700 hover:bg-primary-200 dark:bg-primary-900 dark:text-primary-300 dark:hover:bg-primary-800'
+              : 'text-gray-600 bg-gray-100 hover:bg-gray-200 dark:text-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600'
           }`}
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -136,35 +136,35 @@ export function SearchInterface() {
       {/* Active filters indicator */}
       {hasActiveFilters && (
         <div className="flex items-center gap-2 mt-3 flex-wrap">
-          <span className="text-xs text-gray-500">Active filters:</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">Active filters:</span>
           {advancedFilters.language && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs">
               {advancedFilters.language}wiki
             </span>
           )}
           {advancedFilters.user && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 text-xs">
               user: {advancedFilters.user}
             </span>
           )}
           {advancedFilters.exclude_bots && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 text-xs">
               no bots
             </span>
           )}
           {advancedFilters.from && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs">
               from: {advancedFilters.from}
             </span>
           )}
           {advancedFilters.to && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs">
               to: {advancedFilters.to}
             </span>
           )}
           <button
             onClick={handleClearFilters}
-            className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs text-red-600 hover:bg-red-50 transition-colors"
+            className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors"
           >
             <X className="h-3 w-3" />
             Clear all

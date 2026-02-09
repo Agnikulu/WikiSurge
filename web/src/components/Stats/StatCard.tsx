@@ -31,16 +31,16 @@ export const StatCard = memo(function StatCard({
       className={`card border-l-4 ${borderClass} flex items-center space-x-3
         transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-default`}
     >
-      <div className={`p-2.5 rounded-lg bg-gray-50 ${color}`}>
+      <div className={`p-2.5 rounded-lg bg-gray-50 dark:bg-gray-700 ${color}`}>
         <Icon className="h-5 w-5" />
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide truncate">
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide truncate">
           {label}
         </p>
         <div className="flex items-baseline gap-2">
-          <p className="text-2xl font-bold text-gray-900 tabular-nums">{value}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
 
           {trend && trend.direction !== 'neutral' && (
             <span

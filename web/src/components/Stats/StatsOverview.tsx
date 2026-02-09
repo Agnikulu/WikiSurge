@@ -59,12 +59,12 @@ export function StatsOverview() {
       <div className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="card animate-pulse border-l-4 border-gray-200">
+            <div key={i} className="card animate-pulse border-l-4 border-gray-200 dark:border-gray-600">
               <div className="flex items-center space-x-3">
-                <div className="h-10 w-10 bg-gray-200 rounded-lg" />
+                <div className="h-10 w-10 bg-gray-200 dark:bg-gray-600 rounded-lg" />
                 <div className="flex-1">
-                  <div className="h-3 bg-gray-200 rounded w-16 mb-2" />
-                  <div className="h-6 bg-gray-200 rounded w-12" />
+                  <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded w-16 mb-2" />
+                  <div className="h-6 bg-gray-200 dark:bg-gray-600 rounded w-12" />
                 </div>
               </div>
             </div>
@@ -76,7 +76,7 @@ export function StatsOverview() {
 
   if (error) {
     return (
-      <div className="card text-center text-gray-500">
+      <div className="card text-center text-gray-500 dark:text-gray-400">
         <p>Failed to load stats</p>
         <button onClick={refresh} className="text-primary-600 hover:underline text-sm mt-1">
           Retry
@@ -136,9 +136,9 @@ export function StatsOverview() {
   ];
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" role="region" aria-label="Statistics overview">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+        <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
           Overview
         </h2>
         <div className="flex items-center gap-2 text-xs text-gray-400">
@@ -147,7 +147,7 @@ export function StatsOverview() {
           )}
           <button
             onClick={refresh}
-            className="p-1 rounded hover:bg-gray-100 transition-colors"
+            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             aria-label="Refresh stats"
           >
             <RefreshCw className="h-3.5 w-3.5" />

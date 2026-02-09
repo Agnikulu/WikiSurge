@@ -74,10 +74,10 @@ export function HistoricalEditWars() {
     <div className="card">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-gray-500" />
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-gray-500 dark:text-gray-400" />
           Edit War History
-          <span className="text-sm font-normal text-gray-500">
+          <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
             ({filtered.length} result{filtered.length !== 1 ? 's' : ''})
           </span>
         </h2>
@@ -85,7 +85,7 @@ export function HistoricalEditWars() {
         <button
           onClick={handleExport}
           disabled={filtered.length === 0}
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded disabled:opacity-50 transition-colors"
         >
           <Download className="h-3 w-3" />
           Export CSV
@@ -93,7 +93,7 @@ export function HistoricalEditWars() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-4 pb-4 border-b border-gray-100">
+      <div className="flex flex-wrap items-center gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-gray-700">
         {/* Page search */}
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
@@ -105,7 +105,7 @@ export function HistoricalEditWars() {
               setPageSearch(e.target.value);
               setPage(0);
             }}
-            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
         </div>
 
@@ -120,8 +120,8 @@ export function HistoricalEditWars() {
               }}
               className={`px-2 py-1 text-xs rounded transition-colors ${
                 severity === s
-                  ? 'bg-gray-200 text-gray-800 font-medium'
-                  : 'text-gray-500 hover:bg-gray-100'
+                  ? 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium'
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
             >
               {s === 'all' ? (
@@ -138,12 +138,12 @@ export function HistoricalEditWars() {
       {loading && filtered.length === 0 ? (
         <div className="animate-pulse space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-28 bg-gray-100 rounded-lg" />
+            <div key={i} className="h-28 bg-gray-100 dark:bg-gray-700 rounded-lg" />
           ))}
         </div>
       ) : error ? (
         <div className="text-center py-8">
-          <p className="text-sm text-gray-500">Failed to load history</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Failed to load history</p>
           <button
             onClick={refetch}
             className="text-blue-600 hover:underline text-sm mt-2"
@@ -166,17 +166,17 @@ export function HistoricalEditWars() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
               <button
                 onClick={() => setPage((p) => Math.max(p - 1, 0))}
                 disabled={page === 0}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors"
               >
                 <ChevronLeft className="h-3 w-3" />
                 Previous
               </button>
 
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-gray-500 dark:text-gray-400">
                 Page {page + 1} of {totalPages}
               </span>
 
@@ -185,7 +185,7 @@ export function HistoricalEditWars() {
                   setPage((p) => Math.min(p + 1, totalPages - 1))
                 }
                 disabled={page >= totalPages - 1}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors"
               >
                 Next
                 <ChevronRight className="h-3 w-3" />

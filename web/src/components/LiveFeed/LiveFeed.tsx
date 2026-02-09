@@ -92,7 +92,7 @@ export function LiveFeed() {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-gray-900">Live Edit Feed</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Live Edit Feed</h2>
           <ConnectionIndicator state={connectionState} reconnectCount={reconnectCount} />
         </div>
 
@@ -109,7 +109,7 @@ export function LiveFeed() {
           <button
             onClick={() => setShowFilters((s) => !s)}
             className={`p-1.5 rounded-lg transition-colors ${
-              showFilters ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+              showFilters ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700'
             }`}
             aria-label="Toggle filters"
             aria-expanded={showFilters}
@@ -122,8 +122,8 @@ export function LiveFeed() {
             onClick={isPaused ? resume : pause}
             className={`p-1.5 rounded-lg transition-colors ${
               isPaused
-                ? 'bg-amber-50 text-amber-600'
-                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700'
             }`}
             aria-label={isPaused ? 'Resume live feed' : 'Pause live feed'}
             title={isPaused ? 'Resume' : 'Pause'}
@@ -134,7 +134,7 @@ export function LiveFeed() {
           {/* Clear */}
           <button
             onClick={clearData}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700 transition-colors"
             aria-label="Clear feed"
             title="Clear"
           >
@@ -145,12 +145,12 @@ export function LiveFeed() {
 
       {/* Paused banner */}
       {isPaused && (
-        <div className="flex items-center gap-2 px-3 py-1.5 mb-3 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium">
+        <div className="flex items-center gap-2 px-3 py-1.5 mb-3 rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs font-medium">
           <Pause className="h-3 w-3" />
           Feed paused — new edits are not being displayed
           <button
             onClick={resume}
-            className="ml-auto px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 transition-colors"
+            className="ml-auto px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 dark:bg-amber-800 dark:hover:bg-amber-700 transition-colors"
           >
             Resume
           </button>
@@ -159,7 +159,7 @@ export function LiveFeed() {
 
       {/* Filter panel (collapsible) */}
       {showFilters && (
-        <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-100 animate-slide-down">
+        <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-700 animate-slide-down">
           <FilterControls />
         </div>
       )}
@@ -225,7 +225,7 @@ export function LiveFeed() {
       {userScrolled && edits.length > 0 && (
         <button
           onClick={scrollToTop}
-          className="absolute bottom-14 right-6 p-2 rounded-full bg-white shadow-md border border-gray-200 text-gray-500 hover:text-gray-700 hover:shadow-lg transition-all animate-fade-in"
+          className="absolute bottom-14 right-6 p-2 rounded-full bg-white dark:bg-gray-800 shadow-md border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:shadow-lg transition-all animate-fade-in"
           aria-label="Scroll to top"
         >
           <ArrowUp className="h-4 w-4" />
@@ -234,7 +234,7 @@ export function LiveFeed() {
 
       {/* Footer stats */}
       {edits.length > 0 && (
-        <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
+        <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
           <span className="text-[11px] text-gray-400">{edits.length} edits in feed</span>
           <div className="flex items-center gap-3">
             {connected && messageRate > 0 && (
@@ -288,7 +288,7 @@ function ConnectionIndicator({
   return (
     <div className="flex items-center gap-1.5" role="status" aria-live="polite">
       <span className={`inline-block w-2 h-2 rounded-full ${color}`} aria-hidden="true" />
-      <span className="text-xs text-gray-500">{label}</span>
+      <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
     </div>
   );
 }

@@ -148,7 +148,7 @@ export function EditWarsList() {
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="flex items-center gap-2 text-lg font-semibold text-gray-900 hover:text-gray-700 transition-colors"
+          className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
         >
           <Swords className="h-5 w-5 text-red-500" />
           <span>⚔️ Edit Wars in Progress</span>
@@ -170,8 +170,8 @@ export function EditWarsList() {
                 onClick={() => setFilter('active')}
                 className={`px-3 py-1 text-xs font-medium rounded-l-md border transition-colors ${
                   filter === 'active'
-                    ? 'bg-red-50 text-red-700 border-red-200'
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
+                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-700'
                 }`}
               >
                 Active
@@ -180,8 +180,8 @@ export function EditWarsList() {
                 onClick={() => setFilter('all')}
                 className={`px-3 py-1 text-xs font-medium rounded-r-md border-t border-r border-b transition-colors ${
                   filter === 'all'
-                    ? 'bg-red-50 text-red-700 border-red-200'
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
+                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-700'
                 }`}
               >
                 All
@@ -203,7 +203,7 @@ export function EditWarsList() {
           ) : visibleWars.length === 0 ? (
             <EmptyState filter={filter} />
           ) : (
-            <div className="space-y-3 max-h-[600px] overflow-y-auto scrollbar-thin pr-1">
+            <div className="space-y-3 max-h-[600px] overflow-y-auto scrollbar-thin pr-1" role="list" aria-label="Edit wars">
               {visibleWars.map((war) => (
                 <EditWarCard
                   key={war.page_title}
@@ -226,12 +226,12 @@ function LoadingSkeleton() {
   return (
     <div className="animate-pulse space-y-3">
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="p-4 rounded-lg border border-gray-200">
-          <div className="h-4 bg-gray-200 rounded w-2/3 mb-2" />
-          <div className="h-3 bg-gray-200 rounded w-1/2 mb-3" />
+        <div key={i} className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-2/3 mb-2" />
+          <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded w-1/2 mb-3" />
           <div className="grid grid-cols-4 gap-3">
             {Array.from({ length: 4 }).map((_, j) => (
-              <div key={j} className="h-3 bg-gray-200 rounded" />
+              <div key={j} className="h-3 bg-gray-200 dark:bg-gray-600 rounded" />
             ))}
           </div>
         </div>
@@ -243,7 +243,7 @@ function LoadingSkeleton() {
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="text-center py-8">
-      <p className="text-sm text-gray-500">Failed to load edit wars</p>
+      <p className="text-sm text-gray-500 dark:text-gray-400">Failed to load edit wars</p>
       <button
         onClick={onRetry}
         className="text-primary-600 hover:underline text-sm mt-2"

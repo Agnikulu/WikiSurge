@@ -7,7 +7,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  type TooltipProps,
 } from 'recharts';
 import { Clock } from 'lucide-react';
 import type { TimeRange, TimeSeriesPoint } from '../../types';
@@ -30,14 +29,15 @@ function formatTimeLabel(ts: number, range: TimeRange): string {
 }
 
 // ── Custom tooltip ────────────────────────────────────────────────
-function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-sm">
-      <p className="text-gray-500 text-xs mb-1">
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg px-3 py-2 text-sm">
+      <p className="text-gray-500 dark:text-gray-400 text-xs mb-1">
         {new Date(label as number).toLocaleTimeString()}
       </p>
-      <p className="font-semibold text-gray-900">
+      <p className="font-semibold text-gray-900 dark:text-white">
         {payload[0].value?.toFixed(1)} edits/min
       </p>
     </div>
@@ -80,10 +80,10 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-gray-400" />
-          <h3 className="text-sm font-semibold text-gray-700">Edits Timeline</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Edits Timeline</h3>
         </div>
 
-        <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
+        <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-700 text-xs">
           {(Object.keys(RANGE_CONFIG) as TimeRange[]).map((r) => (
             <button
               key={r}
@@ -94,7 +94,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
               className={`px-2.5 py-1 transition-colors ${
                 range === r
                   ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
+                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
               {RANGE_CONFIG[r].label}
@@ -104,7 +104,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
       </div>
 
       {/* Chart */}
-      <div className="h-64">
+      <div className="h-64" role="figure" aria-label="Edits per minute timeline chart">
         {loading && chartData.length === 0 ? (
           <div className="h-full flex items-center justify-center text-gray-400 text-sm">
             Loading chart data…

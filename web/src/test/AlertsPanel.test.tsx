@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AlertsPanel } from '../components/Alerts/AlertsPanel';
-import type { SpikeAlert, EditWarAlert, Alert } from '../types';
+import type { SpikeAlert, EditWarAlert } from '../types';
 
 // ── Mocks ──
 
