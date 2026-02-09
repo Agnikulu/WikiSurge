@@ -219,6 +219,41 @@ The system includes comprehensive monitoring with:
 - Elasticsearch index statistics
 - Custom application metrics
 
+For complete monitoring setup and dashboard configuration, see [docs/MONITORING.md](docs/MONITORING.md).
+
+## Documentation
+
+WikiSurge comes with comprehensive documentation covering all aspects of the system:
+
+### 📚 Core Documentation
+
+- **[Architecture Guide](docs/ARCHITECTURE.md)** - System design, components, data models, and algorithms
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Installation for local, production, and cloud environments
+- **[Operations Guide](docs/OPERATIONS.md)** - Daily operations, troubleshooting, and maintenance
+- **[Monitoring Guide](docs/MONITORING.md)** - Metrics, dashboards, alerts, and performance tuning
+- **[Development Guide](docs/DEVELOPMENT.md)** - Code structure, adding features, testing, and contributing
+- **[API Reference](docs/API.md)** - Complete REST and WebSocket API documentation
+- **[FAQ](docs/FAQ.md)** - Frequently asked questions and answers
+
+### 🎯 Getting Started
+
+1. **New users:** Start with this README, then read [DEPLOYMENT.md](docs/DEPLOYMENT.md)
+2. **System admins:** Check [OPERATIONS.md](docs/OPERATIONS.md) for daily tasks
+3. **Developers:** See [DEVELOPMENT.md](docs/DEVELOPMENT.md) and [ARCHITECTURE.md](docs/ARCHITECTURE.md)
+4. **Quick answers:** Search [FAQ.md](docs/FAQ.md)
+
+### 📖 Additional Resources
+
+- [Ingestion Details](docs/INGESTION.md) - Wikipedia EventStreams integration
+- [Processing Details](docs/PROCESSING.md) - Stream processing pipelines
+- [Storage Layer](docs/STORAGE_LAYER_SUMMARY.md) - Redis and Elasticsearch
+- [Spike Detection](docs/SPIKE_DETECTION_IMPLEMENTATION.md) - Algorithm details
+- [Hot Pages](docs/HOT_PAGES_IMPLEMENTATION.md) - Page promotion system
+- [Recovery](docs/RECOVERY.md) - Backup and disaster recovery
+- [Capacity Planning](docs/CAPACITY_PLANNING.md) - Resource planning
+
+For a complete documentation index, see [docs/README.md](docs/README.md).
+
 ## Contributing
 
 1. Fork the repository
