@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/Agnikulu/WikiSurge/internal/config"
+	"github.com/Agnikulu/WikiSurge/internal/models"
 	"github.com/Agnikulu/WikiSurge/internal/storage"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
@@ -21,12 +23,14 @@ type APIServer struct {
 	trending       *storage.TrendingScorer
 	hotPages       *storage.HotPageTracker
 	alerts         *storage.RedisAlerts
+	statsTracker   *storage.StatsTracker
 	config         *config.Config
 	logger         zerolog.Logger
 	startTime      time.Time
 	cache          *responseCache
 	rateLimiter    *RateLimiter
 	wsHub          *WebSocketHub
+	alertHub       *AlertHub
 	version        string
 
 	// Stats cache
@@ -46,17 +50,18 @@ func NewAPIServer(
 	logger zerolog.Logger,
 ) *APIServer {
 	s := &APIServer{
-		router:    http.NewServeMux(),
-		redis:     redisClient,
-		es:        es,
-		trending:  trending,
-		hotPages:  hotPages,
-		alerts:    alerts,
-		config:    cfg,
-		logger:    logger.With().Str("component", "api").Logger(),
-		startTime: time.Now(),
-		cache:     newResponseCache(),
-		version:   "1.0.0",
+		router:       http.NewServeMux(),
+		redis:        redisClient,
+		es:           es,
+		trending:     trending,
+		hotPages:     hotPages,
+		alerts:       alerts,
+		statsTracker: storage.NewStatsTracker(redisClient),
+		config:       cfg,
+		logger:       logger.With().Str("component", "api").Logger(),
+		startTime:    time.Now(),
+		cache:        newResponseCache(),
+		version:      "1.0.0",
 	}
 
 	// Initialise Redis-backed rate limiter.
@@ -68,6 +73,10 @@ func NewAPIServer(
 	// WebSocket hub.
 	s.wsHub = NewWebSocketHub(s.logger)
 	go s.wsHub.Run()
+
+	// Alert hub — single shared Redis subscription for all alert WS clients.
+	s.alertHub = NewAlertHub(alerts, s.logger)
+	go s.alertHub.Run()
 
 	s.setupRoutes()
 	return s
@@ -142,6 +151,27 @@ func (s *APIServer) ListenAndServe(addr string) *http.Server {
 // Hub returns the WebSocket hub for external integration (e.g., processor broadcasting).
 func (s *APIServer) Hub() *WebSocketHub {
 	return s.wsHub
+}
+
+// StartEditRelay subscribes to the Redis pub/sub channel where the processor
+// publishes live edits, and feeds them into the API's WebSocket hub so that
+// connected dashboard clients receive real-time updates.
+func (s *APIServer) StartEditRelay(redisClient *redis.Client) {
+	go func() {
+		ctx := context.Background()
+		sub := redisClient.Subscribe(ctx, "wikisurge:edits:live")
+		ch := sub.Channel()
+		s.logger.Info().Msg("Edit relay started — subscribing to Redis pub/sub for live edits")
+
+		for msg := range ch {
+			var edit models.WikipediaEdit
+			if err := json.Unmarshal([]byte(msg.Payload), &edit); err != nil {
+				s.logger.Warn().Err(err).Msg("Failed to unmarshal relayed edit")
+				continue
+			}
+			s.wsHub.BroadcastEditFiltered(&edit)
+		}
+	}()
 }
 
 // Shutdown performs graceful shutdown of API-specific resources.

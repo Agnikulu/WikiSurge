@@ -38,7 +38,7 @@ const (
 	defaultMaxClients = 100
 
 	// Default max connections per IP.
-	defaultMaxPerIP = 5
+	defaultMaxPerIP = 50
 
 	// Client send channel buffer size.
 	sendBufferSize = 256
@@ -402,29 +402,28 @@ func (h *WebSocketHub) Stop() {
 	close(h.stop)
 }
 
-// cleanupStaleConnections removes clients that have been idle too long.
+// cleanupStaleConnections removes clients whose send buffer is full (stuck).
+// Note: We do NOT write directly to the connection here because writePump
+// already handles pings; writing from two goroutines causes a panic.
 func (h *WebSocketHub) cleanupStaleConnections() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	now := time.Now()
+	var stale []*Client
 	for client := range h.clients {
-		// Connections older than staleTimeout with no recent pong are cleaned.
-		// The pong handler resets the read deadline; if the connection is truly
-		// stale the readPump will exit on its own. This is a safety net.
-		if now.Sub(client.connectedAt) > staleTimeout {
-			// Send a ping; if it fails the client is truly dead.
-			_ = client.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := client.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				delete(h.clients, client)
-				close(client.send)
-				client.conn.Close()
-				metrics.WebSocketDisconnectionsTotal.With(nil).Inc()
-				h.logger.Info().
-					Str("client", client.id).
-					Msg("Stale connection cleaned up")
-			}
+		// If the send buffer is completely full the client is stuck.
+		if len(client.send) == cap(client.send) {
+			stale = append(stale, client)
 		}
+	}
+	for _, client := range stale {
+		delete(h.clients, client)
+		close(client.send) // writePump will see the closed channel and exit
+		client.conn.Close()
+		metrics.WebSocketDisconnectionsTotal.With(nil).Inc()
+		h.logger.Info().
+			Str("client", client.id).
+			Msg("Stale connection cleaned up (send buffer full)")
 	}
 	metrics.WebSocketConnectionsActive.With(nil).Set(float64(len(h.clients)))
 }

@@ -49,7 +49,8 @@ function SpikeAlertCard({
       {onDismiss && (
         <button
           onClick={() => onDismiss(alert)}
-          className="absolute top-2 right-2 p-0.5 rounded text-gray-400 opacity-0 group-hover:opacity-100 hover:bg-white/60 transition-opacity"
+          className="absolute top-2 right-2 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ color: 'rgba(0,255,136,0.4)' }}
           aria-label="Dismiss alert"
         >
           <X className="h-3.5 w-3.5" />
@@ -66,7 +67,7 @@ function SpikeAlertCard({
           {/* Header row */}
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <Zap className={`h-3.5 w-3.5 ${severity.text}`} />
-            <span className={`text-sm font-semibold ${severity.text}`}>Spike Detected</span>
+            <span className={`text-sm font-semibold ${severity.text}`} style={{ fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Spike Detected</span>
             <SeverityBadge severity={alert.severity} />
           </div>
 
@@ -75,15 +76,16 @@ function SpikeAlertCard({
             href={wikiUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm font-medium text-gray-800 hover:text-blue-600 hover:underline truncate block"
+            className="text-sm font-medium truncate block"
+            style={{ color: '#00ff88', fontFamily: 'monospace' }}
             title={alert.page_title}
           >
             {truncateTitle(alert.page_title, 50)}
           </a>
 
           {/* Stats */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
-            <span className="font-medium">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}>
+            <span className="font-medium" style={{ color: '#ffaa00' }}>
               {alert.spike_ratio.toFixed(1)}x normal rate
             </span>
             <span>·</span>
@@ -120,7 +122,8 @@ function EditWarAlertCard({
       {onDismiss && (
         <button
           onClick={() => onDismiss(alert)}
-          className="absolute top-2 right-2 p-0.5 rounded text-gray-400 opacity-0 group-hover:opacity-100 hover:bg-white/60 transition-opacity"
+          className="absolute top-2 right-2 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ color: 'rgba(0,255,136,0.4)' }}
           aria-label="Dismiss alert"
         >
           <X className="h-3.5 w-3.5" />
@@ -137,7 +140,7 @@ function EditWarAlertCard({
           {/* Header row */}
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <Swords className={`h-3.5 w-3.5 ${severity.text}`} />
-            <span className={`text-sm font-semibold ${severity.text}`}>Edit War</span>
+            <span className={`text-sm font-semibold ${severity.text}`} style={{ fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Edit War</span>
             <SeverityBadge severity={alert.severity} />
           </div>
 
@@ -146,14 +149,15 @@ function EditWarAlertCard({
             href={wikiUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm font-medium text-gray-800 hover:text-blue-600 hover:underline truncate block"
+            className="text-sm font-medium truncate block"
+            style={{ color: '#00ff88', fontFamily: 'monospace' }}
             title={alert.page_title}
           >
             {truncateTitle(alert.page_title, 50)}
           </a>
 
           {/* Stats */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}>
             <span>{alert.editor_count} editors</span>
             <span>·</span>
             <span>{alert.revert_count} reverts</span>

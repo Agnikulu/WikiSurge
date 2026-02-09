@@ -15,6 +15,7 @@ import (
 	"github.com/r3labs/sse/v2"
 	"github.com/rs/zerolog"
 	"golang.org/x/time/rate"
+	"gopkg.in/cenkalti/backoff.v1"
 )
 
 const (
@@ -164,26 +165,62 @@ func (w *WikiStreamClient) eventLoop() {
 // processStream handles the actual SSE stream processing
 func (w *WikiStreamClient) processStream() error {
 	eventChan := make(chan *sse.Event)
-	
+
+	// Create a fresh SSE client for each stream attempt to avoid stale
+	// internal state from the r3labs/sse library's own retry logic.
+	sseClient := sse.NewClient(WikipediaSSEURL)
+	sseClient.Connection.Transport = &http.Transport{
+		ResponseHeaderTimeout: ConnectionTimeout,
+	}
+	sseClient.Headers = map[string]string{
+		"Accept":     "text/event-stream",
+		"User-Agent": UserAgent,
+	}
+	// Disable the library's internal auto-reconnect so our outer loop
+	// controls reconnection with proper backoff and idle detection.
+	sseClient.ReconnectStrategy = &backoff.StopBackOff{}
+
+	// Use a cancellable context so we can tear down the SSE subscription
+	// when we detect an idle timeout or a stop signal.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Subscribe to the message event type
 	go func() {
-		err := w.sseClient.SubscribeChanWithContext(context.Background(), "message", eventChan)
+		err := sseClient.SubscribeChanWithContext(ctx, "message", eventChan)
 		if err != nil {
 			w.logger.Error().Err(err).Msg("Failed to subscribe to SSE stream")
 		}
 	}()
-	
+
+	// Idle timeout: if no events arrive within this duration, assume the
+	// stream is stalled and force a reconnect.
+	const idleTimeout = 2 * time.Minute
+	idleTimer := time.NewTimer(idleTimeout)
+	defer idleTimer.Stop()
+
 	w.logger.Info().Msg("Started processing SSE events")
-	
+
 	for {
 		select {
 		case <-w.stopChan:
 			return nil
+		case <-idleTimer.C:
+			return fmt.Errorf("SSE stream idle for %v, forcing reconnect", idleTimeout)
 		case event, ok := <-eventChan:
 			if !ok {
 				return fmt.Errorf("SSE event channel closed")
 			}
-			
+
+			// Reset idle timer on every event
+			if !idleTimer.Stop() {
+				select {
+				case <-idleTimer.C:
+				default:
+				}
+			}
+			idleTimer.Reset(idleTimeout)
+
 			if err := w.processEvent(event); err != nil {
 				w.logger.Error().Err(err).Msg("Failed to process event")
 				// Continue processing other events even if one fails

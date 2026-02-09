@@ -135,10 +135,10 @@ func main() {
 		logger.Fatal().Err(err).Msg("Failed to create consumers")
 	}
 
-	// Step 5: Start metrics server
-	metricsPort := 2112
+	// Step 5: Start metrics server (use port 2113 to avoid conflict with ingestor on 2112)
+	metricsPort := 2113
 	if cfg.Ingestor.MetricsPort != 0 {
-		metricsPort = cfg.Ingestor.MetricsPort
+		metricsPort = cfg.Ingestor.MetricsPort + 1
 	}
 	orch.metricsServer = orch.startMetricsServer(metricsPort)
 	logger.Info().Int("port", metricsPort).Msg("Metrics server started")
@@ -223,8 +223,9 @@ func (o *processorOrchestrator) initProcessors() {
 	o.registerComponent("edit-war-detector")
 
 	// Trending Aggregator
-	o.trendingAggregator = processor.NewTrendingAggregator(o.trendingScorer, o.cfg, o.logger)
-	o.logger.Info().Msg("Initialized TrendingAggregator")
+	statsTracker := storage.NewStatsTracker(o.redisClient)
+	o.trendingAggregator = processor.NewTrendingAggregator(o.trendingScorer, statsTracker, o.cfg, o.logger)
+	o.logger.Info().Msg("Initialized TrendingAggregator with StatsTracker")
 	o.registerComponent("trending-aggregator")
 
 	// Selective Indexer (if ES is available)
@@ -243,7 +244,7 @@ func (o *processorOrchestrator) initProcessors() {
 
 	// WebSocket Forwarder
 	if o.wsHub != nil {
-		o.wsForwarder = processor.NewWebSocketForwarder(o.wsHub, o.logger)
+		o.wsForwarder = processor.NewWebSocketForwarder(o.wsHub, o.redisClient, o.logger)
 		o.logger.Info().Msg("Initialized WebSocketForwarder")
 		o.registerComponent("websocket-forwarder")
 	}

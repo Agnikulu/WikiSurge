@@ -97,6 +97,7 @@ export function buildUserUrl(user: string, serverUrl?: string): string {
  * Format large numbers with commas (e.g., 123456 -> "123,456").
  */
 export function formatNumber(num: number): string {
+  if (num == null || isNaN(num)) return '0';
   return num.toLocaleString('en-US');
 }
 
@@ -128,32 +129,32 @@ export function getSeverityColor(severity: string): {
   switch (severity.toLowerCase()) {
     case 'critical':
       return {
-        bg: 'bg-red-50',
-        text: 'text-red-800',
-        border: 'border-red-200',
+        bg: 'bg-red-900/20',
+        text: 'text-red-400',
+        border: 'border-red-800/40',
         dot: 'bg-red-500',
       };
     case 'high':
       return {
-        bg: 'bg-orange-50',
-        text: 'text-orange-800',
-        border: 'border-orange-200',
-        dot: 'bg-orange-500',
+        bg: 'bg-amber-900/20',
+        text: 'text-amber-400',
+        border: 'border-amber-800/40',
+        dot: 'bg-amber-500',
       };
     case 'medium':
       return {
-        bg: 'bg-yellow-50',
-        text: 'text-yellow-800',
-        border: 'border-yellow-200',
-        dot: 'bg-yellow-500',
+        bg: 'bg-emerald-900/20',
+        text: 'text-emerald-400',
+        border: 'border-emerald-800/40',
+        dot: 'bg-emerald-500',
       };
     case 'low':
     default:
       return {
-        bg: 'bg-blue-50',
-        text: 'text-blue-800',
-        border: 'border-blue-200',
-        dot: 'bg-blue-500',
+        bg: 'bg-cyan-900/20',
+        text: 'text-cyan-400',
+        border: 'border-cyan-800/40',
+        dot: 'bg-cyan-500',
       };
   }
 }
@@ -170,7 +171,7 @@ export function truncateTitle(title: string, maxLength = 60): string {
  * Get a CSS class for byte change coloring (green for additions, red for deletions).
  */
 export function getByteChangeColor(bytes: number): string {
-  if (bytes > 0) return 'text-green-600';
-  if (bytes < 0) return 'text-red-600';
+  if (bytes > 0) return 'text-emerald-400';
+  if (bytes < 0) return 'text-red-400';
   return 'text-gray-500';
 }

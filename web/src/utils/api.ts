@@ -1,13 +1,14 @@
 import axios from 'axios';
 import type { TrendingPage, Edit, Alert, Stats, EditWar, SearchResult, SearchParams } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
   },
 });
 
@@ -51,7 +52,11 @@ export const searchEdits = async (
 
 export const getAlerts = async (limit = 20): Promise<Alert[]> => {
   const response = await api.get('/api/alerts', { params: { limit } });
-  return response.data;
+  // The backend wraps alerts in {alerts:[], total, pagination}.
+  const raw = response.data;
+  if (Array.isArray(raw)) return raw;
+  if (raw && Array.isArray(raw.alerts)) return raw.alerts;
+  return [];
 };
 
 export const getStats = async (): Promise<Stats> => {

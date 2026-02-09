@@ -93,14 +93,15 @@ export function SearchSuggestions({ query, onSelect, visible, onClose }: SearchS
   return (
     <div
       ref={containerRef}
-      className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
+      className="absolute z-30 top-full left-0 right-0 mt-1 rounded-xl overflow-hidden"
+      style={{ background: '#111b2e', border: '1px solid rgba(0,255,136,0.15)' }}
       role="listbox"
       aria-label="Search suggestions"
     >
       {loading && (
-        <div className="flex items-center gap-2 px-4 py-3 text-sm text-gray-500">
+        <div className="flex items-center gap-2 px-4 py-3 text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Loading suggestions...
+          LOADING...
         </div>
       )}
       {!loading &&
@@ -110,16 +111,16 @@ export function SearchSuggestions({ query, onSelect, visible, onClose }: SearchS
             onClick={() => onSelect(edit.title)}
             role="option"
             aria-selected={idx === selectedIndex}
-            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${
-              idx === selectedIndex
-                ? 'bg-primary-50 text-primary-700'
-                : 'text-gray-700 hover:bg-gray-50'
-            }`}
+            className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors"
+            style={idx === selectedIndex
+              ? { background: 'rgba(0,255,136,0.1)', color: '#00ff88', fontFamily: 'monospace' }
+              : { color: 'rgba(0,255,136,0.6)', fontFamily: 'monospace' }
+            }
           >
-            <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+            <Search className="h-3.5 w-3.5 flex-shrink-0" style={{ color: 'rgba(0,255,136,0.3)' }} />
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate">{edit.title}</p>
-              <p className="text-xs text-gray-400 truncate">
+              <p className="text-xs truncate" style={{ color: 'rgba(0,255,136,0.3)' }}>
                 by {edit.user} · {edit.wiki}
               </p>
             </div>

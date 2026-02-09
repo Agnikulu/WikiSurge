@@ -109,7 +109,8 @@ export function SearchInput({ onSearch, loading, initialQuery = '' }: SearchInpu
       <div className="relative flex items-center">
         {/* Search icon */}
         <Search
-          className="absolute left-4 h-5 w-5 text-gray-400 pointer-events-none"
+          className="absolute left-4 h-5 w-5 pointer-events-none"
+          style={{ color: 'rgba(0,255,136,0.3)' }}
           aria-hidden="true"
         />
 
@@ -122,17 +123,15 @@ export function SearchInput({ onSearch, loading, initialQuery = '' }: SearchInpu
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onFocus={() => recentSearches.length > 0 && setShowRecent(true)}
-          placeholder="Search pages, users, or comments..."
+          placeholder="SEARCH PAGES, USERS, OR COMMENTS..."
           aria-label="Search pages, users, or comments"
-          className="w-full pl-12 pr-24 py-3 text-base border-2 border-gray-200 rounded-xl
-            bg-white shadow-sm
-            focus:ring-2 focus:ring-primary-500 focus:border-primary-500
-            placeholder:text-gray-400 transition-all duration-200"
+          className="w-full pl-12 pr-24 py-3 text-base rounded-xl focus:outline-none focus:ring-1 transition-all duration-200"
+          style={{ background: 'rgba(0,255,136,0.05)', border: '2px solid rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }}
         />
 
         {/* Character count */}
         {query.length > 0 && (
-          <span className="absolute right-28 text-xs text-gray-400 select-none" aria-hidden="true">
+          <span className="absolute right-28 text-xs select-none" style={{ color: 'rgba(0,255,136,0.3)', fontFamily: 'monospace' }} aria-hidden="true">
             {query.length}
           </span>
         )}
@@ -142,7 +141,8 @@ export function SearchInput({ onSearch, loading, initialQuery = '' }: SearchInpu
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-20 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            className="absolute right-20 p-1 rounded-full transition-colors"
+            style={{ color: 'rgba(0,255,136,0.4)' }}
             aria-label="Clear search"
           >
             <X className="h-4 w-4" />
@@ -157,9 +157,10 @@ export function SearchInput({ onSearch, loading, initialQuery = '' }: SearchInpu
             submitSearch(query);
           }}
           disabled={loading || !query.trim()}
-          className="absolute right-2 px-4 py-1.5 bg-primary-600 text-white rounded-lg text-sm font-medium
-            hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed
+          className="absolute right-2 px-4 py-1.5 rounded-lg text-sm font-medium
+            disabled:opacity-50 disabled:cursor-not-allowed
             flex items-center gap-1.5 transition-colors"
+          style={{ background: 'rgba(0,255,136,0.15)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.3)', fontFamily: 'monospace' }}
           aria-label="Search"
         >
           {loading ? (
@@ -167,7 +168,7 @@ export function SearchInput({ onSearch, loading, initialQuery = '' }: SearchInpu
           ) : (
             <>
               <Search className="h-3.5 w-3.5" />
-              Search
+              SEARCH
             </>
           )}
         </button>
@@ -176,30 +177,33 @@ export function SearchInput({ onSearch, loading, initialQuery = '' }: SearchInpu
       {/* Recent searches dropdown */}
       {showRecent && recentSearches.length > 0 && (
         <div
-          className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
+          className="absolute z-20 top-full left-0 right-0 mt-1 rounded-xl overflow-hidden"
+          style={{ background: '#111b2e', border: '1px solid rgba(0,255,136,0.15)' }}
           role="listbox"
           aria-label="Recent searches"
         >
-          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-              Recent Searches
+          <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: '1px solid rgba(0,255,136,0.1)' }}>
+            <span className="text-xs font-medium uppercase tracking-wide" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+              RECENT SEARCHES
             </span>
             <button
               onClick={handleClearRecent}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+              className="text-xs transition-colors"
+              style={{ color: '#ff4444', fontFamily: 'monospace' }}
             >
-              Clear all
+              CLEAR ALL
             </button>
           </div>
           {recentSearches.map((term) => (
             <button
               key={term}
               onClick={() => handleRecentClick(term)}
-              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-700 flex items-center gap-2 transition-colors"
+              className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors"
+              style={{ color: 'rgba(0,255,136,0.6)', fontFamily: 'monospace' }}
               role="option"
               aria-selected={false}
             >
-              <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+              <Search className="h-3.5 w-3.5 flex-shrink-0" style={{ color: 'rgba(0,255,136,0.3)' }} />
               {term}
             </button>
           ))}

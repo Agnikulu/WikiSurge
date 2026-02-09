@@ -43,11 +43,13 @@ func main() {
 
 	// ---- Metrics ----
 	metrics.InitMetrics()
-	metricsServer := metrics.NewServer(cfg.Ingestor.MetricsPort)
+	apiMetricsPort := cfg.Ingestor.MetricsPort + 2 // avoid collision with ingestor (+0) and processor (+1)
+	metricsServer := metrics.NewServer(apiMetricsPort)
 	if err := metricsServer.Start(); err != nil {
-		logger.Fatal().Err(err).Msg("Failed to start metrics server")
+		logger.Warn().Err(err).Int("port", apiMetricsPort).Msg("Metrics server failed to start (non-fatal)")
+	} else {
+		logger.Info().Int("port", apiMetricsPort).Msg("Metrics server started")
 	}
-	logger.Info().Int("port", cfg.Ingestor.MetricsPort).Msg("Metrics server started")
 
 	// ---- Redis ----
 	redisAddr := strings.TrimPrefix(cfg.Redis.URL, "redis://")
@@ -56,7 +58,7 @@ func main() {
 		DialTimeout:  5 * time.Second,
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
-		PoolSize:     20,
+		PoolSize:     50,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -95,6 +97,9 @@ func main() {
 			logger.Fatal().Err(err).Msg("API server failed")
 		}
 	}()
+
+	// ---- Start Redis pub/sub relay for live edits to WebSocket clients ----
+	apiServer.StartEditRelay(redisClient)
 
 	// ---- Wait for shutdown signal ----
 	sigChan := make(chan os.Signal, 1)

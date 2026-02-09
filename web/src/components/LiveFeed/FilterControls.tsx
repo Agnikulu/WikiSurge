@@ -66,25 +66,26 @@ export function FilterControls({ onFilterChange }: FilterControlsProps) {
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 uppercase tracking-wider">
+        <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}>
           <Filter className="h-3 w-3" />
-          Filters
+          FILTERS
         </div>
         {hasActiveFilters && (
           <button
             onClick={handleReset}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            className="flex items-center gap-1 text-xs transition-colors"
+            style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}
             aria-label="Clear all filters"
           >
             <X className="h-3 w-3" />
-            Clear
+            CLEAR
           </button>
         )}
       </div>
 
       {/* Language selector */}
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1.5">Languages</label>
+        <label className="block text-xs font-medium mb-1.5" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Languages</label>
         <div className="flex flex-wrap gap-1">
           {COMMON_LANGUAGES.map(({ code, label }) => {
             const isActive = code === '' ? filters.languages.length === 0 : filters.languages.includes(code);
@@ -92,14 +93,11 @@ export function FilterControls({ onFilterChange }: FilterControlsProps) {
               <button
                 key={code || 'all'}
                 onClick={() => handleLanguageToggle(code)}
-                className={`
-                  px-2 py-0.5 rounded-full text-[11px] font-medium transition-all duration-150
-                  ${
-                    isActive
-                      ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                  }
-                `}
+                className="px-2 py-0.5 rounded-full text-[11px] font-medium transition-all duration-150"
+                style={isActive
+                  ? { background: 'rgba(0,255,136,0.15)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.3)', fontFamily: 'monospace' }
+                  : { background: 'rgba(0,255,136,0.05)', color: 'rgba(0,255,136,0.4)', border: '1px solid transparent', fontFamily: 'monospace' }
+                }
                 aria-pressed={isActive}
                 aria-label={`Filter by ${label}`}
               >
@@ -112,7 +110,7 @@ export function FilterControls({ onFilterChange }: FilterControlsProps) {
 
       {/* Bot toggle */}
       <div className="flex items-center justify-between">
-        <label htmlFor="exclude-bots" className="text-xs font-medium text-gray-600">
+        <label htmlFor="exclude-bots" className="text-xs font-medium" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace', textTransform: 'uppercase' }}>
           Exclude bots
         </label>
         <button
@@ -120,16 +118,15 @@ export function FilterControls({ onFilterChange }: FilterControlsProps) {
           role="switch"
           aria-checked={filters.excludeBots}
           onClick={handleBotsToggle}
-          className={`
-            relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200
-            ${filters.excludeBots ? 'bg-blue-500' : 'bg-gray-200'}
-          `}
+          className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200"
+          style={{ background: filters.excludeBots ? 'rgba(0,255,136,0.3)' : 'rgba(0,255,136,0.1)' }}
         >
           <span
-            className={`
-              inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200
-              ${filters.excludeBots ? 'translate-x-4' : 'translate-x-0.5'}
-            `}
+            className="inline-block h-3.5 w-3.5 transform rounded-full shadow transition-transform duration-200"
+            style={{
+              background: filters.excludeBots ? '#00ff88' : 'rgba(0,255,136,0.3)',
+              transform: filters.excludeBots ? 'translateX(16px)' : 'translateX(2px)',
+            }}
           />
         </button>
       </div>
@@ -137,10 +134,10 @@ export function FilterControls({ onFilterChange }: FilterControlsProps) {
       {/* Min byte change slider */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label htmlFor="min-byte-change" className="text-xs font-medium text-gray-600">
+          <label htmlFor="min-byte-change" className="text-xs font-medium" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace', textTransform: 'uppercase' }}>
             Min byte change
           </label>
-          <span className="text-[11px] text-gray-400 font-mono tabular-nums">
+          <span className="text-[11px] font-mono tabular-nums" style={{ color: 'rgba(0,255,136,0.4)' }}>
             {filters.minByteChange > 0 ? `±${filters.minByteChange}` : 'any'}
           </span>
         </div>
@@ -152,13 +149,14 @@ export function FilterControls({ onFilterChange }: FilterControlsProps) {
           step={10}
           value={filters.minByteChange}
           onChange={handleMinByteChange}
-          className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-blue-500
+          className="w-full h-1.5 rounded-full appearance-none cursor-pointer
             [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5
-            [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:cursor-pointer
+            [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer
             [&::-webkit-slider-thumb]:shadow-sm"
+          style={{ background: 'rgba(0,255,136,0.1)' }}
           aria-label={`Minimum byte change: ${filters.minByteChange}`}
         />
-        <div className="flex justify-between text-[10px] text-gray-300 mt-0.5">
+        <div className="flex justify-between text-[10px] mt-0.5" style={{ color: 'rgba(0,255,136,0.2)', fontFamily: 'monospace' }}>
           <span>0</span>
           <span>500</span>
           <span>1000</span>

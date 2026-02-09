@@ -40,6 +40,52 @@ type ConsumerMetrics struct {
 	ProcessingTime    prometheus.Histogram
 }
 
+// Shared metrics registered once across all consumers
+var (
+	sharedMetrics     *ConsumerMetrics
+	sharedMetricsOnce sync.Once
+)
+
+func getSharedConsumerMetrics() *ConsumerMetrics {
+	sharedMetricsOnce.Do(func() {
+		sharedMetrics = &ConsumerMetrics{
+			MessagesProcessed: prometheus.NewCounterVec(
+				prometheus.CounterOpts{
+					Name: "kafka_messages_processed_total",
+					Help: "Total number of Kafka messages processed",
+				},
+				[]string{"consumer_group", "topic", "status"},
+			),
+			ProcessingErrors: prometheus.NewCounter(
+				prometheus.CounterOpts{
+					Name: "kafka_processing_errors_total",
+					Help: "Total number of message processing errors",
+				},
+			),
+			ConsumerLag: prometheus.NewGauge(
+				prometheus.GaugeOpts{
+					Name: "kafka_consumer_lag",
+					Help: "Current consumer lag in messages",
+				},
+			),
+			ProcessingTime: prometheus.NewHistogram(
+				prometheus.HistogramOpts{
+					Name: "kafka_message_processing_seconds",
+					Help: "Time spent processing individual messages",
+					Buckets: prometheus.ExponentialBuckets(0.001, 2, 10),
+				},
+			),
+		}
+		prometheus.MustRegister(
+			sharedMetrics.MessagesProcessed,
+			sharedMetrics.ProcessingErrors,
+			sharedMetrics.ConsumerLag,
+			sharedMetrics.ProcessingTime,
+		)
+	})
+	return sharedMetrics
+}
+
 // ConsumerConfig holds consumer-specific configuration
 type ConsumerConfig struct {
 	Brokers       []string
@@ -91,43 +137,8 @@ func NewConsumer(cfg *config.Config, consumerCfg ConsumerConfig, handler Message
 
 	reader := kafka.NewReader(readerConfig)
 
-	// Initialize metrics
-	metrics := &ConsumerMetrics{
-		MessagesProcessed: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "kafka_messages_processed_total",
-				Help: "Total number of Kafka messages processed",
-			},
-			[]string{"consumer_group", "topic", "status"},
-		),
-		ProcessingErrors: prometheus.NewCounter(
-			prometheus.CounterOpts{
-				Name: "kafka_processing_errors_total",
-				Help: "Total number of message processing errors",
-			},
-		),
-		ConsumerLag: prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Name: "kafka_consumer_lag",
-				Help: "Current consumer lag in messages",
-			},
-		),
-		ProcessingTime: prometheus.NewHistogram(
-			prometheus.HistogramOpts{
-				Name: "kafka_message_processing_seconds",
-				Help: "Time spent processing individual messages",
-				Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
-			},
-		),
-	}
-
-	// Register metrics
-	prometheus.MustRegister(
-		metrics.MessagesProcessed,
-		metrics.ProcessingErrors,
-		metrics.ConsumerLag,
-		metrics.ProcessingTime,
-	)
+	// Use shared metrics (registered once)
+	metrics := getSharedConsumerMetrics()
 
 	ctx, cancel := context.WithCancel(context.Background())
 

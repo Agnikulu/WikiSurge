@@ -365,7 +365,7 @@ var (
 			Help:    "ES query duration",
 			Buckets: prometheus.DefBuckets,
 		},
-		[]string{},
+		[]string{"operation"},
 	)
 
 	// Registry for all metrics

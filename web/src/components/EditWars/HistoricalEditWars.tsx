@@ -36,15 +36,18 @@ export function HistoricalEditWars() {
   // Client-side filtering
   const filtered = (allWars ?? [])
     .filter((w) => !w.active) // only resolved
-    .filter((w) => severity === 'all' || w.severity.toLowerCase() === severity)
+    .filter((w) => severity === 'all' || (w.severity?.toLowerCase() ?? '') === severity)
     .filter(
       (w) =>
         !pageSearch ||
         w.page_title.toLowerCase().includes(pageSearch.toLowerCase()),
     )
     .sort(
-      (a, b) =>
-        new Date(b.start_time).getTime() - new Date(a.start_time).getTime(),
+      (a, b) => {
+        const ta = a.start_time ? new Date(a.start_time).getTime() : 0;
+        const tb = b.start_time ? new Date(b.start_time).getTime() : 0;
+        return tb - ta;
+      },
     );
 
   const totalPages = Math.max(Math.ceil(filtered.length / PAGE_SIZE), 1);
@@ -74,10 +77,10 @@ export function HistoricalEditWars() {
     <div className="card">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-          Edit War History
-          <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
+        <h2 className="flex items-center gap-2" style={{ color: 'rgba(0,255,136,0.7)', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const }}>
+          <Calendar className="h-5 w-5" style={{ color: 'rgba(0,255,136,0.5)' }} />
+          EDIT WAR HISTORY
+          <span className="text-sm font-normal" style={{ color: 'rgba(0,255,136,0.4)' }}>
             ({filtered.length} result{filtered.length !== 1 ? 's' : ''})
           </span>
         </h2>
@@ -85,27 +88,29 @@ export function HistoricalEditWars() {
         <button
           onClick={handleExport}
           disabled={filtered.length === 0}
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded disabled:opacity-50 transition-colors"
+          style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.2)', fontFamily: 'monospace' }}
         >
           <Download className="h-3 w-3" />
-          Export CSV
+          EXPORT CSV
         </button>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-gray-700">
+      <div className="flex flex-wrap items-center gap-3 mb-4 pb-4" style={{ borderBottom: '1px solid rgba(0,255,136,0.1)' }}>
         {/* Page search */}
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'rgba(0,255,136,0.3)' }} />
           <input
             type="text"
-            placeholder="Search page title..."
+            placeholder="SEARCH PAGE TITLE..."
             value={pageSearch}
             onChange={(e) => {
               setPageSearch(e.target.value);
               setPage(0);
             }}
-            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="w-full pl-8 pr-3 py-1.5 text-sm rounded-md focus:outline-none focus:ring-1"
+            style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }}
           />
         </div>
 
@@ -118,14 +123,14 @@ export function HistoricalEditWars() {
                 setSeverity(s);
                 setPage(0);
               }}
-              className={`px-2 py-1 text-xs rounded transition-colors ${
-                severity === s
-                  ? 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium'
-                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
+              className="px-2 py-1 text-xs rounded transition-colors"
+              style={severity === s
+                ? { background: 'rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }
+                : { color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }
+              }
             >
               {s === 'all' ? (
-                'All'
+                'ALL'
               ) : (
                 <SeverityBadge severity={s} />
               )}
@@ -138,23 +143,23 @@ export function HistoricalEditWars() {
       {loading && filtered.length === 0 ? (
         <div className="animate-pulse space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-28 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+            <div key={i} className="h-28 rounded-lg" style={{ background: 'rgba(0,255,136,0.04)' }} />
           ))}
         </div>
       ) : error ? (
         <div className="text-center py-8">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Failed to load history</p>
+          <p className="text-sm" style={{ color: '#ff4444', fontFamily: 'monospace' }}>FAILED TO LOAD HISTORY</p>
           <button
             onClick={refetch}
-            className="text-blue-600 hover:underline text-sm mt-2"
+            className="text-sm mt-2" style={{ color: '#00ff88', fontFamily: 'monospace' }}
           >
-            Retry
+            RETRY
           </button>
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-8">
-          <Swords className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-400">No historical edit wars found</p>
+          <Swords className="h-10 w-10 mx-auto mb-2" style={{ color: 'rgba(0,255,136,0.15)' }} />
+          <p className="text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>NO HISTORICAL EDIT WARS FOUND</p>
         </div>
       ) : (
         <>
@@ -166,18 +171,19 @@ export function HistoricalEditWars() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+            <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: '1px solid rgba(0,255,136,0.1)' }}>
               <button
                 onClick={() => setPage((p) => Math.max(p - 1, 0))}
                 disabled={page === 0}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors"
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded disabled:opacity-40 transition-colors"
+                style={{ color: '#00ff88', border: '1px solid rgba(0,255,136,0.2)', fontFamily: 'monospace' }}
               >
                 <ChevronLeft className="h-3 w-3" />
-                Previous
+                PREV
               </button>
 
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                Page {page + 1} of {totalPages}
+              <span className="text-xs" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+                PAGE {page + 1} OF {totalPages}
               </span>
 
               <button
@@ -185,9 +191,10 @@ export function HistoricalEditWars() {
                   setPage((p) => Math.min(p + 1, totalPages - 1))
                 }
                 disabled={page >= totalPages - 1}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors"
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded disabled:opacity-40 transition-colors"
+                style={{ color: '#00ff88', border: '1px solid rgba(0,255,136,0.2)', fontFamily: 'monospace' }}
               >
-                Next
+                NEXT
                 <ChevronRight className="h-3 w-3" />
               </button>
             </div>

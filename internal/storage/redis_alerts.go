@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -114,12 +115,13 @@ func (r *RedisAlerts) PublishVandalismAlert(ctx context.Context, edit *models.Wi
 
 // SubscribeToAlerts subscribes to alert streams and calls the provided handler for each alert
 func (r *RedisAlerts) SubscribeToAlerts(ctx context.Context, alertTypes []string, handler func(Alert) error) error {
-	streams := make([]string, 0, len(alertTypes)*2)
-	
-	// Build stream names and starting positions
-	for _, alertType := range alertTypes {
-		streamName := fmt.Sprintf("alerts:%s", alertType)
-		streams = append(streams, streamName, "$") // "$" means read only new messages
+	// go-redis XRead expects Streams as [key1, key2, ..., id1, id2, ...]
+	// i.e. all stream names first, then all IDs in the same order.
+	names := make([]string, len(alertTypes))
+	ids := make([]string, len(alertTypes))
+	for i, alertType := range alertTypes {
+		names[i] = fmt.Sprintf("alerts:%s", alertType)
+		ids[i] = "$" // "$" means read only new messages
 	}
 
 	for {
@@ -127,6 +129,8 @@ func (r *RedisAlerts) SubscribeToAlerts(ctx context.Context, alertTypes []string
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
+			streams := append(append([]string{}, names...), ids...)
+
 			// Read from streams with blocking
 			result, err := r.client.XRead(ctx, &redis.XReadArgs{
 				Streams: streams,
@@ -156,10 +160,10 @@ func (r *RedisAlerts) SubscribeToAlerts(ctx context.Context, alertTypes []string
 						log.Printf("Alert handler error: %v", err)
 					}
 
-					// Update stream position for next read
-					for i := 0; i < len(streams); i += 2 {
-						if streams[i] == stream.Stream {
-							streams[i+1] = message.ID
+					// Update the ID for this stream so the next XRead picks up from here
+					for i, name := range names {
+						if name == stream.Stream {
+							ids[i] = message.ID
 							break
 						}
 					}
@@ -280,13 +284,18 @@ func (r *RedisAlerts) publishAlert(ctx context.Context, streamName string, alert
 	return nil
 }
 
-// parseAlertMessage parses a Redis stream message into an Alert
+// parseAlertMessage parses a Redis stream message into an Alert.
+// The processor stores alerts under the key "data", while publishAlert uses
+// "alert_data". We check both for backwards compatibility.
 func (r *RedisAlerts) parseAlertMessage(message redis.XMessage) (Alert, error) {
 	var alert Alert
 
-	alertDataStr, exists := message.Values["alert_data"].(string)
+	alertDataStr, exists := message.Values["data"].(string)
 	if !exists {
-		return alert, fmt.Errorf("alert_data field missing from message")
+		alertDataStr, exists = message.Values["alert_data"].(string)
+	}
+	if !exists {
+		return alert, fmt.Errorf("alert data field missing from message (tried 'data' and 'alert_data')")
 	}
 
 	err := json.Unmarshal([]byte(alertDataStr), &alert)
@@ -379,14 +388,18 @@ func (r *RedisAlerts) GetEditWarAlertsSince(ctx context.Context, since time.Time
 	return wars, nil
 }
 
-// GetActiveEditWars scans Redis for keys marking active edit wars and builds
-// a response from the editor tracking hashes.
+// GetActiveEditWars scans Redis for marker keys that flag active edit wars,
+// then enriches each entry with editor / change data when still available.
+// Marker keys ("editwar:<page>") have a 1-hour TTL set by the processor,
+// while the editor hashes ("editwar:editors:<page>") have a shorter 10-min TTL
+// and may already have expired.
 func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[string]interface{}, error) {
 	var cursor uint64
 	var activeWars []map[string]interface{}
+	seen := make(map[string]bool)
 
 	for {
-		keys, nextCursor, err := r.client.Scan(ctx, cursor, "editwar:editors:*", 100).Result()
+		keys, nextCursor, err := r.client.Scan(ctx, cursor, "editwar:*", 200).Result()
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan for active edit wars: %w", err)
 		}
@@ -396,21 +409,40 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				break
 			}
 
-			// Extract page title
-			pageTitle := key[len("editwar:editors:"):]
+			// Only consider plain marker keys ("editwar:<page>").
+			// Skip sub-keys like editwar:editors:*, editwar:changes:*, editwar:<wiki>:*.
+			raw := key[len("editwar:"):]
+			if strings.Contains(raw, ":") {
+				continue // sub-key (editors:, changes:, enwiki:, etc.)
+			}
 
-			// Check if the marker key exists (confirms active war)
-			markerKey := fmt.Sprintf("editwar:%s", pageTitle)
-			exists, err := r.client.Exists(ctx, markerKey).Result()
-			if err != nil || exists == 0 {
+			pageTitle := raw
+			if seen[pageTitle] {
+				continue
+			}
+			seen[pageTitle] = true
+
+			// Verify the key is actually a string marker (value "1")
+			keyType, err := r.client.Type(ctx, key).Result()
+			if err != nil || keyType != "string" {
 				continue
 			}
 
-			// Get editor hash
-			editorMap, err := r.client.HGetAll(ctx, key).Result()
-			if err != nil || len(editorMap) == 0 {
-				continue
+			// Derive approximate start time from the marker key's TTL.
+			now := time.Now()
+			startTime := now
+			markerKey := key
+			ttl, ttlErr := r.client.TTL(ctx, markerKey).Result()
+			if ttlErr == nil && ttl > 0 {
+				elapsed := 3600*time.Second - ttl
+				if elapsed > 0 {
+					startTime = now.Add(-elapsed)
+				}
 			}
+
+			// Try to enrich with editor data (may have expired).
+			editorsKey := fmt.Sprintf("editwar:editors:%s", pageTitle)
+			editorMap, _ := r.client.HGetAll(ctx, editorsKey).Result()
 
 			editors := make([]string, 0, len(editorMap))
 			totalEdits := 0
@@ -421,7 +453,7 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				totalEdits += count
 			}
 
-			// Count reverts from the changes list
+			// Count reverts from the changes list (may have expired).
 			changesKey := fmt.Sprintf("editwar:changes:%s", pageTitle)
 			revertCount := 0
 			changes, err := r.client.LRange(ctx, changesKey, 0, -1).Result()
@@ -429,16 +461,28 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				revertCount = countRevertPatterns(changes)
 			}
 
+			// If editor data expired, provide sensible defaults from alert stream.
+			if len(editors) == 0 {
+				totalEdits = 5  // minimum threshold that triggered the war
+				revertCount = 2 // minimum reverts that triggered the war
+			}
+
 			severity := classifyEditWarSeverity(len(editors), totalEdits, revertCount)
+			if len(editors) == 0 {
+				// No live editor data — default to at least "moderate"
+				severity = "moderate"
+			}
 
 			war := map[string]interface{}{
 				"page_title":   pageTitle,
-				"editor_count": len(editors),
+				"editor_count": max(len(editors), 2), // at least 2 editors triggered the war
 				"edit_count":   totalEdits,
 				"revert_count": revertCount,
 				"severity":     severity,
 				"editors":      editors,
 				"active":       true,
+				"start_time":   startTime.UTC().Format(time.RFC3339),
+				"last_edit":    now.UTC().Format(time.RFC3339),
 			}
 			activeWars = append(activeWars, war)
 		}

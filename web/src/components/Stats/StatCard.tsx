@@ -22,30 +22,27 @@ export const StatCard = memo(function StatCard({
   icon: Icon,
   color,
   trend,
-  accentColor,
 }: StatCardProps) {
-  const borderClass = accentColor ?? 'border-gray-200';
-
   return (
     <div
-      className={`card border-l-4 ${borderClass} flex items-center space-x-3
-        transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-default`}
+      className="card flex items-center space-x-3 transition-all duration-200 hover:-translate-y-0.5 cursor-default"
+      style={{ borderLeft: '3px solid rgba(0,255,136,0.3)' }}
     >
-      <div className={`p-2.5 rounded-lg bg-gray-50 dark:bg-gray-700 ${color}`}>
-        <Icon className="h-5 w-5" />
+      <div className="p-2.5 rounded-lg" style={{ background: 'rgba(0,255,136,0.06)' }}>
+        <Icon className={`h-5 w-5 ${color}`} style={color.startsWith('text-') ? undefined : { color }} />
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide truncate">
+        <p className="text-[10px] font-mono font-medium uppercase tracking-widest" style={{ color: 'rgba(0,255,136,0.4)' }}>
           {label}
         </p>
         <div className="flex items-baseline gap-2">
-          <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
+          <p className="text-2xl font-bold font-mono tabular-nums" style={{ color: '#00ff88' }}>{value}</p>
 
           {trend && trend.direction !== 'neutral' && (
             <span
-              className={`inline-flex items-center text-xs font-medium gap-0.5
-                ${trend.direction === 'up' ? 'text-green-600' : 'text-red-600'}`}
+              className="inline-flex items-center text-xs font-mono font-medium gap-0.5"
+              style={{ color: trend.direction === 'up' ? '#00ff88' : '#ff4444' }}
             >
               {trend.direction === 'up' ? (
                 <TrendingUp className="h-3 w-3" />

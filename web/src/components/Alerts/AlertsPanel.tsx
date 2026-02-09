@@ -136,9 +136,9 @@ export function AlertsPanel() {
     <div className="card">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-orange-500" />
-          🔴 Breaking News Alerts
+        <h2 className="flex items-center gap-2" style={{ color: '#ff4444', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+          <AlertTriangle className="h-5 w-5" style={{ color: '#ff4444' }} />
+          ALERTS
           {alerts.length > 0 && (
             <span className="badge badge-critical">{alerts.length}</span>
           )}
@@ -152,14 +152,14 @@ export function AlertsPanel() {
           >
             {connected ? (
               <>
-                <Wifi className="h-3 w-3 text-green-500" />
-                <span className="text-green-600 hidden sm:inline">Live</span>
+                <Wifi className="h-3 w-3" style={{ color: '#00ff88' }} />
+                <span className="hidden sm:inline" style={{ color: '#00ff88', fontFamily: 'monospace' }}>LIVE</span>
               </>
             ) : (
               <>
-                <WifiOff className="h-3 w-3 text-red-400" />
-                <span className="text-red-500 hidden sm:inline">
-                  {wsDisconnected ? 'Polling' : 'Connecting'}
+                <WifiOff className="h-3 w-3" style={{ color: '#ff4444' }} />
+                <span className="hidden sm:inline" style={{ color: '#ff4444', fontFamily: 'monospace' }}>
+                  {wsDisconnected ? 'POLLING' : 'CONNECTING'}
                 </span>
               </>
             )}
@@ -168,14 +168,15 @@ export function AlertsPanel() {
           {/* Sound toggle */}
           <button
             onClick={toggleSound}
-            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="p-1 rounded transition-colors"
+            style={{ color: soundOn ? '#00ff88' : 'rgba(0,255,136,0.3)' }}
             aria-label={soundOn ? 'Mute alert sounds' : 'Enable alert sounds'}
             title={soundOn ? 'Sound on' : 'Sound off'}
           >
             {soundOn ? (
-              <Bell className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
+              <Bell className="h-3.5 w-3.5" />
             ) : (
-              <BellOff className="h-3.5 w-3.5 text-gray-400" />
+              <BellOff className="h-3.5 w-3.5" />
             )}
           </button>
 
@@ -183,7 +184,8 @@ export function AlertsPanel() {
           {alerts.length > 0 && (
             <button
               onClick={handleClearAll}
-              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-400 hover:text-red-500"
+              className="p-1 rounded transition-colors"
+              style={{ color: 'rgba(0,255,136,0.4)' }}
               aria-label="Clear all alerts"
               title="Clear all"
             >
@@ -197,37 +199,37 @@ export function AlertsPanel() {
       <div className="flex flex-wrap gap-3 mb-3">
         {/* Severity filter */}
         <div className="flex items-center gap-1">
-          <Filter className="h-3 w-3 text-gray-400" />
-          <span className="text-[11px] text-gray-500 dark:text-gray-400 mr-1">Severity:</span>
+          <Filter className="h-3 w-3" style={{ color: 'rgba(0,255,136,0.4)' }} />
+          <span className="text-[11px] mr-1" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace', textTransform: 'uppercase' }}>Severity:</span>
           {SEVERITY_OPTIONS.map((s) => (
             <button
               key={s}
               onClick={() => setSeverityFilter(s)}
-              className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
-                severityFilter === s
-                  ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:ring-blue-700'
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-              }`}
+              className="px-2 py-0.5 rounded-full text-[11px] font-medium transition-all"
+              style={severityFilter === s
+                ? { background: 'rgba(0,255,136,0.15)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.3)', fontFamily: 'monospace' }
+                : { background: 'rgba(0,255,136,0.05)', color: 'rgba(0,255,136,0.4)', border: '1px solid transparent', fontFamily: 'monospace' }
+              }
             >
-              {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+              {s === 'all' ? 'ALL' : s.toUpperCase()}
             </button>
           ))}
         </div>
 
         {/* Type filter */}
         <div className="flex items-center gap-1">
-          <span className="text-[11px] text-gray-500 dark:text-gray-400 mr-1">Type:</span>
+          <span className="text-[11px] mr-1" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace', textTransform: 'uppercase' }}>Type:</span>
           {TYPE_OPTIONS.map((t) => (
             <button
               key={t}
               onClick={() => setTypeFilter(t)}
-              className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
-                typeFilter === t
-                  ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:ring-blue-700'
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-              }`}
+              className="px-2 py-0.5 rounded-full text-[11px] font-medium transition-all"
+              style={typeFilter === t
+                ? { background: 'rgba(0,255,136,0.15)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.3)', fontFamily: 'monospace' }
+                : { background: 'rgba(0,255,136,0.05)', color: 'rgba(0,255,136,0.4)', border: '1px solid transparent', fontFamily: 'monospace' }
+              }
             >
-              {t === 'all' ? 'All' : t === 'spike' ? 'Spike' : 'Edit War'}
+              {t === 'all' ? 'ALL' : t === 'spike' ? 'SPIKE' : 'EDIT WAR'}
             </button>
           ))}
         </div>
@@ -244,14 +246,14 @@ export function AlertsPanel() {
             />
           ))
         ) : alerts.length > 0 ? (
-          <div className="text-center py-8 text-sm text-gray-400">
-            <Filter className="h-6 w-6 mx-auto mb-2 text-gray-300" />
-            No alerts match the current filters
+          <div className="text-center py-8 text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+            <Filter className="h-6 w-6 mx-auto mb-2" style={{ color: 'rgba(0,255,136,0.2)' }} />
+            NO ALERTS MATCH FILTERS
           </div>
         ) : (
-          <div className="text-center py-8 text-sm text-gray-400">
-            <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-            No alerts yet. Waiting for spikes…
+          <div className="text-center py-8 text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+            <AlertTriangle className="h-8 w-8 mx-auto mb-2" style={{ color: 'rgba(0,255,136,0.2)' }} />
+            MONITORING… NO ALERTS
           </div>
         )}
       </div>

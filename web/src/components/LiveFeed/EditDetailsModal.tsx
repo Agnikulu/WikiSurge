@@ -103,7 +103,8 @@ export function EditDetailsModal({ edit, onClose }: EditDetailsModalProps) {
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"
+      style={{ background: 'rgba(0,0,0,0.6)' }}
       role="dialog"
       aria-modal="true"
       aria-label={`Edit details for ${edit.title}`}
@@ -111,21 +112,22 @@ export function EditDetailsModal({ edit, onClose }: EditDetailsModalProps) {
       <div
         ref={contentRef}
         tabIndex={-1}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto animate-slide-up outline-none"
+        className="rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto animate-slide-up outline-none"
+        style={{ background: '#111b2e', border: '1px solid rgba(0,255,136,0.15)' }}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-start justify-between rounded-t-xl">
+        <div className="sticky top-0 px-5 py-4 flex items-start justify-between rounded-t-xl" style={{ background: '#0d1525', borderBottom: '1px solid rgba(0,255,136,0.1)' }}>
           <div className="flex-1 min-w-0 pr-4">
-            <h2 className="text-lg font-bold text-gray-900 leading-tight break-words">
+            <h2 className="text-lg font-bold leading-tight break-words" style={{ color: '#00ff88', fontFamily: 'monospace' }}>
               {edit.title}
             </h2>
             <div className="flex items-center gap-2 mt-1">
-              <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 text-gray-500 text-[11px] font-medium uppercase tracking-wide">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium uppercase tracking-wide" style={{ background: 'rgba(0,221,255,0.1)', color: '#00ddff', fontFamily: 'monospace' }}>
                 {lang}
               </span>
               {edit.bot && <span className="badge badge-bot text-[10px]">bot</span>}
               {newPage && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: 'rgba(0,255,136,0.15)', color: '#00ff88' }}>
                   <FilePlus className="h-2.5 w-2.5" />
                   new page
                 </span>
@@ -134,7 +136,8 @@ export function EditDetailsModal({ edit, onClose }: EditDetailsModalProps) {
           </div>
           <button
             onClick={onClose}
-            className="flex-shrink-0 p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+            className="flex-shrink-0 p-1.5 rounded-lg transition-colors"
+            style={{ color: 'rgba(0,255,136,0.4)' }}
             aria-label="Close modal"
           >
             <X className="h-5 w-5" />
@@ -152,7 +155,8 @@ export function EditDetailsModal({ edit, onClose }: EditDetailsModalProps) {
                 href={buildUserUrl(edit.user, serverUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-700 hover:underline inline-flex items-center gap-1"
+                className="inline-flex items-center gap-1"
+                style={{ color: '#00ddff', fontFamily: 'monospace' }}
               >
                 {edit.user}
                 <ExternalLink className="h-3 w-3" />
@@ -169,7 +173,7 @@ export function EditDetailsModal({ edit, onClose }: EditDetailsModalProps) {
                 <span className={`font-mono font-bold text-base ${getByteChangeColor(byteChange)}`}>
                   {formatByteChange(byteChange)}
                 </span>
-                <span className="text-gray-400 ml-2 text-xs">
+                <span className="ml-2 text-xs" style={{ color: 'rgba(0,255,136,0.4)' }}>
                   ({edit.length?.old?.toLocaleString() ?? '?'} → {edit.length?.new?.toLocaleString() ?? '?'} bytes)
                 </span>
               </div>
@@ -181,8 +185,8 @@ export function EditDetailsModal({ edit, onClose }: EditDetailsModalProps) {
             icon={Clock}
             label="Timestamp"
             value={
-              <span>
-                {fullDate.toLocaleString()} <span className="text-gray-400 text-xs">({fullDate.toISOString()})</span>
+              <span style={{ color: 'rgba(0,255,136,0.7)', fontFamily: 'monospace' }}>
+                {fullDate.toLocaleString()} <span style={{ color: 'rgba(0,255,136,0.35)' }}>({fullDate.toISOString()})</span>
               </span>
             }
           />
@@ -192,7 +196,7 @@ export function EditDetailsModal({ edit, onClose }: EditDetailsModalProps) {
             <DetailRow
               icon={MessageSquare}
               label="Comment"
-              value={<span className="text-gray-700 break-words">{edit.comment}</span>}
+              value={<span style={{ color: 'rgba(0,255,136,0.6)', fontFamily: 'monospace' }} className="break-words">{edit.comment}</span>}
             />
           )}
 
@@ -200,7 +204,7 @@ export function EditDetailsModal({ edit, onClose }: EditDetailsModalProps) {
           <DetailRow
             icon={Globe}
             label="Wiki"
-            value={<span>{edit.wiki}</span>}
+            value={<span style={{ color: 'rgba(0,255,136,0.6)', fontFamily: 'monospace' }}>{edit.wiki}</span>}
           />
 
           {/* Revision IDs */}
@@ -209,7 +213,7 @@ export function EditDetailsModal({ edit, onClose }: EditDetailsModalProps) {
               icon={ArrowRightLeft}
               label="Revisions"
               value={
-                <span className="font-mono text-xs text-gray-500">
+                <span className="font-mono text-xs" style={{ color: 'rgba(0,255,136,0.5)' }}>
                   {edit.revision.old} → {edit.revision.new}
                 </span>
               }
@@ -218,35 +222,38 @@ export function EditDetailsModal({ edit, onClose }: EditDetailsModalProps) {
         </div>
 
         {/* Footer links */}
-        <div className="border-t border-gray-100 px-5 py-3 flex flex-wrap gap-2">
+        <div className="px-5 py-3 flex flex-wrap gap-2" style={{ borderTop: '1px solid rgba(0,255,136,0.1)' }}>
           <a
             href={buildWikiUrl(edit.title, serverUrl)}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.2)', fontFamily: 'monospace' }}
           >
             <ExternalLink className="h-3 w-3" />
-            View page
+            VIEW PAGE
           </a>
           {edit.revision && edit.revision.old > 0 && (
             <a
               href={buildDiffUrl(edit.revision.old, edit.revision.new, serverUrl)}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 text-gray-700 text-xs font-medium hover:bg-gray-100 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              style={{ background: 'rgba(0,221,255,0.1)', color: '#00ddff', border: '1px solid rgba(0,221,255,0.2)', fontFamily: 'monospace' }}
             >
               <ArrowRightLeft className="h-3 w-3" />
-              View diff
+              VIEW DIFF
             </a>
           )}
           <a
             href={buildUserUrl(edit.user, serverUrl)}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 text-gray-700 text-xs font-medium hover:bg-gray-100 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ background: 'rgba(0,255,136,0.05)', color: 'rgba(0,255,136,0.6)', border: '1px solid rgba(0,255,136,0.1)', fontFamily: 'monospace' }}
           >
             <User className="h-3 w-3" />
-            User page
+            USER PAGE
           </a>
         </div>
       </div>
@@ -268,14 +275,14 @@ function DetailRow({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center mt-0.5">
-        <Icon className="h-4 w-4 text-gray-400" />
+      <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-0.5" style={{ background: 'rgba(0,255,136,0.06)' }}>
+        <Icon className="h-4 w-4" style={{ color: 'rgba(0,255,136,0.4)' }} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider mb-0.5">
+        <p className="text-[11px] font-medium uppercase tracking-wider mb-0.5" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
           {label}
         </p>
-        <div className="text-sm text-gray-800">{value}</div>
+        <div className="text-sm" style={{ color: 'rgba(0,255,136,0.7)' }}>{value}</div>
       </div>
     </div>
   );

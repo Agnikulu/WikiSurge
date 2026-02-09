@@ -32,9 +32,9 @@ interface EditWarCardProps {
 /* ---------- Severity-specific border accent ---------- */
 const SEVERITY_BORDER: Record<string, string> = {
   critical: 'border-l-red-500',
-  high: 'border-l-orange-500',
-  medium: 'border-l-yellow-500',
-  low: 'border-l-blue-400',
+  high: 'border-l-amber-500',
+  medium: 'border-l-emerald-500',
+  low: 'border-l-cyan-500',
 };
 
 /**
@@ -120,7 +120,8 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
           {onDismiss && (
             <button
               onClick={() => onDismiss(war)}
-              className="p-1 rounded text-gray-400 opacity-0 group-hover:opacity-100 hover:bg-white/70 transition-opacity flex-shrink-0"
+              className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+              style={{ color: 'rgba(0,255,136,0.4)' }}
               aria-label="Dismiss edit war"
             >
               <X className="h-4 w-4" />
@@ -180,22 +181,24 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
         <TimelineBar war={war} />
 
         {/* ── Action buttons ──────────────────────── */}
-        <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-200/60">
+        <div className="flex flex-wrap items-center gap-2 mt-3 pt-3" style={{ borderTop: '1px solid rgba(0,255,136,0.08)' }}>
           <a
             href={wikiUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded transition-colors"
+            style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88', fontFamily: 'monospace' }}
           >
             <ExternalLink className="h-3 w-3" />
-            View page
+            VIEW PAGE
           </a>
 
           <a
             href={historyUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded transition-colors"
+            style={{ background: 'rgba(0,221,255,0.1)', color: '#00ddff', fontFamily: 'monospace' }}
           >
             <History className="h-3 w-3" />
             Edit history
@@ -204,7 +207,8 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
           {/* Expand / collapse */}
           <button
             onClick={() => setExpanded(!expanded)}
-            className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+            className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded transition-colors"
+            style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}
           >
             {expanded ? (
               <>
@@ -223,18 +227,20 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
 
       {/* ── Expanded details ──────────────────────── */}
       {expanded && (
-        <div className="px-4 pb-4 border-t border-gray-200/60 animate-slide-down">
-          <div className="mt-3 space-y-2 text-xs text-gray-600">
+        <div className="px-4 pb-4 animate-slide-down" style={{ borderTop: '1px solid rgba(0,255,136,0.08)' }}>
+          <div className="mt-3 space-y-2 text-xs" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}>
             <p>
-              <span className="font-medium text-gray-700">Started:</span>{' '}
+              <span className="font-medium" style={{ color: 'rgba(0,255,136,0.7)' }}>Started:</span>{' '}
               {new Date(war.start_time).toLocaleString()} ({formatTimestamp(war.start_time)})
             </p>
+            {war.last_edit && (
+              <p>
+                <span className="font-medium" style={{ color: 'rgba(0,255,136,0.7)' }}>Last edit:</span>{' '}
+                {new Date(war.last_edit).toLocaleString()} ({formatTimestamp(war.last_edit)})
+              </p>
+            )}
             <p>
-              <span className="font-medium text-gray-700">Last edit:</span>{' '}
-              {new Date(war.last_edit).toLocaleString()} ({formatTimestamp(war.last_edit)})
-            </p>
-            <p>
-              <span className="font-medium text-gray-700">Revert ratio:</span>{' '}
+              <span className="font-medium" style={{ color: 'rgba(0,255,136,0.7)' }}>Revert ratio:</span>{' '}
               {war.edit_count > 0
                 ? `${((war.revert_count / war.edit_count) * 100).toFixed(0)}%`
                 : 'N/A'}
@@ -242,7 +248,7 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
 
             {/* Full editor list */}
             <div>
-              <span className="font-medium text-gray-700">All editors:</span>
+              <span className="font-medium" style={{ color: 'rgba(0,255,136,0.7)' }}>All editors:</span>
               <ul className="mt-1 ml-4 list-disc space-y-0.5">
                 {war.editors.map((editor) => (
                   <li key={editor}>
@@ -250,7 +256,7 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
                       href={`https://en.wikipedia.org/wiki/User:${encodeURIComponent(editor.replace(/ /g, '_'))}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline"
+                      style={{ color: '#00ddff' }}
                     >
                       {editor}
                     </a>
@@ -261,12 +267,12 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
           </div>
 
           {/* Editor Conflict Graph */}
-          <div className="mt-4 pt-4 border-t border-gray-200/40">
+          <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(0,255,136,0.06)' }}>
             <EditorConflictGraph war={war} />
           </div>
 
           {/* Edit Timeline */}
-          <div className="mt-4 pt-4 border-t border-gray-200/40">
+          <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(0,255,136,0.06)' }}>
             <EditWarTimeline war={war} />
           </div>
         </div>
@@ -287,8 +293,8 @@ function StatCell({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-1.5 text-xs text-gray-600" title={label}>
-      <span className="text-gray-400">{icon}</span>
+    <div className="flex items-center gap-1.5 text-xs" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }} title={label}>
+      <span style={{ color: 'rgba(0,255,136,0.3)' }}>{icon}</span>
       <span>{value}</span>
     </div>
   );
@@ -299,22 +305,26 @@ function StatCell({
  * Uses start_time → now as the full width and plots a simple gradient.
  */
 function TimelineBar({ war }: { war: EditWar }) {
-  const startMs = new Date(war.start_time).getTime();
-  const lastMs = new Date(war.last_edit).getTime();
+  const startMs = war.start_time ? new Date(war.start_time).getTime() : Date.now();
+  const lastMs = war.last_edit ? new Date(war.last_edit).getTime() : Date.now();
   const nowMs = Date.now();
   const rangeMs = Math.max(nowMs - startMs, 1);
-  const lastPct = Math.min(((lastMs - startMs) / rangeMs) * 100, 100);
+  const validStart = Number.isFinite(startMs);
+  const validLast = Number.isFinite(lastMs);
+  const lastPct = validStart && validLast
+    ? Math.min(Math.max(((lastMs - startMs) / rangeMs) * 100, 0), 100)
+    : 100;
 
   return (
     <div className="mt-3" aria-label="Activity timeline">
-      <div className="flex items-center justify-between mb-1 text-[10px] text-gray-400">
-        <span>Started</span>
-        <span>{war.active ? 'Now' : 'Resolved'}</span>
+      <div className="flex items-center justify-between mb-1 text-[10px]" style={{ color: 'rgba(0,255,136,0.3)', fontFamily: 'monospace' }}>
+        <span>STARTED</span>
+        <span>{war.active ? 'NOW' : 'RESOLVED'}</span>
       </div>
-      <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+      <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ background: 'rgba(0,255,136,0.06)' }}>
         <div
-          className="h-full bg-gradient-to-r from-orange-400 to-red-500 rounded-full transition-all duration-500"
-          style={{ width: `${lastPct}%` }}
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${lastPct}%`, background: war.active ? 'linear-gradient(to right, #ffaa00, #ff4444)' : 'linear-gradient(to right, rgba(0,255,136,0.3), rgba(0,255,136,0.5))' }}
         />
       </div>
     </div>

@@ -111,19 +111,19 @@ export function SearchInterface() {
   return (
     <div className="card" role="search" aria-label="Search edits">
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Search Edits</h2>
+        <h2 style={{ color: 'rgba(0,255,136,0.7)', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const }}>SEARCH EDITS</h2>
         <button
           onClick={() => setAdvancedOpen(true)}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-            hasActiveFilters
-              ? 'bg-primary-100 text-primary-700 hover:bg-primary-200 dark:bg-primary-900 dark:text-primary-300 dark:hover:bg-primary-800'
-              : 'text-gray-600 bg-gray-100 hover:bg-gray-200 dark:text-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600'
-          }`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+          style={hasActiveFilters
+            ? { background: 'rgba(0,255,136,0.15)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.3)', fontFamily: 'monospace' }
+            : { color: 'rgba(0,255,136,0.4)', background: 'rgba(0,255,136,0.05)', border: '1px solid transparent', fontFamily: 'monospace' }
+          }
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
-          Advanced search
+          ADVANCED
           {hasActiveFilters && (
-            <span className="flex items-center justify-center w-4 h-4 rounded-full bg-primary-600 text-white text-[10px] font-bold">
+            <span className="flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold" style={{ background: '#00ff88', color: '#0a0f1a' }}>
               {Object.keys(advancedFilters).filter((k) => k !== 'sort').length}
             </span>
           )}
@@ -136,38 +136,39 @@ export function SearchInterface() {
       {/* Active filters indicator */}
       {hasActiveFilters && (
         <div className="flex items-center gap-2 mt-3 flex-wrap">
-          <span className="text-xs text-gray-500 dark:text-gray-400">Active filters:</span>
+          <span className="text-xs" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>FILTERS:</span>
           {advancedFilters.language && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(0,221,255,0.1)', color: '#00ddff', border: '1px solid rgba(0,221,255,0.2)', fontFamily: 'monospace' }}>
               {advancedFilters.language}wiki
             </span>
           )}
           {advancedFilters.user && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 text-xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.2)', fontFamily: 'monospace' }}>
               user: {advancedFilters.user}
             </span>
           )}
           {advancedFilters.exclude_bots && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 text-xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(255,170,0,0.1)', color: '#ffaa00', border: '1px solid rgba(255,170,0,0.2)', fontFamily: 'monospace' }}>
               no bots
             </span>
           )}
           {advancedFilters.from && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.2)', fontFamily: 'monospace' }}>
               from: {advancedFilters.from}
             </span>
           )}
           {advancedFilters.to && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.2)', fontFamily: 'monospace' }}>
               to: {advancedFilters.to}
             </span>
           )}
           <button
             onClick={handleClearFilters}
-            className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors"
+            className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs transition-colors"
+            style={{ color: '#ff4444', fontFamily: 'monospace' }}
           >
             <X className="h-3 w-3" />
-            Clear all
+            CLEAR
           </button>
         </div>
       )}

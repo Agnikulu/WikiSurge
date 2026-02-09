@@ -54,6 +54,12 @@ export function LiveFeed() {
     isPaused,
   } = useWebSocket<Edit>({ url: wsUrl });
 
+  // Sync WebSocket connection state to global store for Header indicators
+  const setWsConnected = useAppStore((s) => s.setWsConnected);
+  useEffect(() => {
+    setWsConnected(connected);
+  }, [connected, setWsConnected]);
+
   const [showFilters, setShowFilters] = useState(false);
   const [selectedEdit, setSelectedEdit] = useState<Edit | null>(null);
   const [userScrolled, setUserScrolled] = useState(false);
@@ -92,14 +98,14 @@ export function LiveFeed() {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Live Edit Feed</h2>
+          <h2 style={{ color: '#00ff88', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const }}>LIVE FEED</h2>
           <ConnectionIndicator state={connectionState} reconnectCount={reconnectCount} />
         </div>
 
         <div className="flex items-center gap-1.5">
           {/* Message rate */}
           {connected && (
-            <span className="hidden sm:flex items-center gap-1 text-[11px] text-gray-400 font-mono tabular-nums mr-1">
+            <span className="hidden sm:flex items-center gap-1 text-[11px] font-mono tabular-nums mr-1" style={{ color: 'rgba(0,255,136,0.5)' }}>
               <Activity className="h-3 w-3" />
               {messageRate}/s
             </span>
@@ -108,9 +114,11 @@ export function LiveFeed() {
           {/* Filter toggle */}
           <button
             onClick={() => setShowFilters((s) => !s)}
-            className={`p-1.5 rounded-lg transition-colors ${
-              showFilters ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700'
-            }`}
+            className="p-1.5 rounded-lg transition-colors"
+            style={showFilters
+              ? { background: 'rgba(0,255,136,0.15)', color: '#00ff88' }
+              : { color: 'rgba(0,255,136,0.4)' }
+            }
             aria-label="Toggle filters"
             aria-expanded={showFilters}
           >
@@ -120,11 +128,11 @@ export function LiveFeed() {
           {/* Pause / Resume */}
           <button
             onClick={isPaused ? resume : pause}
-            className={`p-1.5 rounded-lg transition-colors ${
-              isPaused
-                ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
-                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700'
-            }`}
+            className="p-1.5 rounded-lg transition-colors"
+            style={isPaused
+              ? { background: 'rgba(255,170,0,0.15)', color: '#ffaa00' }
+              : { color: 'rgba(0,255,136,0.4)' }
+            }
             aria-label={isPaused ? 'Resume live feed' : 'Pause live feed'}
             title={isPaused ? 'Resume' : 'Pause'}
           >
@@ -134,7 +142,8 @@ export function LiveFeed() {
           {/* Clear */}
           <button
             onClick={clearData}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+            className="p-1.5 rounded-lg transition-colors"
+            style={{ color: 'rgba(0,255,136,0.4)' }}
             aria-label="Clear feed"
             title="Clear"
           >
@@ -145,21 +154,22 @@ export function LiveFeed() {
 
       {/* Paused banner */}
       {isPaused && (
-        <div className="flex items-center gap-2 px-3 py-1.5 mb-3 rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs font-medium">
+        <div className="flex items-center gap-2 px-3 py-1.5 mb-3 rounded-lg text-xs font-medium" style={{ background: 'rgba(255,170,0,0.1)', color: '#ffaa00', border: '1px solid rgba(255,170,0,0.2)', fontFamily: 'monospace' }}>
           <Pause className="h-3 w-3" />
-          Feed paused — new edits are not being displayed
+          FEED PAUSED
           <button
             onClick={resume}
-            className="ml-auto px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 dark:bg-amber-800 dark:hover:bg-amber-700 transition-colors"
+            className="ml-auto px-2 py-0.5 rounded transition-colors"
+            style={{ background: 'rgba(255,170,0,0.15)', color: '#ffaa00' }}
           >
-            Resume
+            RESUME
           </button>
         </div>
       )}
 
       {/* Filter panel (collapsible) */}
       {showFilters && (
-        <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-700 animate-slide-down">
+        <div className="mb-3 p-3 rounded-lg animate-slide-down" style={{ background: 'rgba(0,255,136,0.03)', border: '1px solid rgba(0,255,136,0.1)' }}>
           <FilterControls />
         </div>
       )}
@@ -176,18 +186,18 @@ export function LiveFeed() {
       >
         {/* Loading state */}
         {connectionState === 'connecting' && edits.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-12" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
             <Loader2 className="h-6 w-6 animate-spin mb-2" />
-            <span className="text-sm">Connecting to live feed…</span>
+            <span className="text-sm">CONNECTING…</span>
           </div>
         )}
 
         {/* Error state */}
         {connectionState === 'error' && (
-          <div className="flex flex-col items-center justify-center py-12 text-red-400">
-            <WifiOff className="h-6 w-6 mb-2" />
-            <span className="text-sm font-medium">Connection failed</span>
-            <span className="text-xs text-gray-400 mt-1">
+          <div className="flex flex-col items-center justify-center py-12" style={{ fontFamily: 'monospace' }}>
+            <WifiOff className="h-6 w-6 mb-2" style={{ color: '#ff4444' }} />
+            <span className="text-sm font-medium" style={{ color: '#ff4444' }}>CONNECTION FAILED</span>
+            <span className="text-xs mt-1" style={{ color: 'rgba(0,255,136,0.3)' }}>
               Max retries reached ({reconnectCount} attempts)
             </span>
           </div>
@@ -195,18 +205,18 @@ export function LiveFeed() {
 
         {/* Disconnected / reconnecting */}
         {connectionState === 'disconnected' && edits.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-12" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
             <Loader2 className="h-5 w-5 animate-spin mb-2" />
-            <span className="text-sm">Reconnecting…</span>
-            <span className="text-xs text-gray-300 mt-0.5">Attempt {reconnectCount}</span>
+            <span className="text-sm">RECONNECTING…</span>
+            <span className="text-xs mt-0.5" style={{ color: 'rgba(0,255,136,0.3)' }}>Attempt {reconnectCount}</span>
           </div>
         )}
 
         {/* Empty state */}
         {connected && edits.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-12" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
             <Activity className="h-6 w-6 mb-2 opacity-40" />
-            <span className="text-sm">Waiting for edits…</span>
+            <span className="text-sm">WAITING FOR EDITS…</span>
           </div>
         )}
 
@@ -225,7 +235,8 @@ export function LiveFeed() {
       {userScrolled && edits.length > 0 && (
         <button
           onClick={scrollToTop}
-          className="absolute bottom-14 right-6 p-2 rounded-full bg-white dark:bg-gray-800 shadow-md border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:shadow-lg transition-all animate-fade-in"
+          className="absolute bottom-14 right-6 p-2 rounded-full shadow-md transition-all animate-fade-in"
+          style={{ background: '#111b2e', border: '1px solid rgba(0,255,136,0.2)', color: '#00ff88' }}
           aria-label="Scroll to top"
         >
           <ArrowUp className="h-4 w-4" />
@@ -234,11 +245,11 @@ export function LiveFeed() {
 
       {/* Footer stats */}
       {edits.length > 0 && (
-        <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
-          <span className="text-[11px] text-gray-400">{edits.length} edits in feed</span>
+        <div className="flex items-center justify-between mt-3 pt-2" style={{ borderTop: '1px solid rgba(0,255,136,0.1)' }}>
+          <span className="text-[11px]" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>{edits.length} EDITS IN FEED</span>
           <div className="flex items-center gap-3">
             {connected && messageRate > 0 && (
-              <span className="text-[11px] text-gray-400 font-mono tabular-nums sm:hidden">
+              <span className="text-[11px] font-mono tabular-nums sm:hidden" style={{ color: 'rgba(0,255,136,0.4)' }}>
                 {messageRate}/s
               </span>
             )}
@@ -260,35 +271,39 @@ function ConnectionIndicator({
   state: ConnectionState;
   reconnectCount: number;
 }) {
-  const config: Record<ConnectionState, { color: string; label: string; icon: React.ReactNode }> = {
+  const config: Record<ConnectionState, { dotStyle: React.CSSProperties; label: string; labelStyle: React.CSSProperties; icon: React.ReactNode }> = {
     connecting: {
-      color: 'bg-yellow-400 animate-pulse',
-      label: 'Connecting…',
+      dotStyle: { background: '#ffaa00' },
+      label: 'CONNECTING…',
+      labelStyle: { color: '#ffaa00', fontFamily: 'monospace', fontSize: '11px' },
       icon: <Loader2 className="h-3 w-3 animate-spin" />,
     },
     connected: {
-      color: 'bg-green-500',
-      label: 'Live',
+      dotStyle: { background: '#00ff88', boxShadow: '0 0 6px rgba(0,255,136,0.5)' },
+      label: 'LIVE',
+      labelStyle: { color: '#00ff88', fontFamily: 'monospace', fontSize: '11px' },
       icon: <Wifi className="h-3 w-3" />,
     },
     disconnected: {
-      color: 'bg-red-400 animate-pulse',
-      label: `Reconnecting${reconnectCount > 0 ? ` (${reconnectCount})` : ''}…`,
+      dotStyle: { background: '#ff4444' },
+      label: `RECONNECTING${reconnectCount > 0 ? ` (${reconnectCount})` : ''}…`,
+      labelStyle: { color: '#ff4444', fontFamily: 'monospace', fontSize: '11px' },
       icon: <Loader2 className="h-3 w-3 animate-spin" />,
     },
     error: {
-      color: 'bg-red-500',
-      label: 'Disconnected',
+      dotStyle: { background: '#ff4444' },
+      label: 'DISCONNECTED',
+      labelStyle: { color: '#ff4444', fontFamily: 'monospace', fontSize: '11px' },
       icon: <WifiOff className="h-3 w-3" />,
     },
   };
 
-  const { color, label } = config[state];
+  const { dotStyle, label, labelStyle } = config[state];
 
   return (
     <div className="flex items-center gap-1.5" role="status" aria-live="polite">
-      <span className={`inline-block w-2 h-2 rounded-full ${color}`} aria-hidden="true" />
-      <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="inline-block w-2 h-2 rounded-full" style={dotStyle} aria-hidden="true" />
+      <span style={labelStyle}>{label}</span>
     </div>
   );
 }

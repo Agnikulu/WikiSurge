@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Activity, TrendingUp, AlertTriangle, BarChart3, Zap, Globe, RefreshCw } from 'lucide-react';
 import type { Stats } from '../../types';
 import { getStats } from '../../utils/api';
@@ -17,6 +17,7 @@ function computeTrend(current: number, previous: number): Trend | undefined {
 
 export function StatsOverview() {
   const updateStats = useAppStore((s) => s.updateStats);
+  const setApiHealthy = useAppStore((s) => s.setApiHealthy);
   const previousStats = useRef<Stats | null>(null);
 
   const fetchFn = useCallback(async () => {
@@ -29,6 +30,11 @@ export function StatsOverview() {
     fetchFunction: fetchFn,
     interval: 5_000,
   });
+
+  // Sync API health to global store
+  useEffect(() => {
+    setApiHealthy(!error);
+  }, [error, setApiHealthy]);
 
   // Compute trends by comparing with previous snapshot
   const trends = {
@@ -59,12 +65,12 @@ export function StatsOverview() {
       <div className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="card animate-pulse border-l-4 border-gray-200 dark:border-gray-600">
+            <div key={i} className="card animate-pulse" style={{ borderLeft: '3px solid rgba(0,255,136,0.15)' }}>
               <div className="flex items-center space-x-3">
-                <div className="h-10 w-10 bg-gray-200 dark:bg-gray-600 rounded-lg" />
+                <div className="h-10 w-10 rounded-lg" style={{ background: 'rgba(0,255,136,0.06)' }} />
                 <div className="flex-1">
-                  <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded w-16 mb-2" />
-                  <div className="h-6 bg-gray-200 dark:bg-gray-600 rounded w-12" />
+                  <div className="h-3 rounded w-16 mb-2" style={{ background: 'rgba(0,255,136,0.1)' }} />
+                  <div className="h-6 rounded w-12" style={{ background: 'rgba(0,255,136,0.1)' }} />
                 </div>
               </div>
             </div>
@@ -76,9 +82,9 @@ export function StatsOverview() {
 
   if (error) {
     return (
-      <div className="card text-center text-gray-500 dark:text-gray-400">
+      <div className="card text-center" style={{ color: 'rgba(0,255,136,0.4)' }}>
         <p>Failed to load stats</p>
-        <button onClick={refresh} className="text-primary-600 hover:underline text-sm mt-1">
+        <button onClick={refresh} className="hover:underline text-sm mt-1" style={{ color: '#00ff88' }}>
           Retry
         </button>
       </div>
@@ -90,64 +96,59 @@ export function StatsOverview() {
       label: 'Edits/sec',
       value: stats?.edits_per_second?.toFixed(1) ?? '—',
       icon: Zap,
-      color: 'text-blue-500',
-      accentColor: 'border-blue-500',
+      color: '#00ff88',
       trend: trends.editsPerSecond,
     },
     {
       label: 'Edits Today',
       value: stats ? formatNumber(stats.edits_today) : '—',
       icon: Activity,
-      color: 'text-green-500',
-      accentColor: 'border-green-500',
+      color: '#00ff88',
       trend: trends.editsToday,
     },
     {
       label: 'Hot Pages',
       value: stats ? formatNumber(stats.hot_pages_count) : '—',
       icon: TrendingUp,
-      color: 'text-orange-500',
-      accentColor: 'border-orange-500',
+      color: '#ffaa00',
       trend: trends.hotPages,
     },
     {
       label: 'Trending',
       value: stats ? formatNumber(stats.trending_count) : '—',
       icon: BarChart3,
-      color: 'text-purple-500',
-      accentColor: 'border-purple-500',
+      color: '#00ddff',
       trend: trends.trending,
     },
     {
       label: 'Active Alerts',
       value: stats ? formatNumber(stats.active_alerts) : '—',
       icon: AlertTriangle,
-      color: 'text-red-500',
-      accentColor: 'border-red-500',
+      color: '#ff4444',
       trend: trends.alerts,
     },
     {
       label: 'Top Language',
       value: stats?.top_language ?? '—',
       icon: Globe,
-      color: 'text-indigo-500',
-      accentColor: 'border-indigo-500',
+      color: '#00ff88',
     },
   ];
 
   return (
     <div className="space-y-2" role="region" aria-label="Statistics overview">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-          Overview
+        <h2 className="text-[10px] font-mono font-medium uppercase tracking-widest" style={{ color: 'rgba(0,255,136,0.4)' }}>
+          SYSTEM OVERVIEW
         </h2>
-        <div className="flex items-center gap-2 text-xs text-gray-400">
+        <div className="flex items-center gap-2 text-[10px] font-mono" style={{ color: 'rgba(0,255,136,0.3)' }}>
           {lastUpdate && (
             <span>Updated {lastUpdate.toLocaleTimeString()}</span>
           )}
           <button
             onClick={refresh}
-            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="p-1 rounded transition-colors"
+            style={{ color: 'rgba(0,255,136,0.3)' }}
             aria-label="Refresh stats"
           >
             <RefreshCw className="h-3.5 w-3.5" />

@@ -1,12 +1,10 @@
-import { Activity, Wifi, WifiOff, Moon, Sun, Menu, X, Server, ServerOff } from 'lucide-react';
+import { Activity, Wifi, WifiOff, Menu, X, Server, ServerOff } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 
 export function Header() {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
-  const darkMode = useAppStore((s) => s.darkMode);
-  const toggleDarkMode = useAppStore((s) => s.toggleDarkMode);
   const wsConnected = useAppStore((s) => s.wsConnected);
   const apiHealthy = useAppStore((s) => s.apiHealthy);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -24,21 +22,16 @@ export function Header() {
     setMobileMenuOpen(false);
   }, [setActiveTab]);
 
-  // Sync dark mode class on <html>
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode);
-  }, [darkMode]);
-
   return (
-    <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50 shadow-sm" role="banner">
+    <header className="sticky top-0 z-50" style={{ background: '#0d1525', borderBottom: '1px solid rgba(0,255,136,0.12)' }} role="banner">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-14">
           {/* Logo & Title */}
           <div className="flex items-center space-x-3 min-w-0">
-            <Activity className="h-8 w-8 text-primary-600 dark:text-primary-400 flex-shrink-0" aria-hidden="true" />
+            <Activity className="h-7 w-7 flex-shrink-0" style={{ color: '#00ff88' }} aria-hidden="true" />
             <div className="min-w-0">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white truncate">WikiSurge</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Analyzing global edit activity</p>
+              <h1 className="text-lg font-bold font-mono tracking-wider" style={{ color: '#00ff88' }}>WIKISURGE</h1>
+              <p className="text-[10px] font-mono hidden sm:block" style={{ color: 'rgba(0,255,136,0.35)' }}>REAL-TIME INTELLIGENCE</p>
             </div>
           </div>
 
@@ -49,13 +42,14 @@ export function Header() {
                 key={tab.id}
                 onClick={() => handleTabClick(tab.id)}
                 aria-current={activeTab === tab.id ? 'page' : undefined}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${
-                  activeTab === tab.id
-                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800'
-                }`}
+                className="px-3 py-1.5 rounded text-xs font-mono font-medium transition-all"
+                style={{
+                  background: activeTab === tab.id ? 'rgba(0,255,136,0.12)' : 'transparent',
+                  color: activeTab === tab.id ? '#00ff88' : 'rgba(0,255,136,0.4)',
+                  borderBottom: activeTab === tab.id ? '2px solid #00ff88' : '2px solid transparent',
+                }}
               >
-                {tab.label}
+                {tab.label.toUpperCase()}
               </button>
             ))}
           </nav>
@@ -63,44 +57,39 @@ export function Header() {
           {/* Right Section */}
           <div className="flex items-center space-x-3">
             {/* Connection Status Indicators */}
-            <div className="hidden sm:flex items-center space-x-3 text-sm" aria-live="polite">
-              <span className="flex items-center space-x-1" title={wsConnected ? 'WebSocket connected' : 'WebSocket disconnected'}>
+            <div className="hidden sm:flex items-center space-x-3 text-xs font-mono" aria-live="polite">
+              <span className="flex items-center space-x-1.5" title={wsConnected ? 'WebSocket connected' : 'WebSocket disconnected'}>
                 {wsConnected ? (
-                  <Wifi className="h-4 w-4 text-green-500" aria-hidden="true" />
+                  <Wifi className="h-3.5 w-3.5" style={{ color: '#00ff88' }} aria-hidden="true" />
                 ) : (
-                  <WifiOff className="h-4 w-4 text-red-400" aria-hidden="true" />
+                  <WifiOff className="h-3.5 w-3.5" style={{ color: '#ff4444' }} aria-hidden="true" />
                 )}
-                <span className={`text-xs ${wsConnected ? 'text-green-600 dark:text-green-400' : 'text-red-400'}`}>
-                  {wsConnected ? 'Live' : 'Offline'}
+                <span style={{ color: wsConnected ? '#00ff88' : '#ff4444' }}>
+                  {wsConnected ? 'LIVE' : 'OFFLINE'}
                 </span>
-              </span>
-              <span className="flex items-center space-x-1" title={apiHealthy ? 'API healthy' : 'API degraded'}>
-                {apiHealthy ? (
-                  <Server className="h-4 w-4 text-green-500" aria-hidden="true" />
-                ) : (
-                  <ServerOff className="h-4 w-4 text-yellow-500" aria-hidden="true" />
+                {wsConnected && (
+                  <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#00ff88', boxShadow: '0 0 6px #00ff88' }} />
                 )}
-                <span className={`text-xs ${apiHealthy ? 'text-green-600 dark:text-green-400' : 'text-yellow-500'}`}>
-                  {apiHealthy ? 'API' : 'Degraded'}
+              </span>
+              <span className="flex items-center space-x-1.5" title={apiHealthy ? 'API healthy' : 'API degraded'}>
+                {apiHealthy ? (
+                  <Server className="h-3.5 w-3.5" style={{ color: '#00ff88' }} aria-hidden="true" />
+                ) : (
+                  <ServerOff className="h-3.5 w-3.5" style={{ color: '#ffaa00' }} aria-hidden="true" />
+                )}
+                <span style={{ color: apiHealthy ? '#00ff88' : '#ffaa00' }}>
+                  {apiHealthy ? 'API' : 'DEGRADED'}
                 </span>
               </span>
             </div>
-
-            {/* Dark Mode Toggle */}
-            <button
-              onClick={toggleDarkMode}
-              aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-              className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors"
-            >
-              {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </button>
 
             {/* Mobile Menu Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Toggle menu"
               aria-expanded={mobileMenuOpen}
-              className="md:hidden p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="md:hidden p-2 rounded transition-colors"
+              style={{ color: 'rgba(0,255,136,0.6)' }}
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
@@ -110,31 +99,31 @@ export function Header() {
 
       {/* Mobile Navigation Menu */}
       {mobileMenuOpen && (
-        <nav className="md:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 animate-slide-down" role="navigation" aria-label="Mobile navigation">
+        <nav className="md:hidden animate-slide-down" style={{ background: '#0d1525', borderTop: '1px solid rgba(0,255,136,0.1)' }} role="navigation" aria-label="Mobile navigation">
           <div className="px-4 py-2 space-y-1">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => handleTabClick(tab.id)}
                 aria-current={activeTab === tab.id ? 'page' : undefined}
-                className={`block w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                  activeTab === tab.id
-                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
-                    : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
-                }`}
+                className="block w-full text-left px-3 py-2 rounded text-xs font-mono font-medium transition-colors"
+                style={{
+                  background: activeTab === tab.id ? 'rgba(0,255,136,0.1)' : 'transparent',
+                  color: activeTab === tab.id ? '#00ff88' : 'rgba(0,255,136,0.4)',
+                }}
               >
-                {tab.label}
+                {tab.label.toUpperCase()}
               </button>
             ))}
             {/* Mobile connection status */}
-            <div className="sm:hidden flex items-center space-x-4 px-3 py-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800 mt-1 pt-2">
+            <div className="sm:hidden flex items-center space-x-4 px-3 py-2 text-[10px] font-mono mt-1 pt-2" style={{ borderTop: '1px solid rgba(0,255,136,0.08)', color: 'rgba(0,255,136,0.4)' }}>
               <span className="flex items-center space-x-1">
-                {wsConnected ? <Wifi className="h-3.5 w-3.5 text-green-500" /> : <WifiOff className="h-3.5 w-3.5 text-red-400" />}
-                <span>{wsConnected ? 'Live' : 'Offline'}</span>
+                {wsConnected ? <Wifi className="h-3.5 w-3.5" style={{ color: '#00ff88' }} /> : <WifiOff className="h-3.5 w-3.5" style={{ color: '#ff4444' }} />}
+                <span>{wsConnected ? 'LIVE' : 'OFFLINE'}</span>
               </span>
               <span className="flex items-center space-x-1">
-                {apiHealthy ? <Server className="h-3.5 w-3.5 text-green-500" /> : <ServerOff className="h-3.5 w-3.5 text-yellow-500" />}
-                <span>{apiHealthy ? 'API OK' : 'Degraded'}</span>
+                {apiHealthy ? <Server className="h-3.5 w-3.5" style={{ color: '#00ff88' }} /> : <ServerOff className="h-3.5 w-3.5" style={{ color: '#ffaa00' }} />}
+                <span>{apiHealthy ? 'API OK' : 'DEGRADED'}</span>
               </span>
             </div>
           </div>

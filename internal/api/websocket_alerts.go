@@ -1,12 +1,10 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
-	"github.com/Agnikulu/WikiSurge/internal/storage"
 	"github.com/gorilla/websocket"
 )
 
@@ -14,13 +12,11 @@ import (
 // /ws/alerts — stream spike and edit-war alerts in real time
 // ---------------------------------------------------------------------------
 
-// WebSocketAlerts upgrades the connection and streams alerts from Redis.
+// WebSocketAlerts upgrades the connection and streams alerts from the shared
+// AlertHub.  Unlike the old implementation, each client does NOT start its own
+// Redis subscription — the AlertHub runs a single XRead loop and fans out.
 //
 // Route: WS /ws/alerts
-//
-// Unlike the feed endpoint this is simpler: no per-client filtering is needed.
-// It subscribes to Redis streams (alerts:spikes, alerts:editwars) and
-// forwards every alert as a JSON WebSocket message.
 func (s *APIServer) WebSocketAlerts(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -30,12 +26,14 @@ func (s *APIServer) WebSocketAlerts(w http.ResponseWriter, r *http.Request) {
 
 	s.logger.Info().Str("remote", r.RemoteAddr).Msg("Alerts WebSocket client connected")
 
-	// Use a context tied to the connection lifetime.
-	ctx, cancel := context.WithCancel(r.Context())
+	// Subscribe to the shared alert hub (no extra Redis connection).
+	alertCh := s.alertHub.Subscribe()
+
+	done := make(chan struct{})
 
 	// readPump — detect client disconnect.
 	go func() {
-		defer cancel()
+		defer close(done)
 		conn.SetReadLimit(maxMessageSize)
 		_ = conn.SetReadDeadline(time.Now().Add(pongWait))
 		conn.SetPongHandler(func(string) error {
@@ -52,34 +50,11 @@ func (s *APIServer) WebSocketAlerts(w http.ResponseWriter, r *http.Request) {
 	// Ping ticker to keep the connection alive.
 	pingTicker := time.NewTicker(pingPeriod)
 
-	// alertCh receives alerts from the Redis subscription goroutine.
-	alertCh := make(chan storage.Alert, 64)
-	subDone := make(chan struct{})
-
-	// Subscribe to Redis alert streams in a background goroutine.
-	go func() {
-		defer close(subDone)
-		if s.alerts == nil {
-			s.logger.Warn().Msg("Alerts storage not configured; alerts WebSocket will idle")
-			<-ctx.Done()
-			return
-		}
-		// SubscribeToAlerts blocks until ctx is cancelled.
-		_ = s.alerts.SubscribeToAlerts(ctx, []string{"spikes", "editwars"}, func(alert storage.Alert) error {
-			select {
-			case alertCh <- alert:
-			default:
-				s.logger.Warn().Msg("Alert channel full, dropping alert for WS client")
-			}
-			return nil
-		})
-	}()
-
 	// Main write loop.
 	go func() {
 		defer func() {
 			pingTicker.Stop()
-			cancel()
+			s.alertHub.Unsubscribe(alertCh)
 			conn.Close()
 		}()
 
@@ -107,7 +82,7 @@ func (s *APIServer) WebSocketAlerts(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-			case <-ctx.Done():
+			case <-done:
 				return
 			}
 		}

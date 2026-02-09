@@ -14,10 +14,11 @@ import (
 
 // TrendingAggregator processes edits to update trending scores
 type TrendingAggregator struct {
-	scorer  *storage.TrendingScorer
-	config  *config.Config
-	metrics *AggregatorMetrics
-	logger  zerolog.Logger
+	scorer       *storage.TrendingScorer
+	statsTracker *storage.StatsTracker
+	config       *config.Config
+	metrics      *AggregatorMetrics
+	logger       zerolog.Logger
 }
 
 // AggregatorMetrics contains metrics for the trending aggregator
@@ -28,17 +29,17 @@ type AggregatorMetrics struct {
 }
 
 // NewTrendingAggregator creates a new trending aggregator
-func NewTrendingAggregator(scorer *storage.TrendingScorer, cfg *config.Config, logger zerolog.Logger) *TrendingAggregator {
-	return newTrendingAggregator(scorer, cfg, logger, true)
+func NewTrendingAggregator(scorer *storage.TrendingScorer, statsTracker *storage.StatsTracker, cfg *config.Config, logger zerolog.Logger) *TrendingAggregator {
+	return newTrendingAggregator(scorer, statsTracker, cfg, logger, true)
 }
 
 // NewTrendingAggregatorForTest creates a new trending aggregator for tests (no metrics registration)
 func NewTrendingAggregatorForTest(scorer *storage.TrendingScorer, cfg *config.Config, logger zerolog.Logger) *TrendingAggregator {
-	return newTrendingAggregator(scorer, cfg, logger, false)
+	return newTrendingAggregator(scorer, nil, cfg, logger, false)
 }
 
 // newTrendingAggregator is the internal constructor
-func newTrendingAggregator(scorer *storage.TrendingScorer, cfg *config.Config, logger zerolog.Logger, registerMetrics bool) *TrendingAggregator {
+func newTrendingAggregator(scorer *storage.TrendingScorer, statsTracker *storage.StatsTracker, cfg *config.Config, logger zerolog.Logger, registerMetrics bool) *TrendingAggregator {
 	metrics := &AggregatorMetrics{
 		EditsProcessed: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "trending_edits_processed_total",
@@ -63,10 +64,11 @@ func newTrendingAggregator(scorer *storage.TrendingScorer, cfg *config.Config, l
 	}
 
 	return &TrendingAggregator{
-		scorer:  scorer,
-		config:  cfg,
-		metrics: metrics,
-		logger:  logger.With().Str("component", "trending-aggregator").Logger(),
+		scorer:       scorer,
+		statsTracker: statsTracker,
+		config:       cfg,
+		metrics:      metrics,
+		logger:       logger.With().Str("component", "trending-aggregator").Logger(),
 	}
 }
 
@@ -102,6 +104,17 @@ func (t *TrendingAggregator) ProcessEdit(ctx context.Context, edit *models.Wikip
 	// Process the edit through the scorer
 	if err := t.scorer.ProcessEdit(edit); err != nil {
 		return fmt.Errorf("failed to update trending score: %w", err)
+	}
+
+	// Record per-language and timeline stats
+	if t.statsTracker != nil {
+		lang := edit.Language()
+		if lang == "" {
+			lang = "unknown"
+		}
+		if err := t.statsTracker.RecordEdit(ctx, lang, edit.Bot); err != nil {
+			t.logger.Warn().Err(err).Msg("Failed to record edit stats")
+		}
 	}
 
 	t.logger.Debug().

@@ -70,20 +70,20 @@ export function TrendingList() {
     return (
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-green-500" />
-            📈 Trending Pages
+          <h2 className="flex items-center gap-2" style={{ color: '#00ff88', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const }}>
+            <TrendingUp className="h-5 w-5" style={{ color: '#00ff88' }} />
+            TRENDING PAGES
           </h2>
         </div>
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="animate-pulse flex items-center gap-3 p-3">
-              <div className="h-8 w-8 bg-gray-200 dark:bg-gray-600 rounded-lg" />
+              <div className="h-8 w-8 rounded-lg" style={{ background: 'rgba(0,255,136,0.06)' }} />
               <div className="flex-1">
-                <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-3/4 mb-1" />
-                <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded w-1/2" />
+                <div className="h-4 rounded w-3/4 mb-1" style={{ background: 'rgba(0,255,136,0.06)' }} />
+                <div className="h-3 rounded w-1/2" style={{ background: 'rgba(0,255,136,0.06)' }} />
               </div>
-              <div className="h-4 w-12 bg-gray-200 dark:bg-gray-600 rounded" />
+              <div className="h-4 w-12 rounded" style={{ background: 'rgba(0,255,136,0.06)' }} />
             </div>
           ))}
         </div>
@@ -96,18 +96,18 @@ export function TrendingList() {
     return (
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-green-500" />
-            📈 Trending Pages
+          <h2 className="flex items-center gap-2" style={{ color: '#00ff88', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const }}>
+            <TrendingUp className="h-5 w-5" style={{ color: '#00ff88' }} />
+            TRENDING PAGES
           </h2>
         </div>
         <div className="text-center py-6">
-          <p className="text-sm text-red-600 dark:text-red-400 mb-2">Failed to load trending pages</p>
+          <p className="text-sm mb-2" style={{ color: '#ff4444', fontFamily: 'monospace' }}>FAILED TO LOAD TRENDING</p>
           <button
             onClick={handleManualRefresh}
-            className="text-sm text-blue-600 hover:underline"
+            className="text-sm" style={{ color: '#00ff88', fontFamily: 'monospace' }}
           >
-            Retry
+            RETRY
           </button>
         </div>
       </div>
@@ -118,12 +118,12 @@ export function TrendingList() {
     <div className="card">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-green-500" />
-          📈 Trending Pages
+        <h2 className="flex items-center gap-2" style={{ color: '#00ff88', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const }}>
+          <TrendingUp className="h-5 w-5" style={{ color: '#00ff88' }} />
+          TRENDING PAGES
         </h2>
 
-        <div className="flex items-center gap-2 text-xs text-gray-400">
+        <div className="flex items-center gap-2 text-xs" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
           {lastUpdate && (
             <span className="hidden sm:inline">
               Updated {formatRelativeTime(lastUpdate.toISOString())}
@@ -132,7 +132,8 @@ export function TrendingList() {
           <button
             onClick={handleManualRefresh}
             disabled={refreshing}
-            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+            className="p-1 rounded transition-colors disabled:opacity-50"
+            style={{ color: '#00ff88' }}
             aria-label="Refresh trending"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
@@ -146,11 +147,11 @@ export function TrendingList() {
           <button
             key={code || 'all'}
             onClick={() => setLangFilter(code)}
-            className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all duration-150 ${
-              activeLang === code || (code === '' && !activeLang)
-                ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:ring-blue-700'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-            }`}
+            className="px-2 py-0.5 rounded-full text-[11px] font-medium transition-all duration-150"
+            style={activeLang === code || (code === '' && !activeLang)
+              ? { background: 'rgba(0,255,136,0.15)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.3)', fontFamily: 'monospace' }
+              : { background: 'rgba(0,255,136,0.05)', color: 'rgba(0,255,136,0.4)', border: '1px solid transparent', fontFamily: 'monospace' }
+            }
           >
             {label}
           </button>
@@ -169,21 +170,21 @@ export function TrendingList() {
             />
           ))
         ) : (
-          <div className="text-center py-8 text-sm text-gray-400">
-            <TrendingUp className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-            No trending pages yet
+          <div className="text-center py-8 text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+            <TrendingUp className="h-8 w-8 mx-auto mb-2" style={{ color: 'rgba(0,255,136,0.2)' }} />
+            NO TRENDING PAGES YET
           </div>
         )}
       </div>
 
       {/* ── Footer summary ── */}
       {trending && trending.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-xs text-gray-400">
+        <div className="mt-3 pt-3 flex items-center justify-between text-xs" style={{ borderTop: '1px solid rgba(0,255,136,0.1)', color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
           <span>
-            Showing top {trending.length} page{trending.length !== 1 ? 's' : ''}
+            SHOWING TOP {trending.length} PAGE{trending.length !== 1 ? 'S' : ''}
           </span>
           {activeLang && (
-            <span className="uppercase font-medium text-blue-500">{activeLang}</span>
+            <span className="uppercase font-medium" style={{ color: '#00ddff' }}>{activeLang}</span>
           )}
         </div>
       )}

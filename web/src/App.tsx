@@ -10,6 +10,7 @@ import {
   SearchSkeleton,
 } from './components/ui/Skeleton';
 import { useAppStore } from './store/appStore';
+import { LanguageDistributionChart } from './components/Stats/LanguageDistributionChart';
 
 // Lazy-loaded heavy components for code splitting
 const StatsOverview = lazy(() =>
@@ -17,11 +18,6 @@ const StatsOverview = lazy(() =>
 );
 const EditsTimelineChart = lazy(() =>
   import('./components/Stats/EditsTimelineChart').then((m) => ({ default: m.EditsTimelineChart }))
-);
-const LanguageDistributionChart = lazy(() =>
-  import('./components/Stats/LanguageDistributionChart').then((m) => ({
-    default: m.LanguageDistributionChart,
-  }))
 );
 const AlertsPanel = lazy(() =>
   import('./components/Alerts/AlertsPanel').then((m) => ({ default: m.AlertsPanel }))
@@ -54,7 +50,7 @@ function App() {
   }, [darkMode]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors duration-200">
+    <div className="min-h-screen flex flex-col bg-[#0a0f1a] transition-colors duration-200">
       <SkipLink />
       <Header />
 
@@ -90,16 +86,10 @@ function DashboardView() {
 
       {/* Charts - 2 columns on desktop */}
       <section aria-label="Charts" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ErrorBoundary>
-          <Suspense fallback={<ChartSkeleton />}>
-            <EditsTimelineChart />
-          </Suspense>
-        </ErrorBoundary>
-        <ErrorBoundary>
-          <Suspense fallback={<ChartSkeleton />}>
-            <LanguageDistributionChart />
-          </Suspense>
-        </ErrorBoundary>
+        <Suspense fallback={<ChartSkeleton />}>
+          <EditsTimelineChart />
+        </Suspense>
+        <LanguageDistributionChart />
       </section>
 
       {/* Alerts + Trending - 2 columns */}

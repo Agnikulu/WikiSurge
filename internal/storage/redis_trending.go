@@ -232,14 +232,27 @@ func (t *TrendingScorer) GetTopTrending(limit int) ([]*TrendingEntry, error) {
 	}
 	
 	entries := make([]*TrendingEntry, 0, len(results))
-	
-	// Get fresh data for each page
+
+	// Pipeline all HGetAll calls to avoid N+1 round-trips.
+	type pageResult struct {
+		title string
+		cmd   *redis.MapStringStringCmd
+	}
+	pipe := t.redis.Pipeline()
+	pageResults := make([]pageResult, 0, len(results))
 	for _, result := range results {
 		pageTitle := result.Member.(string)
 		pageKey := fmt.Sprintf("trending:%s", pageTitle)
-		
-		// Get raw data
-		data, err := t.redis.HGetAll(ctx, pageKey).Result()
+		cmd := pipe.HGetAll(ctx, pageKey)
+		pageResults = append(pageResults, pageResult{title: pageTitle, cmd: cmd})
+	}
+	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+		return nil, fmt.Errorf("failed to pipeline trending page data: %w", err)
+	}
+
+	// Process results from the pipeline
+	for _, pr := range pageResults {
+		data, err := pr.cmd.Result()
 		if err != nil {
 			continue // Skip pages that no longer exist
 		}
@@ -260,7 +273,7 @@ func (t *TrendingScorer) GetTopTrending(limit int) ([]*TrendingEntry, error) {
 		currentScore := rawScore * decayFactor
 		
 		entries = append(entries, &TrendingEntry{
-			PageTitle:    pageTitle,
+			PageTitle:    pr.title,
 			RawScore:     rawScore,
 			LastUpdated:  lastUpdated,
 			CurrentScore: currentScore,

@@ -3,10 +3,10 @@ interface SeverityBadgeProps {
 }
 
 const SEVERITY_STYLES: Record<string, string> = {
-  critical: 'bg-red-100 text-red-800',
-  high: 'bg-orange-100 text-orange-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  low: 'bg-blue-100 text-blue-800',
+  critical: 'bg-red-900/30 text-red-400 border border-red-800/40',
+  high: 'bg-amber-900/30 text-amber-400 border border-amber-800/40',
+  medium: 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/40',
+  low: 'bg-cyan-900/30 text-cyan-400 border border-cyan-800/40',
 };
 
 /**

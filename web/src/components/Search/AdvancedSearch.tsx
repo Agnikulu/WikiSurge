@@ -59,19 +59,20 @@ export function AdvancedSearch({ isOpen, onClose, onApply, currentFilters }: Adv
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Advanced search">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-xl animate-slide-up">
+      <div className="relative w-full max-w-lg rounded-2xl shadow-xl animate-slide-up" style={{ background: '#111b2e', border: '1px solid rgba(0,255,136,0.15)' }}>
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+        <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid rgba(0,255,136,0.1)' }}>
           <div className="flex items-center gap-2">
-            <SlidersHorizontal className="h-5 w-5 text-primary-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Advanced Search</h2>
+            <SlidersHorizontal className="h-5 w-5" style={{ color: '#00ff88' }} />
+            <h2 style={{ color: '#00ff88', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.1em' }}>ADVANCED SEARCH</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            className="p-1 rounded-lg transition-colors"
+            style={{ color: 'rgba(0,255,136,0.4)' }}
             aria-label="Close advanced search"
           >
             <X className="h-5 w-5" />
@@ -82,30 +83,32 @@ export function AdvancedSearch({ isOpen, onClose, onApply, currentFilters }: Adv
         <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
           {/* Date Range */}
           <fieldset>
-            <legend className="text-sm font-medium text-gray-700 mb-1.5">Date Range</legend>
+            <legend className="text-sm font-medium mb-1.5" style={{ color: 'rgba(0,255,136,0.6)', fontFamily: 'monospace' }}>DATE RANGE</legend>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="date-from" className="text-xs text-gray-500">
-                  From
+                <label htmlFor="date-from" className="text-xs" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+                  FROM
                 </label>
                 <input
                   id="date-from"
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-full mt-0.5 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full mt-0.5 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1"
+                  style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }}
                 />
               </div>
               <div>
-                <label htmlFor="date-to" className="text-xs text-gray-500">
-                  To
+                <label htmlFor="date-to" className="text-xs" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+                  TO
                 </label>
                 <input
                   id="date-to"
                   type="date"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
-                  className="w-full mt-0.5 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full mt-0.5 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1"
+                  style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }}
                 />
               </div>
             </div>
@@ -113,14 +116,15 @@ export function AdvancedSearch({ isOpen, onClose, onApply, currentFilters }: Adv
 
           {/* Language */}
           <div>
-            <label htmlFor="language" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Language
+            <label htmlFor="language" className="block text-sm font-medium mb-1.5" style={{ color: 'rgba(0,255,136,0.6)', fontFamily: 'monospace' }}>
+              LANGUAGE
             </label>
             <select
               id="language"
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+              className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1"
+              style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }}
             >
               <option value="">All languages</option>
               {LANGUAGES.map((l) => (
@@ -133,28 +137,29 @@ export function AdvancedSearch({ isOpen, onClose, onApply, currentFilters }: Adv
 
           {/* User */}
           <div>
-            <label htmlFor="user-filter" className="block text-sm font-medium text-gray-700 mb-1.5">
-              User Name
+            <label htmlFor="user-filter" className="block text-sm font-medium mb-1.5" style={{ color: 'rgba(0,255,136,0.6)', fontFamily: 'monospace' }}>
+              USER NAME
             </label>
             <input
               id="user-filter"
               type="text"
               value={user}
               onChange={(e) => setUser(e.target.value)}
-              placeholder="Filter by user name..."
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              placeholder="FILTER BY USER NAME..."
+              className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1"
+              style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }}
             />
           </div>
 
           {/* Byte Change Range */}
           <fieldset>
-            <legend className="text-sm font-medium text-gray-700 mb-1.5">
-              Byte Change Range
+            <legend className="text-sm font-medium mb-1.5" style={{ color: 'rgba(0,255,136,0.6)', fontFamily: 'monospace' }}>
+              BYTE CHANGE RANGE
             </legend>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="min-bytes" className="text-xs text-gray-500">
-                  Min
+                <label htmlFor="min-bytes" className="text-xs" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+                  MIN
                 </label>
                 <input
                   id="min-bytes"
@@ -162,12 +167,13 @@ export function AdvancedSearch({ isOpen, onClose, onApply, currentFilters }: Adv
                   value={minBytes}
                   onChange={(e) => setMinBytes(e.target.value)}
                   placeholder="0"
-                  className="w-full mt-0.5 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full mt-0.5 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1"
+                  style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }}
                 />
               </div>
               <div>
-                <label htmlFor="max-bytes" className="text-xs text-gray-500">
-                  Max
+                <label htmlFor="max-bytes" className="text-xs" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+                  MAX
                 </label>
                 <input
                   id="max-bytes"
@@ -175,7 +181,8 @@ export function AdvancedSearch({ isOpen, onClose, onApply, currentFilters }: Adv
                   value={maxBytes}
                   onChange={(e) => setMaxBytes(e.target.value)}
                   placeholder="No limit"
-                  className="w-full mt-0.5 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full mt-0.5 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1"
+                  style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }}
                 />
               </div>
             </div>
@@ -188,23 +195,25 @@ export function AdvancedSearch({ isOpen, onClose, onApply, currentFilters }: Adv
               type="checkbox"
               checked={excludeBots}
               onChange={(e) => setExcludeBots(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="h-4 w-4 rounded"
+              style={{ accentColor: '#00ff88' }}
             />
-            <label htmlFor="exclude-bots" className="text-sm text-gray-700">
-              Exclude bot edits
+            <label htmlFor="exclude-bots" className="text-sm" style={{ color: 'rgba(0,255,136,0.6)', fontFamily: 'monospace' }}>
+              EXCLUDE BOT EDITS
             </label>
           </div>
 
           {/* Sort */}
           <div>
-            <label htmlFor="sort-by" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Sort By
+            <label htmlFor="sort-by" className="block text-sm font-medium mb-1.5" style={{ color: 'rgba(0,255,136,0.6)', fontFamily: 'monospace' }}>
+              SORT BY
             </label>
             <select
               id="sort-by"
               value={sort}
               onChange={(e) => setSort(e.target.value as SearchParams['sort'])}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+              className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1"
+              style={{ background: 'rgba(0,255,136,0.05)', border: '1px solid rgba(0,255,136,0.15)', color: '#00ff88', fontFamily: 'monospace' }}
             >
               <option value="relevance">Relevance</option>
               <option value="date_desc">Date (newest first)</option>
@@ -216,13 +225,14 @@ export function AdvancedSearch({ isOpen, onClose, onApply, currentFilters }: Adv
           <button
             type="button"
             onClick={() => setShowHelp(!showHelp)}
-            className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800 transition-colors"
+            className="flex items-center gap-1 text-xs transition-colors"
+            style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}
           >
             <HelpCircle className="h-3.5 w-3.5" />
-            Search syntax help
+            SYNTAX HELP
           </button>
           {showHelp && (
-            <div className="p-3 bg-blue-50 rounded-lg text-xs text-blue-800 space-y-1">
+            <div className="p-3 rounded-lg text-xs space-y-1" style={{ background: 'rgba(0,221,255,0.05)', border: '1px solid rgba(0,221,255,0.1)', color: '#00ddff', fontFamily: 'monospace' }}>
               <p><strong>title:</strong>keyword — search in page titles only</p>
               <p><strong>user:</strong>name — filter by user name</p>
               <p><strong>&quot;exact phrase&quot;</strong> — match exact phrase</p>
@@ -232,25 +242,28 @@ export function AdvancedSearch({ isOpen, onClose, onApply, currentFilters }: Adv
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-5 border-t border-gray-100">
+        <div className="flex items-center justify-between p-5" style={{ borderTop: '1px solid rgba(0,255,136,0.1)' }}>
           <button
             onClick={handleReset}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+            className="px-4 py-2 text-sm transition-colors"
+            style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}
           >
-            Reset filters
+            RESET
           </button>
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              className="px-4 py-2 text-sm rounded-lg transition-colors"
+              style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}
             >
-              Cancel
+              CANCEL
             </button>
             <button
               onClick={handleApply}
-              className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+              className="px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+              style={{ background: 'rgba(0,255,136,0.15)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.3)', fontFamily: 'monospace' }}
             >
-              Apply Filters
+              APPLY FILTERS
             </button>
           </div>
         </div>

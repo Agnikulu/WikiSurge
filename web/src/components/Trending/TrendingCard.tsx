@@ -10,7 +10,8 @@ interface TrendingCardProps {
 }
 
 /** Language code → flag emoji (best-effort). */
-function langFlag(lang: string): string {
+function langFlag(lang: string | undefined): string {
+  if (!lang) return '🌐';
   const map: Record<string, string> = {
     en: '🇬🇧', es: '🇪🇸', fr: '🇫🇷', de: '🇩🇪',
     ja: '🇯🇵', zh: '🇨🇳', ru: '🇷🇺', pt: '🇧🇷',
@@ -23,12 +24,12 @@ function langFlag(lang: string): string {
 /** Rank badge colors for top 3. */
 function rankStyle(rank: number): string {
   if (rank === 1)
-    return 'bg-gradient-to-br from-yellow-300 to-yellow-500 text-yellow-900 shadow-sm shadow-yellow-200';
+    return '';
   if (rank === 2)
-    return 'bg-gradient-to-br from-gray-200 to-gray-400 text-gray-800 shadow-sm shadow-gray-200';
+    return '';
   if (rank === 3)
-    return 'bg-gradient-to-br from-orange-300 to-orange-500 text-orange-900 shadow-sm shadow-orange-200';
-  return 'bg-gray-100 text-gray-500';
+    return '';
+  return '';
 }
 
 export function TrendingCard({ page, rank, previousRank, isNew }: TrendingCardProps) {
@@ -41,16 +42,16 @@ export function TrendingCard({ page, rank, previousRank, isNew }: TrendingCardPr
   if (previousRank != null && previousRank !== rank) {
     if (rank < previousRank) {
       TrendIcon = TrendingUp;
-      trendColor = 'text-green-500';
+      trendColor = '';
       trendLabel = `up ${previousRank - rank}`;
     } else {
       TrendIcon = TrendingDown;
-      trendColor = 'text-red-500';
+      trendColor = '';
       trendLabel = `down ${rank - previousRank}`;
     }
   } else if (isNew) {
     TrendIcon = TrendingUp;
-    trendColor = 'text-green-500';
+    trendColor = '';
     trendLabel = 'new entry';
   }
 
@@ -60,18 +61,25 @@ export function TrendingCard({ page, rank, previousRank, isNew }: TrendingCardPr
     <div
       className={`
         group flex items-center gap-3 p-3 rounded-xl transition-all duration-200
-        hover:bg-gray-50 hover:shadow-sm
-        ${isNew ? 'animate-slide-up ring-1 ring-green-200' : ''}
+        ${isNew ? 'animate-slide-up' : ''}
         ${isTop3 ? 'py-4' : ''}
       `}
+      style={{
+        border: isNew ? '1px solid rgba(0,255,136,0.3)' : '1px solid transparent',
+      }}
     >
       {/* ── Rank badge ── */}
       <div
         className={`
           flex-shrink-0 flex items-center justify-center rounded-lg font-bold
           ${isTop3 ? 'w-10 h-10 text-base' : 'w-8 h-8 text-sm'}
-          ${rankStyle(rank)}
         `}
+        style={{
+          background: rank === 1 ? 'rgba(255,170,0,0.2)' : rank === 2 ? 'rgba(0,255,136,0.15)' : rank === 3 ? 'rgba(0,221,255,0.15)' : 'rgba(0,255,136,0.06)',
+          color: rank === 1 ? '#ffaa00' : rank === 2 ? '#00ff88' : rank === 3 ? '#00ddff' : 'rgba(0,255,136,0.5)',
+          fontFamily: 'monospace',
+          border: rank <= 3 ? `1px solid ${rank === 1 ? 'rgba(255,170,0,0.3)' : rank === 2 ? 'rgba(0,255,136,0.3)' : 'rgba(0,221,255,0.3)'}` : '1px solid rgba(0,255,136,0.08)',
+        }}
       >
         #{rank}
       </div>
@@ -83,17 +91,18 @@ export function TrendingCard({ page, rank, previousRank, isNew }: TrendingCardPr
           target="_blank"
           rel="noopener noreferrer"
           className={`
-            font-semibold text-gray-900 hover:text-blue-600 hover:underline truncate block
+            font-semibold hover:underline truncate block
             ${isTop3 ? 'text-base' : 'text-sm'}
           `}
+          style={{ color: '#00ff88', fontFamily: 'monospace' }}
           title={page.title}
         >
           {truncateTitle(page.title, 45)}
         </a>
 
         {/* Stats row */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-xs text-gray-500">
-          <span title={`Language: ${page.language}`}>{langFlag(page.language)}</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-xs" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+          {page.language && <span title={`Language: ${page.language}`}>{langFlag(page.language)}</span>}
           <span className="hidden sm:inline">·</span>
           <span>{page.edits_1h} edits/hr</span>
           <span className="hidden sm:inline">·</span>
@@ -104,14 +113,14 @@ export function TrendingCard({ page, rank, previousRank, isNew }: TrendingCardPr
       {/* ── Score + trend ── */}
       <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
         <div className="flex items-center gap-1">
-          <TrendIcon className={`h-3.5 w-3.5 ${trendColor}`} aria-label={trendLabel} />
-          <span className={`font-bold tabular-nums ${isTop3 ? 'text-base' : 'text-sm'} text-gray-800`}>
+          <TrendIcon className={`h-3.5 w-3.5 ${trendColor}`} style={{ color: trendLabel.startsWith('up') || trendLabel === 'new entry' ? '#00ff88' : trendLabel.startsWith('down') ? '#ff4444' : 'rgba(0,255,136,0.3)' }} aria-label={trendLabel} />
+          <span className={`font-bold tabular-nums ${isTop3 ? 'text-base' : 'text-sm'}`} style={{ color: '#00ff88', fontFamily: 'monospace' }}>
             {page.score >= 1000
               ? `${(page.score / 1000).toFixed(1)}k`
               : page.score.toFixed(1)}
           </span>
         </div>
-        <span className="text-[10px] text-gray-400">{formatNumber(page.edits_1h)} edits</span>
+        <span className="text-[10px]" style={{ color: 'rgba(0,255,136,0.35)', fontFamily: 'monospace' }}>{formatNumber(page.edits_1h)} edits</span>
       </div>
     </div>
   );

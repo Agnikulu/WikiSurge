@@ -10,7 +10,8 @@ interface SkeletonProps {
 
 /** Basic pulsing skeleton block */
 export const Skeleton = memo(function Skeleton({ className = '', variant = 'text', lines = 1 }: SkeletonProps) {
-  const base = 'animate-pulse rounded bg-gray-200 dark:bg-gray-700';
+  const base = 'animate-pulse rounded';
+  const bgStyle = { background: 'rgba(0,255,136,0.06)' };
 
   const variantClasses: Record<string, string> = {
     text: 'h-4 w-full',
@@ -28,20 +29,20 @@ export const Skeleton = memo(function Skeleton({ className = '', variant = 'text
           <div
             key={i}
             className={`${base} ${variantClasses[variant]}`}
-            style={variant === 'text' ? { width: `${Math.max(40, 100 - i * 15)}%` } : undefined}
+            style={{ ...bgStyle, width: variant === 'text' ? `${Math.max(40, 100 - i * 15)}%` : undefined }}
           />
         ))}
       </div>
     );
   }
 
-  return <div className={`${base} ${variantClasses[variant]} ${className}`} />;
+  return <div className={`${base} ${variantClasses[variant]} ${className}`} style={bgStyle} />;
 });
 
 /** Skeleton layout matching StatsOverview */
 export const StatsOverviewSkeleton = memo(function StatsOverviewSkeleton() {
   return (
-    <div className="card dark:bg-gray-800 dark:border-gray-700">
+    <div className="card">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="space-y-2 p-3">
@@ -57,7 +58,7 @@ export const StatsOverviewSkeleton = memo(function StatsOverviewSkeleton() {
 /** Skeleton layout matching TrendingList */
 export const TrendingListSkeleton = memo(function TrendingListSkeleton() {
   return (
-    <div className="card dark:bg-gray-800 dark:border-gray-700 space-y-3">
+    <div className="card space-y-3">
       <Skeleton variant="title" className="w-32" />
       {Array.from({ length: 5 }).map((_, i) => (
         <div key={i} className="flex items-center space-x-3 py-2">
@@ -75,7 +76,7 @@ export const TrendingListSkeleton = memo(function TrendingListSkeleton() {
 /** Skeleton layout matching a chart card */
 export const ChartSkeleton = memo(function ChartSkeleton() {
   return (
-    <div className="card dark:bg-gray-800 dark:border-gray-700 space-y-3">
+    <div className="card space-y-3">
       <Skeleton variant="title" className="w-40" />
       <Skeleton variant="chart" />
     </div>
@@ -85,7 +86,7 @@ export const ChartSkeleton = memo(function ChartSkeleton() {
 /** Skeleton layout matching SearchInterface */
 export const SearchSkeleton = memo(function SearchSkeleton() {
   return (
-    <div className="card dark:bg-gray-800 dark:border-gray-700 space-y-3">
+    <div className="card space-y-3">
       <Skeleton variant="title" className="w-28" />
       <Skeleton variant="text" className="h-10 w-full rounded-md" />
       <Skeleton lines={4} />

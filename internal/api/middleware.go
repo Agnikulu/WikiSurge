@@ -1,11 +1,13 @@
 package api
 
 import (
+	"bufio"
 	"compress/gzip"
 	"crypto/sha256"
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"strings"
@@ -42,6 +44,15 @@ func (rr *responseRecorder) Write(b []byte) (int, error) {
 	n, err := rr.ResponseWriter.Write(b)
 	rr.bytesWritten += n
 	return n, err
+}
+
+// Hijack implements http.Hijacker so WebSocket upgrades work through the
+// logging middleware.
+func (rr *responseRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := rr.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
 
 // logSampleRate returns the sampling rate for a given path.
@@ -279,7 +290,7 @@ func (g *gzipResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (g *gzipResponseWriter) Close() error {
-	if !g.wroteHeader && len(g.buf) > 0 {
+	if !g.compressed && len(g.buf) > 0 {
 		// Data never exceeded threshold — send uncompressed.
 		g.ResponseWriter.WriteHeader(g.statusCode)
 		_, _ = g.ResponseWriter.Write(g.buf)
@@ -381,6 +392,15 @@ func (e *etagRecorder) WriteHeader(code int) {
 func (e *etagRecorder) Write(b []byte) (int, error) {
 	e.body = append(e.body, b...)
 	return len(b), nil
+}
+
+// Hijack implements http.Hijacker so WebSocket upgrades work through the
+// ETag middleware.
+func (e *etagRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := e.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
 
 // calculateETag computes a weak ETag from response body.

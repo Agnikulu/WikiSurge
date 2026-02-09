@@ -27,10 +27,12 @@ const SEVERITY_WEIGHT: Record<string, number> = {
 };
 
 function sortWars(a: EditWar, b: EditWar): number {
-  const wa = SEVERITY_WEIGHT[a.severity.toLowerCase()] ?? 0;
-  const wb = SEVERITY_WEIGHT[b.severity.toLowerCase()] ?? 0;
+  const wa = SEVERITY_WEIGHT[a.severity?.toLowerCase()] ?? 0;
+  const wb = SEVERITY_WEIGHT[b.severity?.toLowerCase()] ?? 0;
   if (wb !== wa) return wb - wa;
-  return new Date(b.start_time).getTime() - new Date(a.start_time).getTime();
+  const ta = a.start_time ? new Date(a.start_time).getTime() : 0;
+  const tb = b.start_time ? new Date(b.start_time).getTime() : 0;
+  return tb - ta;
 }
 
 export function EditWarsList() {
@@ -148,47 +150,48 @@ export function EditWarsList() {
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+          className="flex items-center gap-2 transition-colors"
+          style={{ color: '#ff4444', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const }}
         >
-          <Swords className="h-5 w-5 text-red-500" />
-          <span>⚔️ Edit Wars in Progress</span>
+          <Swords className="h-5 w-5" style={{ color: '#ff4444' }} />
+          <span>EDIT WARS IN PROGRESS</span>
           {activeCount > 0 && (
             <span className="badge badge-critical">{activeCount}</span>
           )}
           {collapsed ? (
-            <ChevronDown className="h-4 w-4 text-gray-400" />
+            <ChevronDown className="h-4 w-4" style={{ color: 'rgba(0,255,136,0.4)' }} />
           ) : (
-            <ChevronUp className="h-4 w-4 text-gray-400" />
+            <ChevronUp className="h-4 w-4" style={{ color: 'rgba(0,255,136,0.4)' }} />
           )}
         </button>
 
         {!collapsed && (
           <div className="flex items-center gap-2">
             {/* Filter toggle */}
-            <div className="inline-flex rounded-md shadow-sm" role="group">
+            <div className="inline-flex rounded-md" role="group">
               <button
                 onClick={() => setFilter('active')}
-                className={`px-3 py-1 text-xs font-medium rounded-l-md border transition-colors ${
-                  filter === 'active'
-                    ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-700'
-                }`}
+                className="px-3 py-1 text-xs font-medium rounded-l-md transition-colors"
+                style={filter === 'active'
+                  ? { background: 'rgba(255,68,68,0.15)', color: '#ff4444', border: '1px solid rgba(255,68,68,0.3)', fontFamily: 'monospace' }
+                  : { background: 'rgba(0,255,136,0.05)', color: 'rgba(0,255,136,0.4)', border: '1px solid rgba(0,255,136,0.1)', fontFamily: 'monospace' }
+                }
               >
-                Active
+                ACTIVE
               </button>
               <button
                 onClick={() => setFilter('all')}
-                className={`px-3 py-1 text-xs font-medium rounded-r-md border-t border-r border-b transition-colors ${
-                  filter === 'all'
-                    ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-700'
-                }`}
+                className="px-3 py-1 text-xs font-medium rounded-r-md transition-colors"
+                style={filter === 'all'
+                  ? { background: 'rgba(255,68,68,0.15)', color: '#ff4444', border: '1px solid rgba(255,68,68,0.3)', fontFamily: 'monospace' }
+                  : { background: 'rgba(0,255,136,0.05)', color: 'rgba(0,255,136,0.4)', border: '1px solid rgba(0,255,136,0.1)', fontFamily: 'monospace' }
+                }
               >
-                All
+                ALL
               </button>
             </div>
 
-            <Filter className="h-3.5 w-3.5 text-gray-400" />
+            <Filter className="h-3.5 w-3.5" style={{ color: 'rgba(0,255,136,0.3)' }} />
           </div>
         )}
       </div>
@@ -226,12 +229,12 @@ function LoadingSkeleton() {
   return (
     <div className="animate-pulse space-y-3">
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-2/3 mb-2" />
-          <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded w-1/2 mb-3" />
+        <div key={i} className="p-4 rounded-lg" style={{ border: '1px solid rgba(0,255,136,0.08)' }}>
+          <div className="h-4 rounded w-2/3 mb-2" style={{ background: 'rgba(0,255,136,0.06)' }} />
+          <div className="h-3 rounded w-1/2 mb-3" style={{ background: 'rgba(0,255,136,0.06)' }} />
           <div className="grid grid-cols-4 gap-3">
             {Array.from({ length: 4 }).map((_, j) => (
-              <div key={j} className="h-3 bg-gray-200 dark:bg-gray-600 rounded" />
+              <div key={j} className="h-3 rounded" style={{ background: 'rgba(0,255,136,0.06)' }} />
             ))}
           </div>
         </div>
@@ -243,12 +246,12 @@ function LoadingSkeleton() {
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="text-center py-8">
-      <p className="text-sm text-gray-500 dark:text-gray-400">Failed to load edit wars</p>
+      <p className="text-sm" style={{ color: '#ff4444', fontFamily: 'monospace' }}>FAILED TO LOAD EDIT WARS</p>
       <button
         onClick={onRetry}
-        className="text-primary-600 hover:underline text-sm mt-2"
+        className="text-sm mt-2" style={{ color: '#00ff88', fontFamily: 'monospace' }}
       >
-        Retry
+        RETRY
       </button>
     </div>
   );
@@ -257,14 +260,14 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 function EmptyState({ filter }: { filter: 'active' | 'all' }) {
   return (
     <div className="text-center py-8">
-      <Swords className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-      <p className="text-sm text-gray-400">
+      <Swords className="h-10 w-10 mx-auto mb-2" style={{ color: 'rgba(0,255,136,0.15)' }} />
+      <p className="text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
         {filter === 'active'
-          ? 'No active edit wars detected'
-          : 'No edit wars found'}
+          ? 'NO ACTIVE EDIT WARS DETECTED'
+          : 'NO EDIT WARS FOUND'}
       </p>
-      <p className="text-xs text-gray-300 mt-1">
-        Edit wars will appear here when detected
+      <p className="text-xs mt-1" style={{ color: 'rgba(0,255,136,0.25)', fontFamily: 'monospace' }}>
+        MONITORING FOR CONFLICTS…
       </p>
     </div>
   );

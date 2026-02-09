@@ -45,8 +45,8 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
 
   return (
     <nav className="flex items-center justify-between pt-4" aria-label="Pagination">
-      <p className="text-sm text-gray-500">
-        Page {currentPage} of {totalPages}
+      <p className="text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+        PAGE {currentPage} OF {totalPages}
       </p>
 
       <div className="flex items-center gap-1">
@@ -54,7 +54,8 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="p-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          style={{ color: '#00ff88' }}
           aria-label="Previous page"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -63,7 +64,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
         {/* Page numbers */}
         {pages.map((page, i) =>
           page === 'ellipsis' ? (
-            <span key={`ellipsis-${i}`} className="px-2 text-gray-400" aria-hidden="true">
+            <span key={`ellipsis-${i}`} className="px-2" style={{ color: 'rgba(0,255,136,0.3)' }} aria-hidden="true">
               …
             </span>
           ) : (
@@ -72,11 +73,11 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
               onClick={() => onPageChange(page)}
               disabled={page === currentPage}
               aria-current={page === currentPage ? 'page' : undefined}
-              className={`min-w-[36px] h-9 rounded-lg text-sm font-medium transition-colors ${
-                page === currentPage
-                  ? 'bg-primary-600 text-white cursor-default'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
+              className="min-w-[36px] h-9 rounded-lg text-sm font-medium transition-colors"
+              style={page === currentPage
+                ? { background: 'rgba(0,255,136,0.15)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.3)', fontFamily: 'monospace', cursor: 'default' }
+                : { color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }
+              }
             >
               {page}
             </button>
@@ -87,7 +88,8 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="p-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          style={{ color: '#00ff88' }}
           aria-label="Next page"
         >
           <ChevronRight className="h-4 w-4" />
