@@ -20,9 +20,10 @@ elasticsearch:
   retention_days: 7
   max_docs_per_day: 10000
   selective_criteria:
-    trending_top_n: 100
-    spike_ratio_min: 2.0
+    trending_top_n: 10000
+    spike_ratio_min: 1.1
     edit_war_enabled: true
+    sample_rate: 0.5  # Index 50% of all edits for better search coverage
 
 redis:
   url: "redis://localhost:6379"
@@ -64,5 +65,5 @@ api:
       - "192.168.0.0/16"
 
 logging:
-  level: "debug"
+  level: "info"
   format: "json"

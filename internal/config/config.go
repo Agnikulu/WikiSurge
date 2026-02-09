@@ -54,6 +54,7 @@ type SelectiveCriteria struct {
 	TrendingTopN     int     `yaml:"trending_top_n"`
 	SpikeRatioMin    float64 `yaml:"spike_ratio_min"`
 	EditWarEnabled   bool    `yaml:"edit_war_enabled"`
+	SampleRate       float64 `yaml:"sample_rate"` // 0.0-1.0, percentage of all edits to index regardless of significance (0 = disabled)
 }
 
 // Redis configuration

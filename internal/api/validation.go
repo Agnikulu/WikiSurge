@@ -46,7 +46,7 @@ func ParseSearchParams(r *http.Request) (SearchParams, *ValidationError) {
 		}
 	}
 
-	from, err := parseTimeQuery(r, "from", time.Now().Add(-7*24*time.Hour))
+	from, err := parseTimeQuery(r, "from", time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		return SearchParams{}, &ValidationError{
 			Field:   "from",
@@ -54,7 +54,7 @@ func ParseSearchParams(r *http.Request) (SearchParams, *ValidationError) {
 			Code:    ErrCodeInvalidParameter,
 		}
 	}
-	to, err := parseTimeQuery(r, "to", time.Now())
+	to, err := parseTimeQuery(r, "to", time.Now().Add(24*time.Hour))
 	if err != nil {
 		return SearchParams{}, &ValidationError{
 			Field:   "to",

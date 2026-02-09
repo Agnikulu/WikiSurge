@@ -2,6 +2,7 @@ package models
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -34,8 +35,8 @@ func FromWikipediaEdit(edit *WikipediaEdit, reason string) *EditDocument {
 	hash := sha256.Sum256([]byte(idStr))
 	id := fmt.Sprintf("%x", hash)[:16] // Use first 16 characters of hash
 
-	// Parse timestamp from Unix milliseconds
-	timestamp := time.Unix(0, edit.Timestamp*int64(time.Millisecond))
+	// Parse timestamp from Unix seconds and convert to UTC
+	timestamp := time.Unix(edit.Timestamp, 0).UTC()
 
 	// Extract language from wiki field (e.g., "enwiki" -> "en")
 	language := edit.Language()
@@ -60,4 +61,40 @@ func FromWikipediaEdit(edit *WikipediaEdit, reason string) *EditDocument {
 		Language:      language,
 		IndexedReason: reason,
 	}
+}
+
+// MarshalJSON implements custom JSON marshaling for EditDocument
+// to ensure timestamp is formatted with milliseconds for Elasticsearch
+func (d *EditDocument) MarshalJSON() ([]byte, error) {
+	// Format timestamp with milliseconds for ES: yyyy-MM-dd'T'HH:mm:ss.SSS'Z'
+	// Extract milliseconds from the timestamp
+	millis := d.Timestamp.UnixNano() / 1000000 % 1000
+	timestampStr := fmt.Sprintf("%s.%03dZ",
+		d.Timestamp.UTC().Format("2006-01-02T15:04:05"),
+		millis)
+	
+	// Create anonymous struct to avoid recursion
+	return json.Marshal(&struct {
+		ID            string `json:"id"`
+		Title         string `json:"title"`
+		User          string `json:"user"`
+		Bot           bool   `json:"bot"`
+		Wiki          string `json:"wiki"`
+		Timestamp     string `json:"timestamp"`
+		ByteChange    int    `json:"byte_change"`
+		Comment       string `json:"comment"`
+		Language      string `json:"language"`
+		IndexedReason string `json:"indexed_reason"`
+	}{
+		ID:            d.ID,
+		Title:         d.Title,
+		User:          d.User,
+		Bot:           d.Bot,
+		Wiki:          d.Wiki,
+		Timestamp:     timestampStr,
+		ByteChange:    d.ByteChange,
+		Comment:       d.Comment,
+		Language:      d.Language,
+		IndexedReason: d.IndexedReason,
+	})
 }

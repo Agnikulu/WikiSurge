@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +75,14 @@ func (s *IndexingStrategy) ShouldIndex(ctx context.Context, edit *models.Wikiped
 		}, nil
 	}
 
+	// Check sample rate (for development/testing - index random % of all edits)
+	if s.config.SampleRate > 0 && rand.Float64() < s.config.SampleRate {
+		return &IndexingDecision{
+			ShouldIndex: true,
+			Reason:      "sampled",
+		}, nil
+	}
+
 	// Get page context (with caching)
 	pageContext, err := s.getPageContext(ctx, edit.Wiki, edit.Title)
 	if err != nil {
@@ -114,6 +123,14 @@ func (s *IndexingStrategy) ShouldIndex(ctx context.Context, edit *models.Wikiped
 	if pageContext.IsHotPage {
 		decision.ShouldIndex = true
 		decision.Reason = "hot_page"
+		return decision, nil
+	}
+
+	// NEW: Index pages with recent activity for search discoverability
+	// This ensures the search feature has data to work with
+	if pageContext.EditCount >= 2 {
+		decision.ShouldIndex = true
+		decision.Reason = "recent_activity"
 		return decision, nil
 	}
 
