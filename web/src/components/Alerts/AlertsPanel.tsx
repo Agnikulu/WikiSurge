@@ -40,24 +40,38 @@ export const AlertsPanel = memo(function AlertsPanel() {
   const wsUrl = buildWebSocketUrl(WS_ENDPOINTS.alerts);
 
   const handleWsMessage = useCallback((data: unknown) => {
-    const alert = (data as { data?: Alert })?.data ?? (data as Alert);
-    if (!alert || !('type' in alert)) return;
+    try {
+      const alert = (data as { data?: Alert })?.data ?? (data as Alert);
+      
+      // Defensive: validate alert has required fields
+      if (!alert || typeof alert !== 'object') {
+        console.warn('[AlertsPanel] Invalid alert data (not an object):', data);
+        return;
+      }
+      
+      if (!('type' in alert) || !('page_title' in alert) || !('severity' in alert)) {
+        console.warn('[AlertsPanel] Alert missing required fields:', alert);
+        return;
+      }
 
-    setAlerts((prev) => {
-      // Deduplicate by page_title + type
-      const key = `${alert.page_title}-${alert.type}`;
-      const exists = prev.some(
-        (a) => `${a.page_title}-${a.type}` === key,
-      );
-      if (exists) return prev;
+      setAlerts((prev) => {
+        // Deduplicate by page_title + type
+        const key = `${alert.page_title}-${alert.type}`;
+        const exists = prev.some(
+          (a) => `${a.page_title}-${a.type}` === key,
+        );
+        if (exists) return prev;
 
-      const updated = [alert, ...prev].slice(0, MAX_ALERTS);
-      return updated;
-    });
+        const updated = [alert, ...prev].slice(0, MAX_ALERTS);
+        return updated;
+      });
 
-    // Sound notifications
-    if (alert.severity === 'critical') playCriticalAlert();
-    else if (alert.type === 'edit_war') playEditWarAlert();
+      // Sound notifications
+      if (alert.severity === 'critical') playCriticalAlert();
+      else if (alert.type === 'edit_war') playEditWarAlert();
+    } catch (error) {
+      console.error('[AlertsPanel] Error handling WebSocket message:', error, data);
+    }
   }, []);
 
   const {
@@ -110,8 +124,15 @@ export const AlertsPanel = memo(function AlertsPanel() {
       const cutoff = Date.now() - AUTO_DISMISS_MS;
       setAlerts((prev) =>
         prev.filter((a) => {
-          const ts = 'timestamp' in a ? a.timestamp : (a as { start_time: string }).start_time;
-          return new Date(ts).getTime() > cutoff;
+          try {
+            const ts = 'timestamp' in a ? a.timestamp : (a as { start_time?: string }).start_time;
+            if (!ts) return true; // Keep if no timestamp
+            const alertTime = new Date(ts).getTime();
+            if (isNaN(alertTime)) return true; // Keep if invalid timestamp
+            return alertTime > cutoff;
+          } catch {
+            return true; // Keep on error
+          }
         }),
       );
     }, 30_000);

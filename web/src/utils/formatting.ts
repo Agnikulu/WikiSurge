@@ -4,9 +4,11 @@ import type { Edit } from '../types';
 /**
  * Format an ISO timestamp to a relative time string (e.g., "2s ago").
  */
-export function formatTimestamp(timestamp: string): string {
+export function formatTimestamp(timestamp: string | undefined | null): string {
+  if (!timestamp) return 'unknown';
   try {
     const date = parseISO(timestamp);
+    if (isNaN(date.getTime())) return timestamp;
     return formatDistanceToNowStrict(date, { addSuffix: true });
   } catch {
     return timestamp;
@@ -73,6 +75,7 @@ export function isNewPage(edit: Edit): boolean {
  * Build a Wikipedia URL for a page title on a given wiki.
  */
 export function buildWikiUrl(title: string, serverUrl?: string): string {
+  if (!title) return '#';
   const base = serverUrl || 'https://en.wikipedia.org';
   return `${base}/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`;
 }

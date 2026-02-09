@@ -147,8 +147,7 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
           return (
             <div
               key={idx}
-              className="relative pl-5 py-1.5 group transition-colors"
-              style={{ '&:hover': { background: 'rgba(0,255,136,0.03)' } }}
+              className="relative pl-5 py-1.5 group transition-colors hover:bg-[rgba(0,255,136,0.03)]"
             >
               {/* Dot on timeline */}
               <span

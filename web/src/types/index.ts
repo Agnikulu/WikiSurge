@@ -48,6 +48,7 @@ export interface SpikeAlert {
   severity: 'low' | 'medium' | 'high' | 'critical';
   timestamp: string;
   edits_5min: number;
+  editor_count?: number; // Optional field from API
 }
 
 export interface EditWarAlert {

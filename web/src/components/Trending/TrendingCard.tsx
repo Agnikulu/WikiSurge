@@ -21,17 +21,6 @@ function langFlag(lang: string | undefined): string {
   return map[lang] ?? lang.toUpperCase();
 }
 
-/** Rank badge colors for top 3. */
-function rankStyle(rank: number): string {
-  if (rank === 1)
-    return '';
-  if (rank === 2)
-    return '';
-  if (rank === 3)
-    return '';
-  return '';
-}
-
 export function TrendingCard({ page, rank, previousRank, isNew }: TrendingCardProps) {
   const wikiUrl = buildWikiUrl(page.title);
 

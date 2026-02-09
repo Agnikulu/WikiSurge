@@ -275,8 +275,8 @@ function DetailRow({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-0.5" style={{ background: 'rgba(0,255,136,0.06)' }}>
-        <Icon className="h-4 w-4" style={{ color: 'rgba(0,255,136,0.4)' }} />
+      <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-0.5" style={{ background: 'rgba(0,255,136,0.06)', color: 'rgba(0,255,136,0.4)' }}>
+        <Icon className="h-4 w-4" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[11px] font-medium uppercase tracking-wider mb-0.5" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>

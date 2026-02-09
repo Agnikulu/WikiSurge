@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { List } from 'react-window';
 import type { Edit } from '../../types';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import type { ConnectionState } from '../../hooks/useWebSocket';
@@ -64,30 +65,32 @@ export function LiveFeed() {
   const [selectedEdit, setSelectedEdit] = useState<Edit | null>(null);
   const [userScrolled, setUserScrolled] = useState(false);
 
-  const feedRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<{ 
+    readonly element: HTMLDivElement | null;
+    scrollToRow: (config: { 
+      index: number; 
+      align?: 'auto' | 'center' | 'end' | 'smart' | 'start';
+      behavior?: 'auto' | 'instant' | 'smooth';
+    }) => void;
+  } | null>(null);
   const lastScrollRef = useRef<number>(0);
 
   // Auto-scroll to top on new edits (throttled to prevent jank)
   useEffect(() => {
-    if (!userScrolled && !isPaused && feedRef.current) {
+    if (!userScrolled && !isPaused && listRef.current && edits.length > 0) {
       const now = Date.now();
       // Throttle: only scroll if 500ms have passed since last scroll
       if (now - lastScrollRef.current > 500) {
         lastScrollRef.current = now;
-        feedRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        listRef.current.scrollToRow({ index: 0, behavior: 'smooth' });
       }
     }
   }, [edits, userScrolled, isPaused]);
 
-  // Detect user scroll
-  const handleScroll = useCallback(() => {
-    if (!feedRef.current) return;
-    const { scrollTop } = feedRef.current;
-    setUserScrolled(scrollTop > 40);
-  }, []);
+  // Detect user scroll - handled by List's onScroll
 
   const scrollToTop = useCallback(() => {
-    feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    listRef.current?.scrollToRow({ index: 0, behavior: 'smooth' });
     setUserScrolled(false);
   }, []);
 
@@ -98,6 +101,29 @@ export function LiveFeed() {
   const handleCloseModal = useCallback(() => {
     setSelectedEdit(null);
   }, []);
+
+  // Row renderer for virtual list
+  const RowComponent = useCallback((props: any) => {
+    const { index, style, ariaAttributes } = props;
+    const edit = edits[index];
+    const isFirstItem = index === 0 && !isPaused;
+    
+    return (
+      <div style={style} {...ariaAttributes} className={isFirstItem ? 'animate-feed-in' : ''}>
+        <div className="px-1 pb-0.5">
+          <EditItem edit={edit} onClick={handleEditClick} />
+        </div>
+      </div>
+    );
+  }, [edits, isPaused, handleEditClick]);
+
+  const handleRowsRendered = useCallback(
+    (visibleRows: { startIndex: number; stopIndex: number }) => {
+      // Detect if user has scrolled away from top
+      setUserScrolled(visibleRows.startIndex > 0);
+    },
+    []
+  );
 
   return (
     <div className="card flex flex-col">
@@ -181,15 +207,7 @@ export function LiveFeed() {
       )}
 
       {/* Feed */}
-      <div
-        ref={feedRef}
-        onScroll={handleScroll}
-        className="relative space-y-0.5 max-h-[400px] overflow-y-auto scroll-smooth overscroll-contain
-          scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent"
-        role="feed"
-        aria-label="Live edit feed"
-        aria-busy={connectionState === 'connecting'}
-      >
+      <div className="relative">
         {/* Loading state */}
         {connectionState === 'connecting' && edits.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
@@ -226,15 +244,19 @@ export function LiveFeed() {
           </div>
         )}
 
-        {/* Edit list */}
-        {edits.map((edit, index) => (
-          <div
-            key={`${edit.id}-${edit.revision?.new ?? index}`}
-            className={index === 0 && !isPaused ? 'animate-feed-in' : ''}
-          >
-            <EditItem edit={edit} onClick={handleEditClick} />
-          </div>
-        ))}
+        {/* Virtualized Edit list */}
+        {edits.length > 0 && (
+          <List<Record<string, never>>
+            listRef={listRef}
+            rowComponent={RowComponent}
+            rowCount={edits.length}
+            rowHeight={90}
+            rowProps={{}}
+            onRowsRendered={handleRowsRendered}
+            style={{ height: 400 }}
+            className="scroll-smooth overscroll-contain scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent"
+          />
+        )}
       </div>
 
       {/* Scroll-to-top button */}

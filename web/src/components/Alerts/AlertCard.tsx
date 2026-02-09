@@ -9,6 +9,12 @@ interface AlertCardProps {
 }
 
 export function AlertCard({ alert, onDismiss }: AlertCardProps) {
+  // Defensive: ensure alert has required fields
+  if (!alert || !alert.type || !alert.page_title || !alert.severity) {
+    console.warn('[AlertCard] Invalid alert data:', alert);
+    return null;
+  }
+
   const severity = getSeverityColor(alert.severity);
 
   if (alert.type === 'spike') {
@@ -85,12 +91,20 @@ function SpikeAlertCard({
 
           {/* Stats */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}>
-            <span className="font-medium" style={{ color: '#ffaa00' }}>
-              {alert.spike_ratio.toFixed(1)}x normal rate
-            </span>
-            <span>·</span>
-            <span>{alert.edits_5min} edits in 5 min</span>
-            <span>·</span>
+            {alert.spike_ratio != null && (
+              <>
+                <span className="font-medium" style={{ color: '#ffaa00' }}>
+                  {alert.spike_ratio.toFixed(1)}x normal rate
+                </span>
+                <span>·</span>
+              </>
+            )}
+            {alert.edits_5min != null && (
+              <>
+                <span>{alert.edits_5min} edits in 5 min</span>
+                <span>·</span>
+              </>
+            )}
             <span>{formatTimestamp(alert.timestamp)}</span>
           </div>
         </div>
@@ -158,12 +172,24 @@ function EditWarAlertCard({
 
           {/* Stats */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs" style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}>
-            <span>{alert.editor_count} editors</span>
-            <span>·</span>
-            <span>{alert.revert_count} reverts</span>
-            <span>·</span>
-            <span>{alert.edit_count} edits</span>
-            <span>·</span>
+            {alert.editor_count != null && (
+              <>
+                <span>{alert.editor_count} editors</span>
+                <span>·</span>
+              </>
+            )}
+            {alert.revert_count != null && (
+              <>
+                <span>{alert.revert_count} reverts</span>
+                <span>·</span>
+              </>
+            )}
+            {alert.edit_count != null && (
+              <>
+                <span>{alert.edit_count} edits</span>
+                <span>·</span>
+              </>
+            )}
             <span>{formatTimestamp(alert.start_time)}</span>
           </div>
         </div>
