@@ -1,4 +1,90 @@
-.PHONY: setup kafka-setup start stop clean logs health test
+.PHONY: setup kafka-setup start stop stop-all clean reset logs health test dev dev-backend dev-web help
+
+# Show available commands
+help:
+	@echo "WikiSurge - Available Commands"
+	@echo "==============================="
+	@echo ""
+	@echo "Quick Start:"
+	@echo "  make dev         - Clean, build, and start everything (backend only)"
+	@echo "  make dev-web     - Start web app (run in separate terminal)"
+	@echo "  make reset       - Stop everything and clean up"
+	@echo ""
+	@echo "Service Control:"
+	@echo "  make start       - Start Docker services"
+	@echo "  make stop        - Stop Docker services"
+	@echo "  make stop-all    - Stop Docker + Go processes"
+	@echo "  make dev-backend - Restart backend services only"
+	@echo ""
+	@echo "Build & Test:"
+	@echo "  make build       - Build Go applications"
+	@echo "  make test        - Run all tests"
+	@echo "  make deps        - Install dependencies"
+	@echo ""
+	@echo "Monitoring:"
+	@echo "  make health      - Check service health"
+	@echo "  make logs        - View Docker logs"
+	@echo "  make urls        - Show service URLs"
+	@echo ""
+	@echo "Cleanup:"
+	@echo "  make clean       - Remove containers and volumes"
+	@echo ""
+
+# Stop all services including Go processes
+stop-all:
+	@echo "Stopping all services..."
+	-@pkill -f "./bin/api" 2>/dev/null || true
+	-@pkill -f "./bin/ingestor" 2>/dev/null || true
+	-@pkill -f "./bin/processor" 2>/dev/null || true
+	@docker-compose down 2>/dev/null || true
+	@echo "✅ All services stopped!"
+
+# Full reset - stop everything and clean
+reset: stop-all clean
+	@echo "✅ Full reset complete!"
+
+# Development mode - start everything
+dev: reset build
+	@echo "Starting development environment..."
+	@docker-compose up -d
+	@echo "Waiting for services to be ready..."
+	@sleep 8
+	@echo "Creating Kafka topic..."
+	@docker-compose exec -T kafka rpk topic create wikipedia.edits --partitions 3 --replicas 1 || echo "Topic may already exist"
+	@echo "Starting processor..."
+	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/processor > processor.log 2>&1 &
+	@echo "Starting ingestor..."
+	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/ingestor > ingestor.log 2>&1 &
+	@echo "Starting API..."
+	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/api > api.log 2>&1 &
+	@sleep 2
+	@echo ""
+	@echo "✅ Backend services started!"
+	@echo ""
+	@echo "To start the web app, run:"
+	@echo "  cd web && npm run dev"
+	@echo ""
+	@echo "View logs:"
+	@echo "  tail -f processor.log"
+	@echo "  tail -f ingestor.log"
+	@echo "  tail -f api.log"
+
+# Start only backend services (assumes Docker is running)
+dev-backend:
+	@echo "Starting backend services..."
+	-@pkill -f "./bin/api" 2>/dev/null || true
+	-@pkill -f "./bin/ingestor" 2>/dev/null || true
+	-@pkill -f "./bin/processor" 2>/dev/null || true
+	@sleep 1
+	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/processor > processor.log 2>&1 &
+	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/ingestor > ingestor.log 2>&1 &
+	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/api > api.log 2>&1 &
+	@echo "✅ Backend services restarted!"
+
+# Start web app
+dev-web:
+	@echo "Starting web application..."
+	@cd web && npm run dev
 
 # Setup infrastructure
 setup:
@@ -125,13 +211,6 @@ validate:
 	@echo "✅ Configuration and metrics validation complete!"
 	@echo "Running tests..."
 	@go test ./... -v
-
-# Build all Go applications
-build:
-	@echo "Building applications..."
-	@go build -o bin/ingestor ./cmd/ingestor
-	@go build -o bin/processor ./cmd/processor
-	@go build -o bin/api ./cmd/api
 
 # Install Go dependencies
 deps:
