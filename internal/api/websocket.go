@@ -41,7 +41,7 @@ const (
 	defaultMaxPerIP = 50
 
 	// Client send channel buffer size.
-	sendBufferSize = 256
+	sendBufferSize = 512 // Increased from 256
 
 	// Stale connection timeout.
 	staleTimeout = 60 * time.Second
@@ -251,7 +251,7 @@ type WebSocketHub struct {
 func NewWebSocketHub(logger zerolog.Logger) *WebSocketHub {
 	return &WebSocketHub{
 		clients:    make(map[*Client]bool),
-		broadcast:  make(chan []byte, 256),
+		broadcast:  make(chan []byte, 512), // Increased buffer from 256
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		maxClients: defaultMaxClients,

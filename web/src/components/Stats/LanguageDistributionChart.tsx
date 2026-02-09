@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, memo } from 'react';
 import { Globe } from 'lucide-react';
-import type { Stats } from '../../types';
+import { useAppStore } from '../../store/appStore';
 
 // ── Colors ────────────────────────────────────────────────────────
 const LANG_COLORS = [
@@ -9,43 +9,10 @@ const LANG_COLORS = [
 ];
 
 // ── Main component ───────────────────────────────────────────────
-export function LanguageDistributionChart() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchStats = async () => {
-      try {
-        const res = await fetch('/api/stats');
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const text = await res.text();
-        if (!text) {
-          throw new Error('Empty response body');
-        }
-        const data: Stats = JSON.parse(text);
-        if (mounted) {
-          setStats(data);
-          setError(null);
-        }
-      } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      }
-    };
-
-    fetchStats();
-    const interval = setInterval(fetchStats, 10_000);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, []);
+export const LanguageDistributionChart = memo(function LanguageDistributionChart() {
+  // Get stats from global store (shared with StatsOverview)
+  const stats = useAppStore((s) => s.stats);
+  const [error] = useState<string | null>(null);
 
   const languages = stats?.top_languages?.slice(0, 10) ?? [];
   const maxCount = Math.max(...languages.map((l) => l.count), 1);
@@ -139,4 +106,4 @@ export function LanguageDistributionChart() {
       )}
     </div>
   );
-}
+});

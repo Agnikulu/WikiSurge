@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { Activity } from 'lucide-react';
-import type { TimeRange, TimeSeriesPoint, Stats } from '../../types';
+import type { TimeRange, TimeSeriesPoint } from '../../types';
+import { useAppStore } from '../../store/appStore';
 
 const RANGE_CONFIG: Record<TimeRange, { label: string; minutes: number; bucketSec: number }> = {
   '1h':  { label: '1H',  minutes: 60,   bucketSec: 10 },
@@ -23,34 +24,18 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 600, h: 240 });
   const [tick, setTick] = useState(0); // animation driver
-  const [stats, setStats] = useState<Stats | null>(null);
+  
+  // Get stats from global store (shared with StatsOverview)
+  const stats = useAppStore((s) => s.stats);
 
-  // Smooth updates — 10 seconds
+  // Animation tick for scan-line sweep - 24 FPS for smooth animation
   useEffect(() => {
-    let mounted = true;
-    const fetchStats = async () => {
-      try {
-        const res = await fetch('/api/stats');
-        if (res.ok) {
-          const data: Stats = await res.json();
-          if (mounted) setStats(data);
-        }
-      } catch { /* ignore */ }
-    };
-    fetchStats();
-    const interval = setInterval(fetchStats, 10_000);
-    return () => { mounted = false; clearInterval(interval); };
-  }, []);
-
-  // Animation tick for scan-line sweep
-  useEffect(() => {
-    let raf: number;
+    let interval: ReturnType<typeof setInterval>;
     const loop = () => {
       setTick(Date.now());
-      raf = requestAnimationFrame(loop);
     };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    interval = setInterval(loop, 42); // ~24 FPS (1000ms / 24 ≈ 42ms)
+    return () => clearInterval(interval);
   }, []);
 
   // Responsive sizing
@@ -107,7 +92,6 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
     const now = Date.now();
     const rangeMs = config.minutes * 60 * 1000;
     const tMin = now - rangeMs;
-    const tMax = now;
     const tRange = rangeMs;
     
     return chartData.map((p) => ({
@@ -132,7 +116,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
     });
   }, [maxValue, chartH]);
 
-  // X-axis labels - show expected time range, not actual data range
+  // X-axis labels - show expected time range, update only every 10 seconds
   const xLabels = useMemo(() => {
     const now = Date.now();
     const rangeMs = config.minutes * 60 * 1000;
@@ -152,7 +136,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
         }),
       };
     });
-  }, [config.minutes, chartW, tick]); // Update with animation tick so labels move with time
+  }, [config.minutes, chartW, Math.floor(tick / 10000)]); // Only update every 10 seconds
 
   // Scan-line X position — sweeps across chart area every 4 seconds
   const scanX = useMemo(() => {

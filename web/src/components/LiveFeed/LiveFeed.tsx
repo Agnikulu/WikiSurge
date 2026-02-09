@@ -65,11 +65,17 @@ export function LiveFeed() {
   const [userScrolled, setUserScrolled] = useState(false);
 
   const feedRef = useRef<HTMLDivElement>(null);
+  const lastScrollRef = useRef<number>(0);
 
-  // Auto-scroll to top on new edits (only if user hasn't scrolled down)
+  // Auto-scroll to top on new edits (throttled to prevent jank)
   useEffect(() => {
     if (!userScrolled && !isPaused && feedRef.current) {
-      feedRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      const now = Date.now();
+      // Throttle: only scroll if 500ms have passed since last scroll
+      if (now - lastScrollRef.current > 500) {
+        lastScrollRef.current = now;
+        feedRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     }
   }, [edits, userScrolled, isPaused]);
 

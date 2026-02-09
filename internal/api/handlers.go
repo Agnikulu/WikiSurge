@@ -124,11 +124,12 @@ type LanguageStat struct {
 }
 
 func (s *APIServer) handleGetStats(w http.ResponseWriter, r *http.Request) {
-	// Return cached result if fresh (< 5 seconds)
+	// Return cached result if fresh (< 10 seconds) - matches frontend poll interval
 	s.statsMu.RLock()
-	if s.statsCache != nil && time.Since(s.statsCacheTime) < 5*time.Second {
+	if s.statsCache != nil && time.Since(s.statsCacheTime) < 10*time.Second {
 		cached := *s.statsCache
 		s.statsMu.RUnlock()
+		w.Header().Set("Cache-Control", "max-age=10")
 		respondJSON(w, http.StatusOK, cached)
 		return
 	}
@@ -172,10 +173,10 @@ func (s *APIServer) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		TopLanguages:  []LanguageStat{},
 	}
 
-	// Compute edits_today from activity key count.
-	activityKeys, err := s.redis.Keys(ctx, "activity:*").Result()
-	if err == nil {
-		resp.EditsToday = len(activityKeys)
+	// Compute edits_today from stats tracker counter (not KEYS scan)
+	if s.statsTracker != nil {
+		todayCount, _ := s.statsTracker.GetDailyEditCount(ctx)
+		resp.EditsToday = int(todayCount)
 	}
 
 	// Compute edits_per_second: use activity count / uptime as approximation.
@@ -257,6 +258,7 @@ func (s *APIServer) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	s.statsCacheTime = time.Now()
 	s.statsMu.Unlock()
 
+	w.Header().Set("Cache-Control", "max-age=10, stale-while-revalidate=5")
 	respondJSON(w, http.StatusOK, resp)
 }
 
@@ -313,8 +315,8 @@ func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
 		streams = []string{validTypes[params.AlertType]}
 	}
 
-	// Fetch a larger batch to allow for filtering + offset
-	fetchCount := int64(params.Limit + params.Offset + 100)
+	// Fetch with reasonable buffer for filtering
+	fetchCount := int64(params.Limit + params.Offset + 50)
 	var allAlerts []storage.Alert
 
 	for _, stream := range streams {

@@ -67,7 +67,7 @@ func (h *AlertHub) Stop() {
 // Subscribe returns a channel that receives alerts.  The caller MUST call
 // Unsubscribe when done to avoid leaks.
 func (h *AlertHub) Subscribe() chan storage.Alert {
-	ch := make(chan storage.Alert, 64)
+	ch := make(chan storage.Alert, 128) // Increased buffer from 64 to 128
 	h.mu.Lock()
 	h.subscribers[ch] = struct{}{}
 	h.mu.Unlock()

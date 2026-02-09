@@ -107,6 +107,19 @@ func (st *StatsTracker) GetEditTypes(ctx context.Context) (human, bot int64, err
 	return human, bot, nil
 }
 
+// GetDailyEditCount returns the total edit count for today.
+func (st *StatsTracker) GetDailyEditCount(ctx context.Context) (int64, error) {
+	totalStr, err := st.redis.HGet(ctx, "stats:languages", "__total__").Result()
+	if err == redis.Nil {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	total, _ := strconv.ParseInt(totalStr, 10, 64)
+	return total, nil
+}
+
 // GetTimeline returns edit counts per minute for the given duration.
 func (st *StatsTracker) GetTimeline(ctx context.Context, duration time.Duration) ([]TimelinePoint, error) {
 	now := time.Now().Truncate(time.Minute).Unix()

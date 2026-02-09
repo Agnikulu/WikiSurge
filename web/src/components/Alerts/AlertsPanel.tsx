@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo, memo } from 'react';
 import type { Alert } from '../../types';
 import { getAlerts } from '../../utils/api';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -27,7 +27,7 @@ const AUTO_DISMISS_MS = 5 * 60 * 1000; // 5 minutes
 const SEVERITY_OPTIONS = ['all', 'critical', 'high', 'medium', 'low'] as const;
 const TYPE_OPTIONS = ['all', 'spike', 'edit_war'] as const;
 
-export function AlertsPanel() {
+export const AlertsPanel = memo(function AlertsPanel() {
   // ── State ──
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [severityFilter, setSeverityFilter] = useState<string>('all');
@@ -85,15 +85,24 @@ export function AlertsPanel() {
     enabled: wsDisconnected,
   });
 
-  // Also do an initial fetch to populate the list
+  // Initial fetch only if WebSocket fails to connect within 3 seconds
   const didInitialFetchRef = useRef(false);
   useEffect(() => {
     if (didInitialFetchRef.current) return;
-    didInitialFetchRef.current = true;
-    getAlerts(MAX_ALERTS)
-      .then((data) => setAlerts(data))
-      .catch(() => {});
-  }, []);
+    if (connected) {
+      didInitialFetchRef.current = true;
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (!connected && !didInitialFetchRef.current) {
+        didInitialFetchRef.current = true;
+        getAlerts(MAX_ALERTS)
+          .then((data) => setAlerts(data))
+          .catch(() => {});
+      }
+    }, 3000); // Wait 3 seconds for WebSocket before falling back
+    return () => clearTimeout(timer);
+  }, [connected]);
 
   // ── Auto-dismiss timer ──
   useEffect(() => {
@@ -125,11 +134,13 @@ export function AlertsPanel() {
   }, [soundOn]);
 
   // ── Filtered list ──
-  const filteredAlerts = alerts.filter((a) => {
-    if (severityFilter !== 'all' && a.severity !== severityFilter) return false;
-    if (typeFilter !== 'all' && a.type !== typeFilter) return false;
-    return true;
-  });
+  const filteredAlerts = useMemo(() => {
+    return alerts.filter((a) => {
+      if (severityFilter !== 'all' && a.severity !== severityFilter) return false;
+      if (typeFilter !== 'all' && a.type !== typeFilter) return false;
+      return true;
+    });
+  }, [alerts, severityFilter, typeFilter]);
 
   // ── Render ──
   return (
@@ -259,4 +270,4 @@ export function AlertsPanel() {
       </div>
     </div>
   );
-}
+});

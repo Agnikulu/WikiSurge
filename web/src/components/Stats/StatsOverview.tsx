@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, memo } from 'react';
 import { Activity, TrendingUp, AlertTriangle, BarChart3, Zap, Globe, RefreshCw } from 'lucide-react';
 import type { Stats } from '../../types';
 import { getStats } from '../../utils/api';
@@ -15,7 +15,7 @@ function computeTrend(current: number, previous: number): Trend | undefined {
   return { direction: pct > 0 ? 'up' : 'down', value: Math.abs(pct) };
 }
 
-export function StatsOverview() {
+export const StatsOverview = memo(function StatsOverview() {
   const updateStats = useAppStore((s) => s.updateStats);
   const setApiHealthy = useAppStore((s) => s.setApiHealthy);
   const previousStats = useRef<Stats | null>(null);
@@ -28,7 +28,7 @@ export function StatsOverview() {
 
   const { data: stats, loading, error, refresh, lastUpdate } = usePollingData<Stats>({
     fetchFunction: fetchFn,
-    interval: 5_000,
+    interval: 10_000, // Increased from 5s to match backend cache
   });
 
   // Sync API health to global store
@@ -163,4 +163,4 @@ export function StatsOverview() {
       </div>
     </div>
   );
-}
+});

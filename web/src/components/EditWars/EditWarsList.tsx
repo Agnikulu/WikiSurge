@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import type { EditWar } from '../../types';
 import { getEditWars } from '../../utils/api';
 import { useAPI } from '../../hooks/useAPI';
@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 const RESOLVED_LINGER_MS = 60_000; // auto-remove resolved wars after 1 min
-const POLL_INTERVAL = 15_000;
+const POLL_INTERVAL = 20_000; // Reduced polling frequency
 
 /** Sort: by severity weight (desc), then by start_time (desc) */
 const SEVERITY_WEIGHT: Record<string, number> = {
@@ -35,7 +35,7 @@ function sortWars(a: EditWar, b: EditWar): number {
   return tb - ta;
 }
 
-export function EditWarsList() {
+export const EditWarsList = memo(function EditWarsList() {
   const [filter, setFilter] = useState<'active' | 'all'>('active');
   const [collapsed, setCollapsed] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -221,7 +221,7 @@ export function EditWarsList() {
       )}
     </div>
   );
-}
+});
 
 /* ── Sub-components ─────────────────────────────────── */
 

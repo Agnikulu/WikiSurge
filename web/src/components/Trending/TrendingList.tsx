@@ -1,4 +1,4 @@
-import { useCallback, useRef, useMemo, useState } from 'react';
+import { useCallback, useRef, useMemo, useState, memo } from 'react';
 import type { TrendingPage } from '../../types';
 import { getTrending } from '../../utils/api';
 import { usePollingData } from '../../hooks/usePolling';
@@ -17,7 +17,7 @@ const COMMON_LANGUAGES = [
   { code: 'zh', label: 'ZH' },
 ];
 
-export function TrendingList() {
+export const TrendingList = memo(function TrendingList() {
   const updateTrending = useAppStore((s) => s.updateTrending);
   const filters = useAppStore((s) => s.filters);
 
@@ -190,4 +190,4 @@ export function TrendingList() {
       )}
     </div>
   );
-}
+});

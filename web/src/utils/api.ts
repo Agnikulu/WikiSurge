@@ -47,7 +47,12 @@ export const searchEdits = async (
   if (params?.min_bytes !== undefined) searchParams.min_bytes = params.min_bytes;
   if (params?.max_bytes !== undefined) searchParams.max_bytes = params.max_bytes;
   const response = await api.get('/api/search', { params: searchParams });
-  return response.data;
+  // Backend returns 'hits' but frontend expects 'edits'
+  const data = response.data;
+  return {
+    edits: data.hits || [],
+    total: data.total || 0,
+  };
 };
 
 export const getAlerts = async (limit = 20): Promise<Alert[]> => {
