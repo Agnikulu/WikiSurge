@@ -478,17 +478,13 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				revertCount = countRevertPatterns(changes)
 			}
 
-			// If editor data expired, provide sensible defaults from alert stream.
+			// If editor data expired, skip this edit war (it's no longer active).
+			// Editor data has 10-min TTL, so if it's gone, there's been no activity.
 			if len(editors) == 0 {
-				totalEdits = 5  // minimum threshold that triggered the war
-				revertCount = 2 // minimum reverts that triggered the war
+				continue // Skip inactive wars, they'll appear in history
 			}
 
 			severity := classifyEditWarSeverity(len(editors), totalEdits, revertCount)
-			if len(editors) == 0 {
-				// No live editor data — default to at least "moderate"
-				severity = "moderate"
-			}
 
 			war := map[string]interface{}{
 				"page_title":   pageTitle,

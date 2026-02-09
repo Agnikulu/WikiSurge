@@ -339,25 +339,44 @@ export const AlertsPanel = memo(function AlertsPanel() {
 
       {/* ── Alert list ── */}
       <div className="space-y-2 max-h-[500px] overflow-y-auto scrollbar-thin" role="log" aria-label="Alert notifications" aria-live="polite">
-        {filteredAlerts.length > 0 ? (
-          filteredAlerts.map((alert, index) => (
-            <AlertCard
-              key={`${alert.page_title}-${alert.type}-${index}`}
-              alert={alert}
-              onDismiss={handleDismiss}
-            />
-          ))
-        ) : alerts.length > 0 ? (
-          <div className="text-center py-8 text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
-            <Filter className="h-6 w-6 mx-auto mb-2" style={{ color: 'rgba(0,255,136,0.2)' }} />
-            NO ALERTS MATCH FILTERS
-          </div>
-        ) : (
-          <div className="text-center py-8 text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
-            <AlertTriangle className="h-8 w-8 mx-auto mb-2" style={{ color: 'rgba(0,255,136,0.2)' }} />
-            MONITORING… NO ALERTS
-          </div>
-        )}
+        {
+          filteredAlerts.length > 0
+            ? filteredAlerts.map((alert, i) => {
+                const isActive = (() => {
+                  try {
+                    const ts = 'timestamp' in alert ? alert.timestamp : (alert as { start_time?: string }).start_time;
+                    if (!ts) return true;
+                    const alertTime = new Date(ts).getTime();
+                    if (isNaN(alertTime)) return true;
+                    return Date.now() - alertTime < 5 * 60 * 1000; // 5 minutes
+                  } catch {
+                    return true;
+                  }
+                })();
+                
+                return (
+                  <AlertCard
+                    key={`${alert.page_title}-${alert.type}-${i}`}
+                    alert={alert}
+                    onDismiss={handleDismiss}
+                    isActive={isActive}
+                  />
+                );
+              })
+            : alerts.length > 0
+              ? (
+                <div className="text-center py-8 text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+                  <Filter className="h-6 w-6 mx-auto mb-2" style={{ color: 'rgba(0,255,136,0.2)' }} />
+                  NO ALERTS MATCH FILTERS
+                </div>
+              )
+              : (
+                <div className="text-center py-8 text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>
+                  <AlertTriangle className="h-8 w-8 mx-auto mb-2" style={{ color: 'rgba(0,255,136,0.2)' }} />
+                  MONITORING… NO ALERTS
+                </div>
+              )
+        }
       </div>
     </div>
   );
