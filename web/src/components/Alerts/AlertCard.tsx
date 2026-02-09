@@ -6,10 +6,9 @@ import { SeverityBadge } from './SeverityBadge';
 interface AlertCardProps {
   alert: Alert;
   onDismiss?: (alert: Alert) => void;
-  isActive?: boolean; // True if alert is from last 5 minutes
 }
 
-export function AlertCard({ alert, onDismiss, isActive = true }: AlertCardProps) {
+export function AlertCard({ alert, onDismiss }: AlertCardProps) {
   // Defensive: ensure alert has required fields
   if (!alert || !alert.type || !alert.page_title || !alert.severity) {
     console.warn('[AlertCard] Invalid alert data:', alert);
@@ -20,7 +19,7 @@ export function AlertCard({ alert, onDismiss, isActive = true }: AlertCardProps)
 
   if (alert.type === 'spike') {
     return (
-      <SpikeAlertCard alert={alert} severity={severity} onDismiss={onDismiss} isActive={isActive} />
+      <SpikeAlertCard alert={alert} severity={severity} onDismiss={onDismiss} />
     );
   }
 
@@ -29,7 +28,6 @@ export function AlertCard({ alert, onDismiss, isActive = true }: AlertCardProps)
       alert={alert as EditWarAlert}
       severity={severity}
       onDismiss={onDismiss}
-      isActive={isActive}
     />
   );
 }
@@ -38,12 +36,10 @@ function SpikeAlertCard({
   alert,
   severity,
   onDismiss,
-  isActive,
 }: {
   alert: SpikeAlert;
   severity: ReturnType<typeof getSeverityColor>;
   onDismiss?: (alert: Alert) => void;
-  isActive?: boolean;
 }) {
   const wikiUrl = buildWikiUrl(alert.page_title);
 
@@ -53,7 +49,6 @@ function SpikeAlertCard({
         relative p-3 rounded-lg border-l-4 ${severity.bg} ${severity.border}
         animate-slide-up transition-all duration-200
         hover:shadow-sm group
-        ${!isActive ? 'opacity-60' : ''}
       `}
     >
       {/* Dismiss */}
@@ -80,9 +75,7 @@ function SpikeAlertCard({
             <Zap className={`h-3.5 w-3.5 ${severity.text}`} />
             <span className={`text-sm font-semibold ${severity.text}`} style={{ fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Spike Detected</span>
             <SeverityBadge severity={alert.severity} />
-            {!isActive && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(0,255,136,0.4)' }}>HISTORICAL</span>
-            )}
+            {/* historical tag removed; historical alerts shown in separate section on Alerts page */}
           </div>
 
           {/* Page title */}
@@ -125,12 +118,10 @@ function EditWarAlertCard({
   alert,
   severity,
   onDismiss,
-  isActive,
 }: {
   alert: EditWarAlert;
   severity: ReturnType<typeof getSeverityColor>;
   onDismiss?: (alert: Alert) => void;
-  isActive?: boolean;
 }) {
   const wikiUrl = buildWikiUrl(alert.page_title);
 
@@ -140,7 +131,6 @@ function EditWarAlertCard({
         relative p-3 rounded-lg border-l-4 ${severity.bg} ${severity.border}
         animate-slide-up transition-all duration-200
         hover:shadow-sm group
-        ${!isActive ? 'opacity-60' : ''}
       `}
     >
       {/* Dismiss */}
@@ -167,9 +157,7 @@ function EditWarAlertCard({
             <Swords className={`h-3.5 w-3.5 ${severity.text}`} />
             <span className={`text-sm font-semibold ${severity.text}`} style={{ fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Edit War</span>
             <SeverityBadge severity={alert.severity} />
-            {!isActive && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(0,255,136,0.4)' }}>HISTORICAL</span>
-            )}
+            {/* historical tag removed; historical alerts shown in separate section on Alerts page */}
           </div>
 
           {/* Page title */}

@@ -28,7 +28,7 @@ const AUTO_DISMISS_MS = 5 * 60 * 1000; // 5 minutes
 const SEVERITY_OPTIONS = ['all', 'critical', 'high', 'medium', 'low'] as const;
 const TYPE_OPTIONS = ['all', 'spike', 'edit_war'] as const;
 
-export const AlertsPanel = memo(function AlertsPanel() {
+export const AlertsPanel = memo(function AlertsPanel({ showHistorical }: { showHistorical?: boolean } = {}) {
   // ── State ──
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [severityFilter, setSeverityFilter] = useState<string>('all');
@@ -141,7 +141,9 @@ export const AlertsPanel = memo(function AlertsPanel() {
   usePolling({
     fetcher: async () => {
       try {
-        const data = await getAlerts(MAX_ALERTS);
+        // For polling we only need active alerts (5 minutes)
+        const since = new Date(Date.now() - AUTO_DISMISS_MS).toISOString();
+        const data = await getAlerts(MAX_ALERTS, since);
         // Only update if we got data - don't clear existing alerts
         if (data && data.length > 0) {
           setAlerts((prev) => {
@@ -169,23 +171,41 @@ export const AlertsPanel = memo(function AlertsPanel() {
     enabled: persistentDisconnect,
   });
 
-  // Initial fetch on mount to load historical alerts
+  // Initial fetch on mount to load alerts
   // WebSocket only provides NEW alerts, so we need REST to get existing ones
   const didInitialFetchRef = useRef(false);
+  // Historical alerts handled by HistoricalAlerts component
+
   useEffect(() => {
     if (didInitialFetchRef.current) return;
     didInitialFetchRef.current = true;
-    
-    getAlerts(MAX_ALERTS)
-      .then((data) => {
-        if (data && data.length > 0) {
-          setAlerts(data);
-        }
-      })
-      .catch((err) => {
+
+    // Dashboard (no historical): fetch only active alerts (last 5 minutes)
+    if (!showHistorical) {
+      const since = new Date(Date.now() - AUTO_DISMISS_MS).toISOString();
+      getAlerts(MAX_ALERTS, since)
+        .then((data) => {
+          if (data && data.length > 0) {
+            setAlerts(data);
+          }
+        })
+        .catch((err) => {
+          console.error('[AlertsPanel] Initial fetch error:', err);
+        });
+      return;
+    }
+
+    // Alerts page: fetch active (5m)
+    (async () => {
+      try {
+        const activeSince = new Date(Date.now() - AUTO_DISMISS_MS).toISOString();
+        const active = await getAlerts(MAX_ALERTS, activeSince);
+        if (active) setAlerts(active);
+      } catch (err) {
         console.error('[AlertsPanel] Initial fetch error:', err);
-      });
-  }, []);
+      }
+    })();
+  }, [showHistorical]);
 
   // ── Auto-dismiss timer ──
   useEffect(() => {
@@ -342,24 +362,11 @@ export const AlertsPanel = memo(function AlertsPanel() {
         {
           filteredAlerts.length > 0
             ? filteredAlerts.map((alert, i) => {
-                const isActive = (() => {
-                  try {
-                    const ts = 'timestamp' in alert ? alert.timestamp : (alert as { start_time?: string }).start_time;
-                    if (!ts) return true;
-                    const alertTime = new Date(ts).getTime();
-                    if (isNaN(alertTime)) return true;
-                    return Date.now() - alertTime < 5 * 60 * 1000; // 5 minutes
-                  } catch {
-                    return true;
-                  }
-                })();
-                
                 return (
                   <AlertCard
                     key={`${alert.page_title}-${alert.type}-${i}`}
                     alert={alert}
                     onDismiss={handleDismiss}
-                    isActive={isActive}
                   />
                 );
               })
@@ -378,6 +385,7 @@ export const AlertsPanel = memo(function AlertsPanel() {
               )
         }
       </div>
+      {/* Historical alerts removed from Alerts page (kept in backend) */}
     </div>
   );
 });

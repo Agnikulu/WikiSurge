@@ -55,8 +55,10 @@ export const searchEdits = async (
   };
 };
 
-export const getAlerts = async (limit = 20): Promise<Alert[]> => {
-  const response = await api.get('/api/alerts', { params: { limit } });
+export const getAlerts = async (limit = 20, since?: string): Promise<Alert[]> => {
+  const params: Record<string, unknown> = { limit };
+  if (since) params.since = since;
+  const response = await api.get('/api/alerts', { params });
   // The backend wraps alerts in {alerts:[], total, pagination}.
   const raw = response.data;
   if (Array.isArray(raw)) return raw;

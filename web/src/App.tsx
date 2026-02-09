@@ -151,7 +151,7 @@ function AlertsView() {
     <div className="max-w-3xl mx-auto">
       <ErrorBoundary>
         <Suspense fallback={<TrendingListSkeleton />}>
-          <AlertsPanel />
+          <AlertsPanel showHistorical />
         </Suspense>
       </ErrorBoundary>
     </div>
