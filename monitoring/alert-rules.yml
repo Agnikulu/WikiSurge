@@ -1,0 +1,221 @@
+# =============================================================================
+# WikiSurge - Prometheus Alert Rules
+# =============================================================================
+
+groups:
+  # ---------- Infrastructure Alerts ----------
+  - name: infrastructure
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minute."
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 > 400
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.job }}"
+          description: "{{ $labels.instance }} is using {{ $value | humanize }}MB of memory."
+
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.job }}"
+          description: "{{ $labels.instance }} CPU usage is {{ $value | humanizePercentage }}."
+
+  # ---------- Kafka Alerts ----------
+  - name: kafka
+    interval: 30s
+    rules:
+      - alert: HighKafkaConsumerLag
+        expr: wikisurge_kafka_consumer_lag > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Kafka consumer lag"
+          description: "Consumer lag is {{ $value }} messages (threshold: 1000)."
+
+      - alert: CriticalKafkaConsumerLag
+        expr: wikisurge_kafka_consumer_lag > 10000
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical Kafka consumer lag"
+          description: "Consumer lag is {{ $value }} messages (threshold: 10000)."
+
+      - alert: KafkaProducerErrors
+        expr: rate(wikisurge_kafka_producer_errors_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka producer errors detected"
+          description: "Producer error rate: {{ $value }}/s."
+
+  # ---------- Redis Alerts ----------
+  - name: redis
+    interval: 30s
+    rules:
+      - alert: HighRedisMemory
+        expr: wikisurge_redis_memory_usage_ratio > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage above 80%"
+          description: "Redis memory usage is at {{ $value | humanizePercentage }}."
+
+      - alert: CriticalRedisMemory
+        expr: wikisurge_redis_memory_usage_ratio > 0.95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis memory usage above 95%"
+          description: "Redis memory usage is at {{ $value | humanizePercentage }}. Eviction likely."
+
+      - alert: RedisConnectionErrors
+        expr: rate(wikisurge_redis_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis connection errors detected"
+          description: "Redis error rate: {{ $value }}/s."
+
+  # ---------- Elasticsearch Alerts ----------
+  - name: elasticsearch
+    interval: 30s
+    rules:
+      - alert: HighESDiskUsage
+        expr: wikisurge_es_disk_usage_ratio > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elasticsearch disk usage above 80%"
+          description: "ES disk usage is at {{ $value | humanizePercentage }}."
+
+      - alert: ESIndexingErrors
+        expr: rate(wikisurge_es_indexing_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elasticsearch indexing errors"
+          description: "ES indexing error rate: {{ $value }}/s."
+
+      - alert: ESClusterUnhealthy
+        expr: wikisurge_es_cluster_healthy == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Elasticsearch cluster is unhealthy"
+          description: "ES cluster health is not green/yellow."
+
+  # ---------- API Alerts ----------
+  - name: api
+    interval: 15s
+    rules:
+      - alert: HighAPIErrorRate
+        expr: rate(wikisurge_api_errors_total[5m]) / rate(wikisurge_api_requests_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API error rate above 1%"
+          description: "API error rate is {{ $value | humanizePercentage }}."
+
+      - alert: CriticalAPIErrorRate
+        expr: rate(wikisurge_api_errors_total[5m]) / rate(wikisurge_api_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API error rate above 5%"
+          description: "API error rate is {{ $value | humanizePercentage }}."
+
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, rate(wikisurge_api_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency above 1s"
+          description: "API p95 latency is {{ $value }}s."
+
+      - alert: HighWebSocketConnections
+        expr: wikisurge_websocket_connections > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket connections approaching limit"
+          description: "Active WebSocket connections: {{ $value }}."
+
+  # ---------- Ingestion Alerts ----------
+  - name: ingestion
+    interval: 15s
+    rules:
+      - alert: IngestionStopped
+        expr: rate(wikisurge_edits_received_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No edits being ingested"
+          description: "Ingestor has not received any edits for 5 minutes."
+
+      - alert: HighFilterRate
+        expr: rate(wikisurge_edits_filtered_total[5m]) / rate(wikisurge_edits_received_total[5m]) > 0.95
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Very high edit filter rate (>95%)"
+          description: "Filter rate is {{ $value | humanizePercentage }}. Check filter configuration."
+
+  # ---------- Processing Alerts ----------
+  - name: processing
+    interval: 15s
+    rules:
+      - alert: HighProcessingLatency
+        expr: histogram_quantile(0.95, rate(wikisurge_processing_duration_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Processing p95 latency above 500ms"
+          description: "Processing p95 latency is {{ $value }}s."
+
+      - alert: ProcessingErrors
+        expr: rate(wikisurge_processing_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Processing errors detected"
+          description: "Processing error rate: {{ $value }}/s."
+
+      - alert: SpikeDetected
+        expr: wikisurge_spikes_detected_total > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "Edit spike detected"
+          description: "A spike in edit activity was detected."

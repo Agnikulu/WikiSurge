@@ -1,0 +1,104 @@
+# =============================================================================
+# WikiSurge - Loki Log Aggregation Configuration
+# =============================================================================
+# Lightweight log aggregation with Grafana Loki.
+# Add to docker-compose.prod.yml if centralized logging is needed.
+# =============================================================================
+#
+# To enable, add these services to deployments/docker-compose.prod.yml:
+#
+#   loki:
+#     image: grafana/loki:latest
+#     container_name: wikisurge-loki
+#     restart: unless-stopped
+#     command: -config.file=/etc/loki/loki-config.yml
+#     ports:
+#       - "3100:3100"
+#     volumes:
+#       - ../monitoring/loki-config.yml:/etc/loki/loki-config.yml:ro
+#       - loki-data:/loki
+#     networks:
+#       - wikisurge-prod
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 512M
+#           cpus: '0.5'
+#     healthcheck:
+#       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/ready"]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 3
+#     logging:
+#       driver: json-file
+#       options:
+#         max-size: "5m"
+#         max-file: "3"
+#
+#   promtail:
+#     image: grafana/promtail:latest
+#     container_name: wikisurge-promtail
+#     restart: unless-stopped
+#     command: -config.file=/etc/promtail/promtail-config.yml
+#     volumes:
+#       - ../monitoring/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+#       - /var/lib/docker/containers:/var/lib/docker/containers:ro
+#       - /var/run/docker.sock:/var/run/docker.sock:ro
+#     networks:
+#       - wikisurge-prod
+#     depends_on:
+#       - loki
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 128M
+#           cpus: '0.25'
+#
+# Also add to volumes:
+#   loki-data:
+#     name: wikisurge-loki-data
+# =============================================================================
+
+# ---------- Loki Server Configuration ----------
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 168h  # 7 days
+  max_query_series: 500
+  max_query_parallelism: 2
+
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+
+analytics:
+  reporting_enabled: false

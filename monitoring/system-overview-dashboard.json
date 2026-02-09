@@ -1,0 +1,297 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "System Overview",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "title": "Services Health",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "count(up == 1)",
+          "legendFormat": "Healthy"
+        },
+        {
+          "expr": "count(up == 0)",
+          "legendFormat": "Unhealthy"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Edits Received (rate/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(wikisurge_edits_received_total[1m])",
+          "legendFormat": "Edits/s"
+        }
+      ]
+    },
+    {
+      "title": "Kafka Consumer Lag",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "wikisurge_kafka_consumer_lag",
+          "legendFormat": "{{ group }}"
+        }
+      ]
+    },
+    {
+      "title": "Processing Latency (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(wikisurge_processing_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(wikisurge_processing_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        }
+      ]
+    },
+    {
+      "title": "Error Rates",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(wikisurge_api_errors_total[5m])",
+          "legendFormat": "API Errors"
+        },
+        {
+          "expr": "rate(wikisurge_processing_errors_total[5m])",
+          "legendFormat": "Processing Errors"
+        },
+        {
+          "expr": "rate(wikisurge_kafka_producer_errors_total[5m])",
+          "legendFormat": "Kafka Errors"
+        }
+      ]
+    },
+    {
+      "title": "Ingestion Pipeline",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 },
+      "collapsed": false
+    },
+    {
+      "title": "Edits Received vs Filtered",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(wikisurge_edits_received_total[1m])",
+          "legendFormat": "Received"
+        },
+        {
+          "expr": "rate(wikisurge_edits_filtered_total[1m])",
+          "legendFormat": "Filtered"
+        },
+        {
+          "expr": "rate(wikisurge_edits_published_total[1m])",
+          "legendFormat": "Published"
+        }
+      ]
+    },
+    {
+      "title": "Filter Rate (%)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 22 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(wikisurge_edits_filtered_total[5m]) / rate(wikisurge_edits_received_total[5m]) * 100",
+          "legendFormat": "Filter %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "red", "value": 95 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Kafka Produced Messages",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 22 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(wikisurge_kafka_messages_produced_total[1m])",
+          "legendFormat": "msg/s"
+        }
+      ]
+    },
+    {
+      "title": "Storage",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
+      "collapsed": false
+    },
+    {
+      "title": "Redis Memory Usage",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 31 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "wikisurge_redis_memory_usage_ratio * 100",
+          "legendFormat": "Memory %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Hot Pages Count",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 31 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "wikisurge_hot_pages_total",
+          "legendFormat": "Hot Pages"
+        }
+      ]
+    },
+    {
+      "title": "Elasticsearch Documents",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 31 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "wikisurge_es_documents_indexed_total",
+          "legendFormat": "Total Docs"
+        }
+      ]
+    },
+    {
+      "title": "API Performance",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "collapsed": false
+    },
+    {
+      "title": "API Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(wikisurge_api_requests_total[1m])) by (endpoint)",
+          "legendFormat": "{{ endpoint }}"
+        }
+      ]
+    },
+    {
+      "title": "API Latency Percentiles",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(wikisurge_api_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.90, rate(wikisurge_api_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p90"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(wikisurge_api_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "title": "WebSocket Connections",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "wikisurge_websocket_connections",
+          "legendFormat": "Active"
+        }
+      ]
+    },
+    {
+      "title": "Rate Limiting",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 48 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(wikisurge_api_rate_limited_total[1m])",
+          "legendFormat": "Rate Limited/s"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["wikisurge", "production", "overview"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "WikiSurge - System Overview",
+  "uid": "wikisurge-system-overview",
+  "version": 1,
+  "refresh": "10s"
+}

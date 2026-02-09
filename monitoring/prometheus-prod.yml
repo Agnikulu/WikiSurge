@@ -1,0 +1,83 @@
+# =============================================================================
+# WikiSurge Production Prometheus Configuration
+# =============================================================================
+# Scrapes all services with production-appropriate intervals
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+  external_labels:
+    environment: production
+    project: wikisurge
+
+# ---------- Alert Rules ----------
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+# ---------- Scrape Configs ----------
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+  # WikiSurge Ingestor
+  - job_name: 'wikisurge-ingestor'
+    static_configs:
+      - targets: ['ingestor:2112']
+    metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # WikiSurge Processor (multiple replicas discovered via DNS)
+  - job_name: 'wikisurge-processor'
+    dns_sd_configs:
+      - names:
+          - 'processor'
+        type: 'A'
+        port: 2112
+    metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # WikiSurge API (multiple replicas discovered via DNS)
+  - job_name: 'wikisurge-api'
+    dns_sd_configs:
+      - names:
+          - 'api'
+        type: 'A'
+        port: 2112
+    metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Redis (via redis exporter sidecar or direct)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+  # Elasticsearch
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['elasticsearch:9200']
+    metrics_path: /_prometheus/metrics
+    scrape_interval: 30s
+
+  # Kafka / Redpanda internal metrics
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9644']
+    metrics_path: /public_metrics
+    scrape_interval: 15s
+
+  # Grafana
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    metrics_path: /metrics
+    scrape_interval: 30s

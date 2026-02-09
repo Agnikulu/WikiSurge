@@ -1,0 +1,24 @@
+# Environment files (contain secrets)
+.env.prod
+.env.local
+
+# Binaries
+bin/
+
+# Backups
+backups/
+
+# SSL certificates
+deployments/ssl/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+*.coverprofile

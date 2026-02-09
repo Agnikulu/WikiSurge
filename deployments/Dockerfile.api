@@ -1,0 +1,58 @@
+# =============================================================================
+# WikiSurge API - Multi-stage Dockerfile
+# =============================================================================
+# Stage 1: Build the Go binary
+# Stage 2: Minimal runtime image (~15MB)
+# =============================================================================
+
+# --------------- Build Stage ---------------
+FROM golang:1.24-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /build
+
+# Cache dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY cmd/api/ cmd/api/
+COPY internal/ internal/
+
+# Build static binary
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s -extldflags '-static'" \
+    -o /build/api \
+    ./cmd/api
+
+# --------------- Runtime Stage ---------------
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS and wget for health checks
+RUN apk add --no-cache ca-certificates wget tzdata \
+    && addgroup -S wikisurge \
+    && adduser -S -G wikisurge wikisurge
+
+WORKDIR /app
+
+# Copy binary and configs
+COPY --from=builder /build/api /app/api
+COPY configs/ /app/configs/
+
+# Set ownership
+RUN chown -R wikisurge:wikisurge /app
+
+# Switch to non-root user
+USER wikisurge
+
+# Expose API and metrics ports
+EXPOSE 8080 2112
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=10s \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+# Run the binary
+ENTRYPOINT ["/app/api"]
+CMD ["-config", "/app/configs/config.prod.yaml"]
