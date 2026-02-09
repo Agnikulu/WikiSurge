@@ -83,4 +83,11 @@ export const getRecentEdits = async (limit = 50): Promise<Edit[]> => {
   return response.data;
 };
 
+export const getTimeline = async (duration = '24h'): Promise<{ timestamp: number; value: number }[]> => {
+  const response = await api.get('/api/timeline', {
+    params: { duration },
+  });
+  return response.data;
+};
+
 export default api;

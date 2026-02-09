@@ -263,6 +263,55 @@ func (s *APIServer) handleGetStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
+// Timeline
+// ---------------------------------------------------------------------------
+
+func (s *APIServer) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
+	// Parse duration parameter (default: 24h)
+	durationStr := r.URL.Query().Get("duration")
+	if durationStr == "" {
+		durationStr = "24h"
+	}
+	
+	duration, err := time.ParseDuration(durationStr)
+	if err != nil {
+		writeAPIError(w, r, http.StatusBadRequest,
+			"Invalid duration parameter", ErrCodeInvalidParameter, "field: duration")
+		return
+	}
+	
+	// Limit to max 24 hours
+	if duration > 24*time.Hour {
+		duration = 24 * time.Hour
+	}
+	
+	ctx := r.Context()
+	
+	// Get timeline data from Redis
+	points, err := s.statsTracker.GetTimeline(ctx, duration)
+	if err != nil {
+		s.logger.Error().Err(err).
+			Str("request_id", GetRequestID(ctx)).
+			Msg("failed to get timeline points")
+		writeAPIError(w, r, http.StatusInternalServerError,
+			"Failed to retrieve timeline data", ErrCodeInternalError, "")
+		return
+	}
+	
+	// Convert to response format (edits per minute)
+	response := make([]map[string]interface{}, len(points))
+	for i, p := range points {
+		response[i] = map[string]interface{}{
+			"timestamp": p.Timestamp * 1000, // Convert to milliseconds for JS
+			"value":     p.Count,
+		}
+	}
+	
+	w.Header().Set("Cache-Control", "max-age=10")
+	respondJSON(w, http.StatusOK, response)
+}
+
+// ---------------------------------------------------------------------------
 // Alerts
 // ---------------------------------------------------------------------------
 
@@ -482,7 +531,7 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 
 	// Historical: read from the alerts:editwars stream
 	since := time.Now().Add(-7 * 24 * time.Hour) // last 7 days
-	historicalWars, err := s.alerts.GetEditWarAlertsSince(ctx, since, int64(limit))
+	historicalWars, err := s.alerts.GetEditWarAlertsSince(ctx, since, int64(limit*2)) // Fetch more to account for filtering
 	if err != nil {
 		s.logger.Error().Err(err).
 			Str("request_id", GetRequestID(ctx)).
@@ -492,11 +541,30 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get currently active wars to exclude them from history
+	activeWars, err := s.alerts.GetActiveEditWars(ctx, 1000) // Get all active wars
+	if err != nil {
+		s.logger.Warn().Err(err).Msg("failed to get active wars for filtering, continuing without filter")
+		activeWars = []map[string]interface{}{} // Continue with empty filter
+	}
+
+	// Build set of active page titles
+	activeTitles := make(map[string]bool)
+	for _, w := range activeWars {
+		if pt, ok := w["page_title"].(string); ok {
+			activeTitles[pt] = true
+		}
+	}
+
 	results := make([]EditWarEntry, 0, len(historicalWars))
 	for _, w := range historicalWars {
 		entry := EditWarEntry{Active: false}
 		if pt, ok := w["page_title"].(string); ok {
 			entry.PageTitle = pt
+			// Skip if this war is currently active
+			if activeTitles[pt] {
+				continue
+			}
 		}
 		if ec, ok := w["editor_count"].(float64); ok {
 			entry.EditorCount = int(ec)
@@ -526,6 +594,11 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 			entry.Editors = names
 		}
 		results = append(results, entry)
+		
+		// Stop if we've reached the requested limit
+		if len(results) >= limit {
+			break
+		}
 	}
 
 	respondJSON(w, http.StatusOK, results)

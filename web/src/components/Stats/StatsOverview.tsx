@@ -18,6 +18,7 @@ function computeTrend(current: number, previous: number): Trend | undefined {
 export const StatsOverview = memo(function StatsOverview() {
   const updateStats = useAppStore((s) => s.updateStats);
   const setApiHealthy = useAppStore((s) => s.setApiHealthy);
+  const alertsCount = useAppStore((s) => s.alertsCount);
   const previousStats = useRef<Stats | null>(null);
 
   const fetchFn = useCallback(async () => {
@@ -122,7 +123,7 @@ export const StatsOverview = memo(function StatsOverview() {
     },
     {
       label: 'Active Alerts',
-      value: stats ? formatNumber(stats.active_alerts) : '—',
+      value: formatNumber(alertsCount),
       icon: AlertTriangle,
       color: '#ff4444',
       trend: trends.alerts,

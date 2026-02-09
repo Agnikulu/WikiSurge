@@ -1,142 +1,193 @@
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","config":"configs/config.dev.yaml","time":"2026-02-09T14:24:39-05:00","message":"Starting WikiSurge Processor"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"Connected to Redis"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"Initialized HotPageTracker"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"Initialized TrendingScorer with pruning"}
-2026/02/09 14:24:39 Hot pages cleanup started with interval: 5m0s
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"Connected to Elasticsearch"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"WebSocket hub started"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"Initialized SpikeDetector"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"Initialized EditWarDetector"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"Initialized TrendingAggregator with StatsTracker"}
-2026/02/09 14:24:39 Loaded 0 pages from indexing watchlist
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"selective-indexer","buffer_size":1000,"batch_size":500,"flush_interval":5000,"time":"2026-02-09T14:24:39-05:00","message":"Selective indexer bulk processor started"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"Initialized SelectiveIndexer"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"Initialized WebSocketForwarder"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","port":2113,"time":"2026-02-09T14:24:39-05:00","message":"Metrics server started"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"kafka_consumer","group":"spike-detector","time":"2026-02-09T14:24:39-05:00","message":"Starting Kafka consumer"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","consumer":"spike-detector","time":"2026-02-09T14:24:39-05:00","message":"Kafka consumer started"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"kafka_consumer","group":"trending-aggregator","time":"2026-02-09T14:24:39-05:00","message":"Starting Kafka consumer"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","consumer":"trending-aggregator","time":"2026-02-09T14:24:39-05:00","message":"Kafka consumer started"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"kafka_consumer","group":"edit-war-detector","time":"2026-02-09T14:24:39-05:00","message":"Starting Kafka consumer"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","consumer":"edit-war-detector","time":"2026-02-09T14:24:39-05:00","message":"Kafka consumer started"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"kafka_consumer","group":"elasticsearch-indexer","time":"2026-02-09T14:24:39-05:00","message":"Starting Kafka consumer"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","consumer":"elasticsearch-indexer","time":"2026-02-09T14:24:39-05:00","message":"Kafka consumer started"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"kafka_consumer","group":"websocket-forwarder","time":"2026-02-09T14:24:39-05:00","message":"Starting Kafka consumer"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","consumer":"websocket-forwarder","time":"2026-02-09T14:24:39-05:00","message":"Kafka consumer started"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"Health monitoring started (30s interval)"}
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T14:24:39-05:00","message":"All consumers started successfully — processor is running"}
-2026/02/09 14:24:49 Bulk indexed 24 documents (24 success, 0 errors) in 194.915847ms
-2026/02/09 14:24:54 Bulk indexed 10 documents (10 success, 0 errors) in 10.138056ms
-2026/02/09 14:24:59 Bulk indexed 11 documents (11 success, 0 errors) in 12.04677ms
-2026/02/09 14:25:10 Page promoted to hot tracking: Danny Webb (actor británico)
-2026/02/09 14:25:12 Bulk indexed 10 documents (10 success, 0 errors) in 16.218324ms
-2026/02/09 14:25:17 Bulk indexed 18 documents (18 success, 0 errors) in 12.626348ms
-2026/02/09 14:25:22 Bulk indexed 11 documents (11 success, 0 errors) in 9.970102ms
-2026/02/09 14:25:24 Page promoted to hot tracking: User:Cmoza/sandbox
-2026/02/09 14:25:27 Bulk indexed 12 documents (12 success, 0 errors) in 9.864067ms
-2026/02/09 14:25:32 Page promoted to hot tracking: Uzbeks
-2026/02/09 14:25:32 Bulk indexed 8 documents (8 success, 0 errors) in 10.168437ms
-2026/02/09 14:25:33 Page promoted to hot tracking: User talk:Fikriye Ayrancı
-2026/02/09 14:25:36 Page promoted to hot tracking: Progresses of Mary, Queen of Scots
-2026/02/09 14:25:37 Bulk indexed 26 documents (26 success, 0 errors) in 13.808731ms
-2026/02/09 14:25:50 Bulk indexed 10 documents (10 success, 0 errors) in 9.348437ms
-2026/02/09 14:25:52 Page promoted to hot tracking: Talossa
-2026/02/09 14:25:55 Page promoted to hot tracking: Shame and Money
-2026/02/09 14:25:55 Bulk indexed 11 documents (11 success, 0 errors) in 9.157801ms
-2026/02/09 14:25:56 Page promoted to hot tracking: Rakendu Mouli
-2026/02/09 14:25:59 Page promoted to hot tracking: The Lincoln Lawyer (TV series)
-2026/02/09 14:25:59 Page promoted to hot tracking: Ecuación de primer grado
-2026/02/09 14:25:59 Page promoted to hot tracking: Nekrolog Februar 2026
-2026/02/09 14:26:00 Bulk indexed 17 documents (17 success, 0 errors) in 15.613064ms
-2026/02/09 14:26:01 Page promoted to hot tracking: Donald Trump
-2026/02/09 14:26:01 Page promoted to hot tracking: Triangle (métro de Rennes)
-2026/02/09 14:26:05 Bulk indexed 16 documents (16 success, 0 errors) in 9.692675ms
-2026/02/09 14:26:06 Page promoted to hot tracking: User:Cmoza/sandbox
-2026/02/09 14:26:07 Page promoted to hot tracking: Paucijaculum
-2026/02/09 14:26:07 Page promoted to hot tracking: Characteristic function
-2026/02/09 14:26:10 Bulk indexed 15 documents (15 success, 0 errors) in 14.063799ms
-2026/02/09 14:26:18 Page promoted to hot tracking: Ley sobre el Escudo, la Bandera y el Himno Nacionales (México)
-2026/02/09 14:26:22 Page promoted to hot tracking: 2025–26 Sydney FC (women) season
-2026/02/09 14:26:23 Bulk indexed 10 documents (10 success, 0 errors) in 14.521038ms
-2026/02/09 14:26:28 Bulk indexed 20 documents (20 success, 0 errors) in 12.113765ms
-2026/02/09 14:26:29 Page promoted to hot tracking: Statue of Lucille Ball (Celoron, New York)
-2026/02/09 14:26:29 Page promoted to hot tracking: 2025–26 Canberra United FC (women) season
-2026/02/09 14:26:29 Page promoted to hot tracking: Play-Doh
-2026/02/09 14:26:33 Page promoted to hot tracking: Talossa
-2026/02/09 14:26:33 Bulk indexed 18 documents (18 success, 0 errors) in 13.137188ms
-2026/02/09 14:26:38 Page promoted to hot tracking: Usuaria:Majoreds/Abencia Meza
-2026/02/09 14:26:40 Page promoted to hot tracking: Jason Leopold
-2026/02/09 14:26:40 Page promoted to hot tracking: Ecuación de primer grado
-2026/02/09 14:26:43 Bulk indexed 12 documents (12 success, 0 errors) in 9.095454ms
-2026/02/09 14:26:51 Page promoted to hot tracking: The Federalist (Gideon)/10
-2026/02/09 14:26:51 Bulk indexed 13 documents (13 success, 0 errors) in 8.527031ms
-2026/02/09 14:26:53 Page promoted to hot tracking: Utilisateur:Kingdz16/Brouillon
-2026/02/09 14:26:53 Page promoted to hot tracking: El Coyote (character)
-2026/02/09 14:26:53 Page promoted to hot tracking: Swiss Ice Hockey Games 2023
-2026/02/09 14:26:56 Page promoted to hot tracking: 2025–26 Canberra United FC (women) season
-2026/02/09 14:26:56 Bulk indexed 12 documents (12 success, 0 errors) in 12.797717ms
-2026/02/09 14:26:59 Page promoted to hot tracking: The Lincoln Lawyer (TV series)
-2026/02/09 14:27:00 Page promoted to hot tracking: Fem unga
-2026/02/09 14:27:00 Page promoted to hot tracking: User talk:~2026-89189-3
-2026/02/09 14:27:00 Page promoted to hot tracking: Triangle (métro de Rennes)
-2026/02/09 14:27:01 Bulk indexed 25 documents (25 success, 0 errors) in 23.513357ms
-2026/02/09 14:27:04 Page promoted to hot tracking: Mathilde Gremaud
-2026/02/09 14:27:05 Page promoted to hot tracking: 2025–26 Sydney FC (women) season
-2026/02/09 14:27:06 Page promoted to hot tracking: Nekrolog Februar 2026
-2026/02/09 14:27:08 Page promoted to hot tracking: Showing up (disambiguation)
-2026/02/09 14:27:10 Page promoted to hot tracking: User:Reppop/BYOB
-2026/02/09 14:27:11 Page promoted to hot tracking: Berri-UQAM station
-2026/02/09 14:27:11 Page promoted to hot tracking: Au revoir les enfants
-2026/02/09 14:27:11 Page promoted to hot tracking: Jake Sully
-2026/02/09 14:27:11 Bulk indexed 8 documents (8 success, 0 errors) in 12.837427ms
-2026/02/09 14:27:13 Page promoted to hot tracking: User talk:Significa liberdade
-2026/02/09 14:27:16 Bulk indexed 13 documents (13 success, 0 errors) in 10.710605ms
-2026/02/09 14:27:21 Page promoted to hot tracking: Au revoir les enfants
-2026/02/09 14:27:24 Page promoted to hot tracking: Salam (desambiguación)
-2026/02/09 14:27:24 Bulk indexed 8 documents (8 success, 0 errors) in 9.82957ms
-2026/02/09 14:27:26 Page promoted to hot tracking: Breakfast with Girls
-2026/02/09 14:27:29 Bulk indexed 5 documents (5 success, 0 errors) in 12.707281ms
-2026/02/09 14:27:32 Page promoted to hot tracking: User:Reppop/BYOB
-2026/02/09 14:27:33 Page promoted to hot tracking: Uzbeks
-2026/02/09 14:27:34 Page promoted to hot tracking: Constitution of New York
-2026/02/09 14:27:34 Page promoted to hot tracking: Nekrolog Februar 2026
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"spike_detector","page":"Nekrolog Februar 2026","ratio":5.999999999999999,"severity":"low","time":"2026-02-09T14:27:34-05:00","message":"Spike detected"}
-2026/02/09 14:27:34 Bulk indexed 28 documents (28 success, 0 errors) in 17.304432ms
-2026/02/09 14:27:37 Page promoted to hot tracking: and
-2026/02/09 14:27:37 Page promoted to hot tracking: User:Strudjum/sandbox
-2026/02/09 14:27:37 Page promoted to hot tracking: Talk:Bipolar junction transistor
-2026/02/09 14:27:37 Page promoted to hot tracking: Friedrich-Joachim Mehmel
-2026/02/09 14:27:37 Page promoted to hot tracking: The Battle of Polytopia
-2026/02/09 14:27:39 Page promoted to hot tracking: User:Cmoza/sandbox
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"spike_detector","page":"User:Cmoza/sandbox","ratio":5.999999999999999,"severity":"low","time":"2026-02-09T14:27:39-05:00","message":"Spike detected"}
-2026/02/09 14:27:39 Page promoted to hot tracking: Tom Huddlestone
-2026/02/09 14:27:41 Page promoted to hot tracking: Wikipedia:Löschkandidaten/5. Februar 2026
-2026/02/09 14:27:44 Bulk indexed 25 documents (25 success, 0 errors) in 12.476491ms
-2026/02/09 14:27:45 Page promoted to hot tracking: A. R. Rahman discography
-2026/02/09 14:27:45 Page promoted to hot tracking: List of Super Bowl champions
-2026/02/09 14:27:46 Page promoted to hot tracking: Usuario:Marraski/Taller
-2026/02/09 14:27:47 Page promoted to hot tracking: User talk:Erikafossey
-2026/02/09 14:27:54 Page promoted to hot tracking: Snowdown
-2026/02/09 14:27:54 Page promoted to hot tracking: materialis
-2026/02/09 14:27:55 Page promoted to hot tracking: Draft:János Besenyő
-2026/02/09 14:27:57 Bulk indexed 13 documents (13 success, 0 errors) in 8.843445ms
-2026/02/09 14:27:58 Page promoted to hot tracking: Wendell Hayes
-2026/02/09 14:28:02 Page promoted to hot tracking: Draft:I Know It (Madonna song)
-2026/02/09 14:28:02 Bulk indexed 15 documents (15 success, 0 errors) in 9.766972ms
-2026/02/09 14:28:03 Page promoted to hot tracking: Wikipédia:Demande de suppression immédiate
-2026/02/09 14:28:04 Page promoted to hot tracking: Talossa
-{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"spike_detector","page":"Talossa","ratio":5.999999999999999,"severity":"low","time":"2026-02-09T14:28:04-05:00","message":"Spike detected"}
-2026/02/09 14:28:04 Page promoted to hot tracking: User:Balmacedafan108/sandbox
-2026/02/09 14:28:05 Page promoted to hot tracking: Rabbit Habit (1975 film)
-2026/02/09 14:28:05 Page promoted to hot tracking: Wikipédia:Débat d'admissibilité
-2026/02/09 14:28:07 Page promoted to hot tracking: A. R. Rahman discography
-2026/02/09 14:28:07 Bulk indexed 8 documents (8 success, 0 errors) in 7.779744ms
-2026/02/09 14:28:08 Page promoted to hot tracking: Wikipédia:Demande de suppression immédiate
-2026/02/09 14:28:09 Page promoted to hot tracking: Constitution of New York
-2026/02/09 14:28:10 Page promoted to hot tracking: Anexo:Ministros-presidentes de Austria
-2026/02/09 14:28:11 Page promoted to hot tracking: Usuario:J Noguerol/Taller
-2026/02/09 14:28:12 Bulk indexed 19 documents (19 success, 0 errors) in 16.540246ms
-2026/02/09 14:28:13 Page promoted to hot tracking: Dolmens d'El Pozuelo
-2026/02/09 14:28:14 Page promoted to hot tracking: Show up
-2026/02/09 14:28:17 Page promoted to hot tracking: Woman to Woman (Keyshia Cole album)
-2026/02/09 14:28:17 Bulk indexed 9 documents (9 success, 0 errors) in 6.702814ms
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","config":"configs/config.dev.yaml","time":"2026-02-09T16:33:37-05:00","message":"Starting WikiSurge Processor"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"Connected to Redis"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"Initialized HotPageTracker"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"Initialized TrendingScorer with pruning"}
+2026/02/09 16:33:37 Hot pages cleanup started with interval: 5m0s
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"Connected to Elasticsearch"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"WebSocket hub started"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"Initialized SpikeDetector"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"Initialized EditWarDetector"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"Initialized TrendingAggregator with StatsTracker"}
+2026/02/09 16:33:37 Loaded 0 pages from indexing watchlist
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"selective-indexer","buffer_size":1000,"batch_size":500,"flush_interval":5000,"time":"2026-02-09T16:33:37-05:00","message":"Selective indexer bulk processor started"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"Initialized SelectiveIndexer"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"Initialized WebSocketForwarder"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","port":2113,"time":"2026-02-09T16:33:37-05:00","message":"Metrics server started"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"kafka_consumer","group":"spike-detector","time":"2026-02-09T16:33:37-05:00","message":"Starting Kafka consumer"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","consumer":"spike-detector","time":"2026-02-09T16:33:37-05:00","message":"Kafka consumer started"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"kafka_consumer","group":"trending-aggregator","time":"2026-02-09T16:33:37-05:00","message":"Starting Kafka consumer"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","consumer":"trending-aggregator","time":"2026-02-09T16:33:37-05:00","message":"Kafka consumer started"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"kafka_consumer","group":"edit-war-detector","time":"2026-02-09T16:33:37-05:00","message":"Starting Kafka consumer"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","consumer":"edit-war-detector","time":"2026-02-09T16:33:37-05:00","message":"Kafka consumer started"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"kafka_consumer","group":"elasticsearch-indexer","time":"2026-02-09T16:33:37-05:00","message":"Starting Kafka consumer"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","consumer":"elasticsearch-indexer","time":"2026-02-09T16:33:37-05:00","message":"Kafka consumer started"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"kafka_consumer","group":"websocket-forwarder","time":"2026-02-09T16:33:37-05:00","message":"Starting Kafka consumer"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","consumer":"websocket-forwarder","time":"2026-02-09T16:33:37-05:00","message":"Kafka consumer started"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"Health monitoring started (30s interval)"}
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","time":"2026-02-09T16:33:37-05:00","message":"All consumers started successfully — processor is running"}
+2026/02/09 16:33:44 Page promoted to hot tracking: Guerras de independencia hispanoamericanas
+2026/02/09 16:33:48 Bulk indexed 6 documents (6 success, 0 errors) in 198.406754ms
+2026/02/09 16:33:52 Bulk indexed 14 documents (14 success, 0 errors) in 12.67254ms
+2026/02/09 16:33:57 Bulk indexed 7 documents (7 success, 0 errors) in 14.054941ms
+2026/02/09 16:34:00 Page promoted to hot tracking: Richter des Bundesverfassungsgerichts
+2026/02/09 16:34:02 Bulk indexed 17 documents (17 success, 0 errors) in 12.56574ms
+2026/02/09 16:34:03 Page promoted to hot tracking: 2026 Marseille municipal election
+2026/02/09 16:34:10 Bulk indexed 11 documents (11 success, 0 errors) in 10.767169ms
+2026/02/09 16:34:15 Page promoted to hot tracking: Draft:Deeplina Deka
+2026/02/09 16:34:15 Bulk indexed 7 documents (7 success, 0 errors) in 10.417963ms
+2026/02/09 16:34:20 Page promoted to hot tracking: Wikipedia:Requests for page protection/Increase
+2026/02/09 16:34:20 Bulk indexed 10 documents (10 success, 0 errors) in 9.447277ms
+2026/02/09 16:34:20 Page promoted to hot tracking: Philippi (surname)
+2026/02/09 16:34:22 Page promoted to hot tracking: File:BattleArenaToshinden.svg
+2026/02/09 16:34:25 Bulk indexed 5 documents (5 success, 0 errors) in 7.587696ms
+2026/02/09 16:34:29 Page promoted to hot tracking: 2025–26 Boise State Broncos men's basketball team
+2026/02/09 16:34:29 Page promoted to hot tracking: Mirjam Staub-Bisang
+2026/02/09 16:34:30 Bulk indexed 9 documents (9 success, 0 errors) in 9.840223ms
+2026/02/09 16:34:35 Bulk indexed 9 documents (9 success, 0 errors) in 10.719221ms
+2026/02/09 16:34:35 Page promoted to hot tracking: Wikipedia:Featured list candidates/List of Texas Aggie terms
+2026/02/09 16:34:36 Page promoted to hot tracking: William Goldenberg
+2026/02/09 16:34:43 Bulk indexed 11 documents (11 success, 0 errors) in 15.858559ms
+2026/02/09 16:34:47 Page promoted to hot tracking: Batman
+2026/02/09 16:34:48 Bulk indexed 15 documents (15 success, 0 errors) in 12.116788ms
+2026/02/09 16:34:51 Page promoted to hot tracking: Benutzer:Spürnase2013/Frank Francken
+2026/02/09 16:34:53 Bulk indexed 11 documents (11 success, 0 errors) in 12.209324ms
+2026/02/09 16:34:54 Page promoted to hot tracking: Benutzer:Hejkal/Artikelentwurf
+2026/02/09 16:34:58 Bulk indexed 7 documents (7 success, 0 errors) in 15.264648ms
+2026/02/09 16:35:00 Page promoted to hot tracking: Nahuel Guzmán
+2026/02/09 16:35:00 Page promoted to hot tracking: Deaths in January 2026
+2026/02/09 16:35:00 Page promoted to hot tracking: Thusnelda Henning-Hermann
+2026/02/09 16:35:02 Page promoted to hot tracking: User:Selbstporträt/MOS in Short
+2026/02/09 16:35:03 Bulk indexed 4 documents (4 success, 0 errors) in 11.37009ms
+2026/02/09 16:35:06 Page promoted to hot tracking: Template:Northeastern Athletic Conference
+2026/02/09 16:35:06 Page promoted to hot tracking: List of diplomatic missions of the Philippines
+2026/02/09 16:35:07 Page promoted to hot tracking: Theodore Roosevelt High School (Kent, Ohio)
+2026/02/09 16:35:08 Bulk indexed 6 documents (6 success, 0 errors) in 7.809178ms
+2026/02/09 16:35:10 Page promoted to hot tracking: Benutzer:Spürnase2013/Frank Francken
+2026/02/09 16:35:10 Page promoted to hot tracking: 2025–26 Boise State Broncos men's basketball team
+2026/02/09 16:35:10 Page promoted to hot tracking: Government of Punjab, Pakistan
+2026/02/09 16:35:12 Page promoted to hot tracking: Yo tenía diez perritos
+2026/02/09 16:35:12 Page promoted to hot tracking: File:BattleArenaToshinden.svg
+2026/02/09 16:35:16 Bulk indexed 10 documents (10 success, 0 errors) in 10.738331ms
+2026/02/09 16:35:20 Page promoted to hot tracking: Inns of Court Regiment
+2026/02/09 16:35:20 Page promoted to hot tracking: Benutzer:Spürnase2013/Frank Francken
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"spike_detector","page":"Benutzer:Spürnase2013/Frank Francken","ratio":5.999999999999999,"severity":"low","time":"2026-02-09T16:35:20-05:00","message":"Spike detected"}
+2026/02/09 16:35:21 Bulk indexed 14 documents (14 success, 0 errors) in 13.161055ms
+2026/02/09 16:35:22 Page promoted to hot tracking: The Little Rascals Save the Day
+2026/02/09 16:35:23 Page promoted to hot tracking: Sword making
+2026/02/09 16:35:26 Bulk indexed 10 documents (10 success, 0 errors) in 14.572879ms
+2026/02/09 16:35:28 Page promoted to hot tracking: Talk:Hatsune Miku: Colorful Stage!
+2026/02/09 16:35:31 Bulk indexed 13 documents (13 success, 0 errors) in 9.41547ms
+2026/02/09 16:35:32 Page promoted to hot tracking: Toussaint Rose
+2026/02/09 16:35:32 Page promoted to hot tracking: Championnat du Portugal féminin de football 2025-2026
+2026/02/09 16:35:33 Page promoted to hot tracking: Draft:Pookie (film)
+2026/02/09 16:35:36 Bulk indexed 10 documents (10 success, 0 errors) in 12.976663ms
+2026/02/09 16:35:38 Page promoted to hot tracking: Pepperdine University
+2026/02/09 16:35:39 Page promoted to hot tracking: Ski jumping at the 2026 Winter Olympics – Mixed team
+2026/02/09 16:35:40 Page promoted to hot tracking: User:Doomguyscousin173401
+2026/02/09 16:35:40 Page promoted to hot tracking: Benjamin Lavernhe
+2026/02/09 16:35:41 Bulk indexed 9 documents (9 success, 0 errors) in 9.147727ms
+2026/02/09 16:35:42 Page promoted to hot tracking: Avi Kaplan
+2026/02/09 16:35:49 Bulk indexed 14 documents (14 success, 0 errors) in 10.165878ms
+2026/02/09 16:35:50 Page promoted to hot tracking: Nicole Junkermann
+2026/02/09 16:35:54 Bulk indexed 10 documents (10 success, 0 errors) in 9.303875ms
+2026/02/09 16:35:54 Page promoted to hot tracking: 2025–26 UNLV Runnin' Rebels basketball team
+2026/02/09 16:35:59 Page promoted to hot tracking: Kisoro
+2026/02/09 16:35:59 Bulk indexed 9 documents (9 success, 0 errors) in 9.192802ms
+2026/02/09 16:36:03 Page promoted to hot tracking: Draft:Schizoposting
+2026/02/09 16:36:03 Page promoted to hot tracking: 2026 Marseille municipal election
+2026/02/09 16:36:03 Page promoted to hot tracking: mpòkës
+2026/02/09 16:36:04 Bulk indexed 11 documents (11 success, 0 errors) in 9.427251ms
+2026/02/09 16:36:08 Page promoted to hot tracking: User:ChrysGalley/AfC log
+2026/02/09 16:36:09 Bulk indexed 8 documents (8 success, 0 errors) in 12.661433ms
+2026/02/09 16:36:10 Page promoted to hot tracking: User talk:Arussell0423/talk page tutorial
+2026/02/09 16:36:12 Page promoted to hot tracking: Live action role-playing game
+2026/02/09 16:36:14 Bulk indexed 9 documents (9 success, 0 errors) in 8.52837ms
+2026/02/09 16:36:14 Page promoted to hot tracking: Talk:Dalmatius/GA1
+2026/02/09 16:36:14 Page promoted to hot tracking: Discussion utilisateur:Katmyr
+2026/02/09 16:36:16 Page promoted to hot tracking: Ridgefield, Connecticut
+2026/02/09 16:36:18 Page promoted to hot tracking: Template talk:Infobox musical artist
+2026/02/09 16:36:22 Bulk indexed 7 documents (7 success, 0 errors) in 10.101306ms
+2026/02/09 16:36:23 Page promoted to hot tracking: Volker Janitz
+2026/02/09 16:36:24 Page promoted to hot tracking: Pepperdine University
+2026/02/09 16:36:26 Page promoted to hot tracking: Munna Bhai M.B.B.S.
+2026/02/09 16:36:27 Bulk indexed 12 documents (12 success, 0 errors) in 10.204805ms
+2026/02/09 16:36:27 Page promoted to hot tracking: Historia política del mundo
+2026/02/09 16:36:31 Page promoted to hot tracking: User:Fleets/Rugby League articles created 5
+2026/02/09 16:36:31 Page promoted to hot tracking: Kash Patel
+2026/02/09 16:36:32 Page promoted to hot tracking: José Rojas (futbolista)
+2026/02/09 16:36:32 Bulk indexed 16 documents (16 success, 0 errors) in 10.5286ms
+2026/02/09 16:36:34 Page promoted to hot tracking: Module:User:Santi2222/eu-verb-form
+2026/02/09 16:36:35 Page promoted to hot tracking: Selina Freitag
+2026/02/09 16:36:36 Page promoted to hot tracking: Draft:Russell Jackson
+2026/02/09 16:36:36 Page promoted to hot tracking: Volker Janitz
+2026/02/09 16:36:36 Page promoted to hot tracking: Mutapa Empire
+2026/02/09 16:36:37 Bulk indexed 10 documents (10 success, 0 errors) in 9.338991ms
+2026/02/09 16:36:38 Page promoted to hot tracking: Draft:SamsalesConsulting
+2026/02/09 16:36:38 Page promoted to hot tracking: History of women's ice hockey in the United States
+2026/02/09 16:36:39 Page promoted to hot tracking: Snorra-Edda
+2026/02/09 16:36:39 Page promoted to hot tracking: Autonomous Province of Kosovo and Metohija
+2026/02/09 16:36:42 Page promoted to hot tracking: Baghdad Bounedjah
+2026/02/09 16:36:42 Bulk indexed 15 documents (15 success, 0 errors) in 10.636119ms
+2026/02/09 16:36:44 Page promoted to hot tracking: Bleeping Computer
+2026/02/09 16:36:46 Page promoted to hot tracking: User:MagicBiography/sandbox
+2026/02/09 16:36:47 Bulk indexed 10 documents (10 success, 0 errors) in 9.436909ms
+2026/02/09 16:36:50 Page promoted to hot tracking: Draft:Detransitioner lawsuits
+2026/02/09 16:36:51 Page promoted to hot tracking: Corvinus University of Budapest
+2026/02/09 16:36:55 Bulk indexed 7 documents (7 success, 0 errors) in 8.458057ms
+2026/02/09 16:36:56 Page promoted to hot tracking: Wikipedia:Ruhrgebiet
+2026/02/09 16:37:00 Bulk indexed 8 documents (8 success, 0 errors) in 7.867295ms
+2026/02/09 16:37:03 Page promoted to hot tracking: Nicole Junkermann
+2026/02/09 16:37:04 Page promoted to hot tracking: washashore
+2026/02/09 16:37:04 Page promoted to hot tracking: History of women's ice hockey in the United States
+2026/02/09 16:37:05 Bulk indexed 3 documents (3 success, 0 errors) in 8.839297ms
+2026/02/09 16:37:06 Page promoted to hot tracking: Manuel Roa
+2026/02/09 16:37:07 Page promoted to hot tracking: User:Selbstporträt/MOS in Short
+2026/02/09 16:37:09 Page promoted to hot tracking: Bruno Bušić
+2026/02/09 16:37:10 Bulk indexed 16 documents (16 success, 0 errors) in 9.875981ms
+2026/02/09 16:37:13 Page promoted to hot tracking: Arbre d'hélice
+2026/02/09 16:37:14 Page promoted to hot tracking: Talk:Issa Amro
+2026/02/09 16:37:15 Bulk indexed 9 documents (9 success, 0 errors) in 8.138233ms
+2026/02/09 16:37:16 Page promoted to hot tracking: Draft:Pookie (film)
+2026/02/09 16:37:17 Page promoted to hot tracking: Live action role-playing game
+2026/02/09 16:37:20 Bulk indexed 11 documents (11 success, 0 errors) in 12.719939ms
+2026/02/09 16:37:22 Page promoted to hot tracking: List of fatal snake bites in Australia
+2026/02/09 16:37:28 Bulk indexed 8 documents (8 success, 0 errors) in 8.434012ms
+2026/02/09 16:37:30 Page promoted to hot tracking: Corvinus University of Budapest
+2026/02/09 16:37:31 Page promoted to hot tracking: User:MagicBiography/sandbox
+2026/02/09 16:37:32 Page promoted to hot tracking: User:Selbstporträt/MOS in Short
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"spike_detector","page":"User:Selbstporträt/MOS in Short","ratio":5.999999999999999,"severity":"low","time":"2026-02-09T16:37:32-05:00","message":"Spike detected"}
+2026/02/09 16:37:33 Bulk indexed 7 documents (7 success, 0 errors) in 7.93008ms
+2026/02/09 16:37:38 Bulk indexed 12 documents (12 success, 0 errors) in 9.248485ms
+2026/02/09 16:37:39 Page promoted to hot tracking: Historia política del mundo
+2026/02/09 16:37:41 Page promoted to hot tracking: Utilisateur:DemHelv/Brouillon
+2026/02/09 16:37:42 Page promoted to hot tracking: Talk:Issa Amro
+2026/02/09 16:37:43 Bulk indexed 7 documents (7 success, 0 errors) in 6.849365ms
+2026/02/09 16:37:43 Page promoted to hot tracking: Discussion utilisateur:Katmyr
+2026/02/09 16:37:48 Bulk indexed 10 documents (10 success, 0 errors) in 8.15397ms
+2026/02/09 16:37:53 Bulk indexed 7 documents (7 success, 0 errors) in 7.446204ms
+2026/02/09 16:37:53 Page promoted to hot tracking: User:Richard asr/sandpit/Lyall Watson
+2026/02/09 16:37:53 Page promoted to hot tracking: Niels Högel
+2026/02/09 16:37:55 Page promoted to hot tracking: Draft:SamsalesConsulting
+2026/02/09 16:37:55 Page promoted to hot tracking: Gilles Bourdouleix
+2026/02/09 16:37:57 Page promoted to hot tracking: Hard to Be a God
+2026/02/09 16:37:57 Page promoted to hot tracking: North Dakota State Bison
+2026/02/09 16:38:00 Page promoted to hot tracking: Deaths in 2026
+2026/02/09 16:38:00 Bulk indexed 6 documents (6 success, 0 errors) in 7.885042ms
+2026/02/09 16:38:01 Page promoted to hot tracking: Wikipedia:Articles for deletion/Adam Lanza
+2026/02/09 16:38:03 Page promoted to hot tracking: tell
+2026/02/09 16:38:04 Page promoted to hot tracking: Gozlin, comte de Bidgau
+2026/02/09 16:38:05 Bulk indexed 11 documents (11 success, 0 errors) in 9.25319ms
+2026/02/09 16:38:10 Bulk indexed 8 documents (8 success, 0 errors) in 8.275621ms
+2026/02/09 16:39:06 Cleanup completed: removed 0 stale hot pages
+2026/02/09 16:40:22 Page promoted to hot tracking: Paul Honigsheim
+2026/02/09 16:40:24 Page promoted to hot tracking: Deaths in January 2026
+2026/02/09 16:40:25 Page promoted to hot tracking: Wimmera Football League
+2026/02/09 16:40:27 Page promoted to hot tracking: Theodore Roosevelt High School (Kent, Ohio)
+2026/02/09 16:40:27 Bulk indexed 7 documents (7 success, 0 errors) in 18.90732ms
+2026/02/09 16:40:32 Bulk indexed 12 documents (12 success, 0 errors) in 8.909494ms
+2026/02/09 16:40:33 Page promoted to hot tracking: Sign o’ the Times (Album)
+2026/02/09 16:40:37 Bulk indexed 8 documents (8 success, 0 errors) in 7.017985ms
+2026/02/09 16:40:38 Page promoted to hot tracking: Historia política del mundo
+{"level":"info","service":"wikisurge-processor","version":"1.0.0","component":"spike_detector","page":"Historia política del mundo","ratio":5.999999999999999,"severity":"low","time":"2026-02-09T16:40:38-05:00","message":"Spike detected"}
+2026/02/09 16:40:39 Page promoted to hot tracking: Template:2025–26 ABA League First Division group tables
+2026/02/09 16:40:40 Page promoted to hot tracking: Talk:Dalmatius/GA1

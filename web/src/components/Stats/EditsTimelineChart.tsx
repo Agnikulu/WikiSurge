@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { Activity } from 'lucide-react';
 import type { TimeRange, TimeSeriesPoint } from '../../types';
 import { useAppStore } from '../../store/appStore';
+import { getTimeline } from '../../utils/api';
 
 const RANGE_CONFIG: Record<TimeRange, { label: string; minutes: number; bucketSec: number }> = {
   '1h':  { label: '1H',  minutes: 60,   bucketSec: 30 },
@@ -19,7 +20,6 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
   const [range, setRange] = useState<TimeRange>('1h');
   const dataRef = useRef<TimeSeriesPoint[]>([]);
   const [chartData, setChartData] = useState<TimeSeriesPoint[]>([]);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 600, h: 240 });
@@ -27,6 +27,8 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
   
   // Get stats from global store (shared with StatsOverview)
   const stats = useAppStore((s) => s.stats);
+  const statsRef = useRef(stats);
+  statsRef.current = stats;
 
   // Animation tick for scan-line sweep - 24 FPS for smooth animation
   useEffect(() => {
@@ -50,32 +52,78 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
     return () => ro.disconnect();
   }, []);
 
-  const editsPerSecond = stats?.edits_per_second ?? 0;
   const statsReady = stats !== null;
   const config = RANGE_CONFIG[range];
   const maxPoints = Math.floor(config.minutes * 60 / config.bucketSec);
 
-  // Append new data point on every stats update
+  // Load historical timeline data on mount or when range changes
+  useEffect(() => {
+    const loadHistoricalData = async () => {
+      try {
+        const duration = `${config.minutes * 60}s`; // Convert to seconds
+        const historicalPoints = await getTimeline(duration);
+        
+        // Convert API response to TimeSeriesPoint format
+        const points: TimeSeriesPoint[] = historicalPoints.map(p => ({
+          timestamp: p.timestamp,
+          value: p.value,
+        }));
+        
+        // Filter to current range and aggregate to correct bucket size
+        const now = Date.now();
+        const cutoff = now - config.minutes * 60_000;
+        const filtered = points.filter(p => p.timestamp >= cutoff);
+        
+        // Aggregate minute-level data into buckets
+        const bucketMap = new Map<number, number>();
+        for (const point of filtered) {
+          const bucketTime = Math.floor(point.timestamp / (config.bucketSec * 1000)) * config.bucketSec * 1000;
+          const current = bucketMap.get(bucketTime) || 0;
+          bucketMap.set(bucketTime, current + point.value);
+        }
+        
+        // Convert back to array and sort
+        const aggregated = Array.from(bucketMap.entries())
+          .map(([timestamp, value]) => ({ timestamp, value }))
+          .sort((a, b) => a.timestamp - b.timestamp);
+        
+        dataRef.current = aggregated;
+        setChartData([...dataRef.current]);
+      } catch (error) {
+        console.error('Failed to load timeline data:', error);
+        // Continue with empty data - will populate with new points
+      }
+    };
+    
+    loadHistoricalData();
+  }, [config.minutes, config.bucketSec]);
+
+  // Add new data points at regular intervals (every bucketSec seconds)
+  // This ensures the timeline keeps updating even if edit rate is constant
   useEffect(() => {
     if (!statsReady) return;
-    const now = Date.now();
-    const value = editsPerSecond * 60;
-
-    if (dataRef.current.length === 0) {
-      const base = value > 0 ? value : 1;
-      for (let i = 12; i >= 1; i--) {
-        dataRef.current.push({
-          timestamp: now - i * config.bucketSec * 1000,
-          value: base * (0.7 + Math.random() * 0.6),
-        });
-      }
-    }
-
-    dataRef.current.push({ timestamp: now, value });
-    const cutoff = now - config.minutes * 60_000;
-    dataRef.current = dataRef.current.filter((p) => p.timestamp >= cutoff).slice(-maxPoints);
-    setChartData([...dataRef.current]);
-  }, [editsPerSecond, statsReady, config.minutes, config.bucketSec, maxPoints]);
+    
+    // Clear old data when range/config changes
+    dataRef.current = [];
+    
+    const addPoint = () => {
+      const now = Date.now();
+      const currentStats = statsRef.current;
+      const value = currentStats?.edits_per_second ? currentStats.edits_per_second * 60 : 0;
+      
+      dataRef.current.push({ timestamp: now, value });
+      const cutoff = now - config.minutes * 60_000;
+      dataRef.current = dataRef.current.filter((p) => p.timestamp >= cutoff).slice(-maxPoints);
+      setChartData([...dataRef.current]);
+    };
+    
+    // Add initial point immediately
+    addPoint();
+    
+    // Then add new points at regular intervals based on bucket size
+    const interval = setInterval(addPoint, config.bucketSec * 1000);
+    return () => clearInterval(interval);
+  }, [statsReady, config.minutes, config.bucketSec, maxPoints]);
 
   const loading = !statsReady;
   const chartW = dims.w - PAD.left - PAD.right;
@@ -145,24 +193,6 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
     return PAD.left + pct * chartW;
   }, [tick, chartW]);
 
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
-      if (points.length === 0) return;
-      const svg = svgRef.current;
-      if (!svg) return;
-      const rect = svg.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      let closest = 0;
-      let minDist = Infinity;
-      for (let i = 0; i < points.length; i++) {
-        const d = Math.abs(points[i].x - mx);
-        if (d < minDist) { minDist = d; closest = i; }
-      }
-      setHoveredIndex(closest);
-    },
-    [points],
-  );
-
   const lastPoint = chartData.length > 0 ? chartData[chartData.length - 1] : null;
   const lastVal = lastPoint?.value ?? 0;
 
@@ -228,8 +258,6 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
             width={dims.w}
             height={dims.h}
             className="select-none"
-            onMouseMove={handleMouseMove}
-            onMouseLeave={() => setHoveredIndex(null)}
           >
             <defs>
               {/* Glow effect for the main line */}
@@ -352,47 +380,9 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
                   <circle cx={head.x} cy={head.y} r={1.8}
                     fill="#fff"
                   />
-                  {/* Value label near head */}
-                  <text x={head.x - 8} y={head.y - 14}
-                    fill={MONITOR_GREEN} fontSize={10} fontFamily="monospace" fontWeight="bold">
-                    {lastVal.toFixed(0)}
-                  </text>
                 </g>
               );
             })()}
-
-            {/* Hover interaction */}
-            {hoveredIndex !== null && points[hoveredIndex] && (
-              <g>
-                <line
-                  x1={points[hoveredIndex].x} x2={points[hoveredIndex].x}
-                  y1={PAD.top} y2={PAD.top + chartH}
-                  stroke={MONITOR_GREEN} strokeWidth={0.8} strokeDasharray="2 3" opacity={0.4}
-                />
-                <circle
-                  cx={points[hoveredIndex].x} cy={points[hoveredIndex].y}
-                  r={5} fill="none" stroke={MONITOR_GREEN} strokeWidth={1.5}
-                />
-                <rect
-                  x={Math.min(points[hoveredIndex].x - 52, dims.w - PAD.right - 108)}
-                  y={Math.max(points[hoveredIndex].y - 38, PAD.top)}
-                  width={104} height={28} rx={4}
-                  fill="rgba(0,20,10,0.85)" stroke={MONITOR_GREEN} strokeWidth={0.5}
-                />
-                <text
-                  x={Math.min(points[hoveredIndex].x, dims.w - PAD.right - 56)}
-                  y={Math.max(points[hoveredIndex].y - 26, PAD.top + 10)}
-                  textAnchor="middle" fill={MONITOR_GREEN} fontSize={10} fontFamily="monospace">
-                  {chartData[hoveredIndex].value.toFixed(1)} e/min
-                </text>
-                <text
-                  x={Math.min(points[hoveredIndex].x, dims.w - PAD.right - 56)}
-                  y={Math.max(points[hoveredIndex].y - 15, PAD.top + 21)}
-                  textAnchor="middle" fill="rgba(0,255,136,0.5)" fontSize={9} fontFamily="monospace">
-                  {new Date(chartData[hoveredIndex].timestamp).toLocaleTimeString()}
-                </text>
-              </g>
-            )}
 
             {/* X-axis labels */}
             {xLabels.map((l, i) => (

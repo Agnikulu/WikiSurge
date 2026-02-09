@@ -94,6 +94,7 @@ func (s *APIServer) setupRoutes() {
 	s.router.HandleFunc("GET /api/stats", s.handleGetStats)
 	s.router.HandleFunc("GET /api/alerts", s.handleGetAlerts)
 	s.router.HandleFunc("GET /api/edit-wars", s.handleGetEditWars)
+	s.router.HandleFunc("GET /api/timeline", s.handleGetTimeline)
 	s.router.HandleFunc("GET /api/search", s.handleSearch)
 
 	// Documentation routes

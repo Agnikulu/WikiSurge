@@ -3,9 +3,18 @@ import { Globe } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 
 // ── Colors ────────────────────────────────────────────────────────
+// Smooth green-to-teal gradient matching the terminal theme
 const LANG_COLORS = [
-  '#00ff88', '#00ddff', '#ffaa00', '#ff4444', '#88ff00',
-  '#ff44ff', '#00ffdd', '#ff8800', '#44ffaa', '#8888ff',
+  '#00ff88', // Primary monitor green
+  '#00ff99', // Light green
+  '#00ffaa', // Mint green
+  '#00ffbb', // Pale mint
+  '#00ffcc', // Seafoam
+  '#00ffdd', // Light seafoam
+  '#00ffee', // Very light seafoam
+  '#00eedd', // Soft teal
+  '#00ddcc', // Medium teal
+  '#00ccbb', // Deep teal
 ];
 
 // ── Main component ───────────────────────────────────────────────

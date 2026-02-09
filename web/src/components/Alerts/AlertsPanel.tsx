@@ -5,6 +5,7 @@ import { useWebSocket } from '../../hooks/useWebSocket';
 import { usePolling } from '../../hooks/usePolling';
 import { buildWebSocketUrl, WS_ENDPOINTS } from '../../utils/websocket';
 import { AlertCard } from './AlertCard';
+import { useAppStore } from '../../store/appStore';
 import {
   AlertTriangle,
   Bell,
@@ -35,42 +36,77 @@ export const AlertsPanel = memo(function AlertsPanel() {
   const [soundOn, setSoundOn] = useState(isAlertSoundsEnabled());
   const alertsRef = useRef(alerts);
   alertsRef.current = alerts;
+  
+  // ── Global store ──
+  const setAlertsCount = useAppStore((s) => s.setAlertsCount);
+  
+  // Update global alerts count whenever alerts change
+  useEffect(() => {
+    setAlertsCount(alerts.length);
+  }, [alerts.length, setAlertsCount]);
 
   // ── WebSocket (primary data source) ──
   const wsUrl = buildWebSocketUrl(WS_ENDPOINTS.alerts);
 
   const handleWsMessage = useCallback((data: unknown) => {
     try {
-      const alert = (data as { data?: Alert })?.data ?? (data as Alert);
+      // WebSocket sends: {type: 'spike', data: {id, type, timestamp, data: {page_title, severity, ...}}}
+      // We need to unwrap and flatten the nested structure
+      const wrapper = data as { type?: string; data?: Record<string, unknown> };
       
-      // Defensive: validate alert has required fields
-      if (!alert || typeof alert !== 'object') {
-        console.warn('[AlertsPanel] Invalid alert data (not an object):', data);
+      if (!wrapper || typeof wrapper !== 'object') {
         return;
       }
       
-      if (!('type' in alert) || !('page_title' in alert) || !('severity' in alert)) {
-        console.warn('[AlertsPanel] Alert missing required fields:', alert);
-        return;
+      // Check if it's the wrapped format
+      if (wrapper.type && wrapper.data && typeof wrapper.data === 'object') {
+        const outerData = wrapper.data as any;
+        
+        // Check if there's nested data (the actual alert fields)
+        let alert: Alert;
+        if (outerData.data && typeof outerData.data === 'object') {
+          // Double-nested: flatten it
+          alert = {
+            ...outerData.data,
+            ...outerData,
+            type: wrapper.type,
+          } as Alert;
+          // Remove the nested data field to avoid confusion
+          delete (alert as any).data;
+        } else {
+          // Single-level nesting
+          alert = {
+            ...outerData,
+            type: wrapper.type,
+          } as Alert;
+        }
+        
+        // Validate required fields
+        if (!alert.page_title || !alert.severity) {
+          console.warn('[AlertsPanel] Missing required fields. Alert:', alert);
+          return;
+        }
+
+        setAlerts((prev) => {
+          // Deduplicate by page_title + type
+          const key = `${alert.page_title}-${alert.type}`;
+          const exists = prev.some(
+            (a) => `${a.page_title}-${a.type}` === key,
+          );
+          if (exists) {
+            return prev;
+          }
+
+          const updated = [alert, ...prev].slice(0, MAX_ALERTS);
+          return updated;
+        });
+
+        // Sound notifications
+        if (alert.severity === 'critical') playCriticalAlert();
+        else if (alert.type === 'edit_war') playEditWarAlert();
       }
-
-      setAlerts((prev) => {
-        // Deduplicate by page_title + type
-        const key = `${alert.page_title}-${alert.type}`;
-        const exists = prev.some(
-          (a) => `${a.page_title}-${a.type}` === key,
-        );
-        if (exists) return prev;
-
-        const updated = [alert, ...prev].slice(0, MAX_ALERTS);
-        return updated;
-      });
-
-      // Sound notifications
-      if (alert.severity === 'critical') playCriticalAlert();
-      else if (alert.type === 'edit_war') playEditWarAlert();
     } catch (error) {
-      console.error('[AlertsPanel] Error handling WebSocket message:', error, data);
+      console.error('[AlertsPanel] Error handling WebSocket message:', error);
     }
   }, []);
 
@@ -83,40 +119,73 @@ export const AlertsPanel = memo(function AlertsPanel() {
     maxItems: MAX_ALERTS,
   });
 
-  // ── REST fallback polling (when WS disconnected) ──
+  // ── REST fallback polling (when WS disconnected for more than 5 seconds) ──
   const wsDisconnected = connectionState === 'error' || connectionState === 'disconnected';
+  const [persistentDisconnect, setPersistentDisconnect] = useState(false);
+
+  useEffect(() => {
+    if (!wsDisconnected) {
+      setPersistentDisconnect(false);
+      return;
+    }
+    
+    // Only enable REST polling if disconnected for more than 5 seconds
+    // This prevents clearing alerts during brief reconnection hiccups
+    const timer = setTimeout(() => {
+      setPersistentDisconnect(true);
+    }, 5000);
+    
+    return () => clearTimeout(timer);
+  }, [wsDisconnected]);
 
   usePolling({
     fetcher: async () => {
       try {
         const data = await getAlerts(MAX_ALERTS);
-        setAlerts(data);
+        // Only update if we got data - don't clear existing alerts
+        if (data && data.length > 0) {
+          setAlerts((prev) => {
+            // Merge with existing alerts, deduplicating by page_title + type
+            const combined = [...data];
+            const keys = new Set(data.map(a => `${a.page_title}-${a.type}`));
+            
+            // Add existing alerts that aren't in the new data
+            for (const alert of prev) {
+              const key = `${alert.page_title}-${alert.type}`;
+              if (!keys.has(key)) {
+                combined.push(alert);
+                keys.add(key);
+              }
+            }
+            
+            return combined.slice(0, MAX_ALERTS);
+          });
+        }
       } catch {
         // silent – will retry next cycle
       }
     },
     interval: 10_000,
-    enabled: wsDisconnected,
+    enabled: persistentDisconnect,
   });
 
-  // Initial fetch only if WebSocket fails to connect within 3 seconds
+  // Initial fetch on mount to load historical alerts
+  // WebSocket only provides NEW alerts, so we need REST to get existing ones
   const didInitialFetchRef = useRef(false);
   useEffect(() => {
     if (didInitialFetchRef.current) return;
-    if (connected) {
-      didInitialFetchRef.current = true;
-      return;
-    }
-    const timer = setTimeout(() => {
-      if (!connected && !didInitialFetchRef.current) {
-        didInitialFetchRef.current = true;
-        getAlerts(MAX_ALERTS)
-          .then((data) => setAlerts(data))
-          .catch(() => {});
-      }
-    }, 3000); // Wait 3 seconds for WebSocket before falling back
-    return () => clearTimeout(timer);
-  }, [connected]);
+    didInitialFetchRef.current = true;
+    
+    getAlerts(MAX_ALERTS)
+      .then((data) => {
+        if (data && data.length > 0) {
+          setAlerts(data);
+        }
+      })
+      .catch((err) => {
+        console.error('[AlertsPanel] Initial fetch error:', err);
+      });
+  }, []);
 
   // ── Auto-dismiss timer ──
   useEffect(() => {
@@ -156,11 +225,12 @@ export const AlertsPanel = memo(function AlertsPanel() {
 
   // ── Filtered list ──
   const filteredAlerts = useMemo(() => {
-    return alerts.filter((a) => {
+    const filtered = alerts.filter((a) => {
       if (severityFilter !== 'all' && a.severity !== severityFilter) return false;
       if (typeFilter !== 'all' && a.type !== typeFilter) return false;
       return true;
     });
+    return filtered;
   }, [alerts, severityFilter, typeFilter]);
 
   // ── Render ──

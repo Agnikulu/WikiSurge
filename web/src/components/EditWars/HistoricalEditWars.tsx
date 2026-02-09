@@ -50,14 +50,32 @@ export function HistoricalEditWars() {
       },
     );
 
-  const totalPages = Math.max(Math.ceil(filtered.length / PAGE_SIZE), 1);
-  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  // Deduplicate by page_title - keep only the most recent edit war for each page
+  const deduplicated = Array.from(
+    filtered.reduce((map, war) => {
+      const existing = map.get(war.page_title);
+      if (!existing) {
+        map.set(war.page_title, war);
+      } else {
+        // Keep the one with the more recent last_edit
+        const existingTime = existing.last_edit ? new Date(existing.last_edit).getTime() : 0;
+        const warTime = war.last_edit ? new Date(war.last_edit).getTime() : 0;
+        if (warTime > existingTime) {
+          map.set(war.page_title, war);
+        }
+      }
+      return map;
+    }, new Map<string, EditWar>()).values()
+  );
+
+  const totalPages = Math.max(Math.ceil(deduplicated.length / PAGE_SIZE), 1);
+  const paginated = deduplicated.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   // ── Export to CSV ──────────────────────────────────
   const handleExport = () => {
     const headers =
       'Page Title,Editors,Edit Count,Revert Count,Severity,Start Time,Last Edit\n';
-    const rows = filtered
+    const rows = deduplicated
       .map(
         (w) =>
           `"${w.page_title}","${w.editors.join('; ')}",${w.edit_count},${w.revert_count},${w.severity},${w.start_time},${w.last_edit}`,
@@ -81,13 +99,13 @@ export function HistoricalEditWars() {
           <Calendar className="h-5 w-5" style={{ color: 'rgba(0,255,136,0.5)' }} />
           EDIT WAR HISTORY
           <span className="text-sm font-normal" style={{ color: 'rgba(0,255,136,0.4)' }}>
-            ({filtered.length} result{filtered.length !== 1 ? 's' : ''})
+            ({deduplicated.length} result{deduplicated.length !== 1 ? 's' : ''})
           </span>
         </h2>
 
         <button
           onClick={handleExport}
-          disabled={filtered.length === 0}
+          disabled={deduplicated.length === 0}
           className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded disabled:opacity-50 transition-colors"
           style={{ background: 'rgba(0,255,136,0.1)', color: '#00ff88', border: '1px solid rgba(0,255,136,0.2)', fontFamily: 'monospace' }}
         >
@@ -140,7 +158,7 @@ export function HistoricalEditWars() {
       </div>
 
       {/* Body */}
-      {loading && filtered.length === 0 ? (
+      {loading && deduplicated.length === 0 ? (
         <div className="animate-pulse space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-28 rounded-lg" style={{ background: 'rgba(0,255,136,0.04)' }} />
@@ -156,7 +174,7 @@ export function HistoricalEditWars() {
             RETRY
           </button>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : deduplicated.length === 0 ? (
         <div className="text-center py-8">
           <Swords className="h-10 w-10 mx-auto mb-2" style={{ color: 'rgba(0,255,136,0.15)' }} />
           <p className="text-sm" style={{ color: 'rgba(0,255,136,0.4)', fontFamily: 'monospace' }}>NO HISTORICAL EDIT WARS FOUND</p>
