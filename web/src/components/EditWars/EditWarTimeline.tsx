@@ -31,18 +31,27 @@ function colorForEditor(editor: string, editorList: string[]) {
  * Spreads edits+reverts evenly across the war's duration.
  */
 function generateSyntheticTimeline(war: EditWar): EditWarTimelineEntry[] {
-  const startMs = new Date(war.start_time).getTime();
-  const endMs = new Date(war.last_edit).getTime();
+  // Validate inputs: start/end timestamps, editor list and edit count.
+  const startMs = war.start_time ? new Date(war.start_time).getTime() : NaN;
+  const endMs = war.last_edit ? new Date(war.last_edit).getTime() : NaN;
+  const total = Number.isFinite(war.edit_count) ? war.edit_count : 0;
+  const editorsLen = Array.isArray(war.editors) ? war.editors.length : 0;
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || total <= 0 || editorsLen === 0) {
+    return [];
+  }
+
   const range = Math.max(endMs - startMs, 1);
-  const total = war.edit_count;
   const entries: EditWarTimelineEntry[] = [];
 
   for (let i = 0; i < total; i++) {
     const t = startMs + (range / total) * i;
-    const editor = war.editors[i % war.editors.length];
+    const editor = war.editors[i % editorsLen];
     const isRevert = i < war.revert_count;
+    // Guard against invalid date values
+    const timestamp = Number.isFinite(t) ? new Date(t).toISOString() : new Date().toISOString();
     entries.push({
-      timestamp: new Date(t).toISOString(),
+      timestamp,
       editor,
       action: isRevert ? 'revert' : 'edit',
       byte_change: isRevert ? -(Math.floor(Math.random() * 500) + 50) : Math.floor(Math.random() * 300) + 10,

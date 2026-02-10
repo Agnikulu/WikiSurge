@@ -88,7 +88,8 @@ export function EditorConflictGraph({ war }: EditorConflictGraphProps) {
             >
               {/* Avatar */}
               <div
-                className={`${sizeClass} rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold shadow-sm`}
+                className={`${sizeClass} rounded-full flex items-center justify-center font-bold shadow-sm`}
+                style={{ background: 'rgba(0,255,136,0.06)', color: '#00ff88' }}
               >
                 {editor.charAt(0).toUpperCase()}
               </div>
