@@ -100,14 +100,13 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
                 <span
                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${
                     war.active
-                      ? 'bg-red-100'
-                      : 'bg-gray-100'
+                      ? 'bg-red-900/10 text-red-300 border border-red-700/20'
+                      : 'bg-monitor-card/8 text-monitor-text-dim border border-monitor-border/20'
                   }`}
-                  style={{ color: war.active ? '#ff4444' : 'rgba(0,255,136,0.7)' }}
                 >
                   <span
                     className={`inline-block w-1.5 h-1.5 rounded-full ${
-                      war.active ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
+                      war.active ? 'bg-red-500 animate-pulse' : 'bg-monitor-text-dim'
                     }`}
                   />
                   {war.active ? 'Active' : 'Resolved'}
@@ -163,18 +162,17 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
               href={`https://en.wikipedia.org/wiki/User:${encodeURIComponent(editor.replace(/ /g, '_'))}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/80 border border-gray-200 rounded-full text-xs transition-colors"
-              style={{ color: '#00ddff' }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 bg-monitor-card border border-monitor-border rounded-full text-xs transition-colors text-monitor-text"
               title={editor}
             >
-              <span className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-[9px] text-white font-bold flex-shrink-0">
+              <span className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-700 to-purple-700 flex items-center justify-center text-[9px] text-white font-bold flex-shrink-0">
                 {editor.charAt(0).toUpperCase()}
               </span>
               <span className="truncate max-w-[100px]">{editor}</span>
             </a>
           ))}
           {war.editors.length > 6 && (
-            <span className="text-xs" style={{ color: 'rgba(0,255,136,0.5)' }}>
+            <span className="text-xs text-monitor-text-dim">
               +{war.editors.length - 6} more
             </span>
           )}
@@ -259,7 +257,7 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
                       href={`https://en.wikipedia.org/wiki/User:${encodeURIComponent(editor.replace(/ /g, '_'))}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ color: '#00ddff' }}
+                      className="text-monitor-text"
                     >
                       {editor}
                     </a>

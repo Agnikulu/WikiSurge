@@ -19,14 +19,14 @@ const EDITOR_COLORS = [
 ];
 
 const EDITOR_BG_COLORS = [
-  'bg-blue-50 border-blue-200',
-  'bg-red-50 border-red-200',
-  'bg-green-50 border-green-200',
-  'bg-purple-50 border-purple-200',
-  'bg-orange-50 border-orange-200',
-  'bg-teal-50 border-teal-200',
-  'bg-pink-50 border-pink-200',
-  'bg-yellow-50 border-yellow-200',
+  'bg-blue-900/10 border-blue-700/20',
+  'bg-red-900/10 border-red-700/20',
+  'bg-green-900/10 border-green-700/20',
+  'bg-purple-900/10 border-purple-700/20',
+  'bg-orange-900/10 border-orange-700/20',
+  'bg-teal-900/10 border-teal-700/20',
+  'bg-pink-900/10 border-pink-700/20',
+  'bg-yellow-900/10 border-yellow-700/20',
 ];
 
 /**
@@ -88,8 +88,7 @@ export function EditorConflictGraph({ war }: EditorConflictGraphProps) {
             >
               {/* Avatar */}
               <div
-                className={`${sizeClass} rounded-full flex items-center justify-center font-bold shadow-sm`}
-                style={{ background: 'rgba(0,255,136,0.06)', color: '#00ff88' }}
+                className={`${sizeClass} rounded-full flex items-center justify-center font-bold shadow-sm bg-monitor-card text-monitor-green border border-monitor-border`}
               >
                 {editor.charAt(0).toUpperCase()}
               </div>
@@ -134,7 +133,7 @@ export function EditorConflictGraph({ war }: EditorConflictGraphProps) {
             {edges.map(({ from, to }) => (
               <span
                 key={`${from}-${to}`}
-                className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 border border-orange-200 rounded-full text-[10px] text-orange-700"
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-900/10 border border-orange-700/20 rounded-full text-[10px] text-orange-300"
               >
                 <span className="font-medium truncate max-w-[60px]">{from}</span>
                 <RotateCcw className="h-2.5 w-2.5" />

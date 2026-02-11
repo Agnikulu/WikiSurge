@@ -113,14 +113,13 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
         <div className="flex items-center gap-2">
           {/* Editor filter */}
           <div className="relative">
-            <select
-              value={editorFilter ?? ''}
-              onChange={(e) =>
-                setEditorFilter(e.target.value || null)
-              }
-              className="text-[11px] border border-gray-200 rounded px-2 py-0.5 pr-5 bg-white appearance-none cursor-pointer"
-              style={{ color: 'rgba(0,255,136,0.8)' }}
-            >
+              <select
+                value={editorFilter ?? ''}
+                onChange={(e) =>
+                  setEditorFilter(e.target.value || null)
+                }
+                className="text-[11px] border border-monitor-border rounded px-2 py-0.5 pr-5 bg-monitor-card appearance-none cursor-pointer text-monitor-text"
+              >
               <option value="">All editors</option>
               {war.editors.map((ed) => (
                 <option key={ed} value={ed}>
@@ -134,8 +133,7 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
           {/* Export */}
           <button
             onClick={handleExport}
-            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-            style={{ color: '#00ff88' }}
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border border-monitor-border rounded hover:bg-monitor-card/50 transition-colors text-monitor-green"
             title="Export timeline as CSV"
           >
             <Download className="h-2.5 w-2.5" />
@@ -160,7 +158,7 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
             >
               {/* Dot on timeline */}
               <span
-                className={`absolute -left-[5px] top-3 w-2 h-2 rounded-full ${color.dot} ring-2 ring-white`}
+                className={`absolute -left-[5px] top-3 w-2 h-2 rounded-full ${color.dot} ring-2 ring-monitor-border`}
               />
 
               <div className="flex items-center gap-2 text-xs">
@@ -177,14 +175,7 @@ export function EditWarTimeline({ war, entries }: EditWarTimelineProps) {
                 </span>
 
                 {/* Action label */}
-                <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    isRevert
-                      ? 'bg-red-50'
-                      : 'bg-gray-100'
-                  }`}
-                  style={{ color: isRevert ? '#ff4444' : 'rgba(0,255,136,0.7)' }}
-                >
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isRevert ? 'bg-red-900/10 text-red-300' : 'bg-monitor-card/8 text-monitor-text-dim'}`}>
                   {isRevert ? 'Revert' : 'Edit'}
                 </span>
 
@@ -233,12 +224,12 @@ function TimelineStrip({
   const rangeMs = Math.max(lastMs - firstMs, 1);
 
   return (
-    <div className="relative h-6 bg-gray-100 rounded-full overflow-hidden">
-      {entries.map((entry, idx) => {
-        const posMs = new Date(entry.timestamp).getTime() - firstMs;
-        const leftPct = (posMs / rangeMs) * 100;
-        const color = colorForEditor(entry.editor, editors);
-        const isRevert = entry.action === 'revert';
+    <div className="relative h-6 bg-monitor-surface rounded-full overflow-hidden">
+        {entries.map((entry, idx) => {
+          const posMs = new Date(entry.timestamp).getTime() - firstMs;
+          const leftPct = (posMs / rangeMs) * 100;
+          const color = colorForEditor(entry.editor, editors);
+          const isRevert = entry.action === 'revert';
 
         return (
           <span
