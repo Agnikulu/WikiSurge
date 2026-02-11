@@ -1,4 +1,4 @@
-.PHONY: setup kafka-setup start stop stop-all clean reset logs health test dev dev-backend dev-web help
+.PHONY: setup kafka-setup start stop stop-all clean reset logs health test dev dev-backend dev-web help wait-for-es wait-for-kafka wait-for-redis
 
 # Show available commands
 help:
@@ -30,6 +30,57 @@ help:
 	@echo "  make clean       - Remove containers, volumes, logs, binaries, and web artifacts"
 	@echo ""
 
+# Wait for Elasticsearch to be ready
+wait-for-es:
+	@echo "Waiting for Elasticsearch to be ready..."
+	@timeout=60; \
+	elapsed=0; \
+	while [ $$elapsed -lt $$timeout ]; do \
+		if curl -sf http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s > /dev/null 2>&1; then \
+			echo "✅ Elasticsearch is ready!"; \
+			exit 0; \
+		fi; \
+		echo "⏳ Waiting for Elasticsearch... ($$elapsed/$$timeout seconds)"; \
+		sleep 2; \
+		elapsed=$$((elapsed + 2)); \
+	done; \
+	echo "❌ Elasticsearch failed to start within $$timeout seconds"; \
+	exit 1
+
+# Wait for Kafka to be ready
+wait-for-kafka:
+	@echo "Waiting for Kafka to be ready..."
+	@timeout=60; \
+	elapsed=0; \
+	while [ $$elapsed -lt $$timeout ]; do \
+		if docker-compose exec -T kafka rpk cluster health > /dev/null 2>&1; then \
+			echo "✅ Kafka is ready!"; \
+			exit 0; \
+		fi; \
+		echo "⏳ Waiting for Kafka... ($$elapsed/$$timeout seconds)"; \
+		sleep 2; \
+		elapsed=$$((elapsed + 2)); \
+	done; \
+	echo "❌ Kafka failed to start within $$timeout seconds"; \
+	exit 1
+
+# Wait for Redis to be ready
+wait-for-redis:
+	@echo "Waiting for Redis to be ready..."
+	@timeout=30; \
+	elapsed=0; \
+	while [ $$elapsed -lt $$timeout ]; do \
+		if docker-compose exec -T redis redis-cli ping > /dev/null 2>&1; then \
+			echo "✅ Redis is ready!"; \
+			exit 0; \
+		fi; \
+		echo "⏳ Waiting for Redis... ($$elapsed/$$timeout seconds)"; \
+		sleep 2; \
+		elapsed=$$((elapsed + 2)); \
+	done; \
+	echo "❌ Redis failed to start within $$timeout seconds"; \
+	exit 1
+
 # Stop all services including Go processes
 stop-all:
 	@echo "Stopping all services..."
@@ -43,43 +94,72 @@ stop-all:
 reset: stop-all clean
 	@echo "✅ Full reset complete!"
 
-# Development mode - start everything
+# Development mode - start everything with proper health checks
 dev: reset build
 	@echo "Starting development environment..."
+	@echo ""
+	@echo "🚀 Starting Docker services..."
 	@docker-compose up -d
-	@echo "Waiting for services to be ready..."
-	@sleep 8
-	@echo "Creating Kafka topic..."
-	@docker-compose exec -T kafka rpk topic create wikipedia.edits --partitions 3 --replicas 1 || echo "Topic may already exist"
-	@echo "Starting processor..."
+	@echo ""
+	@$(MAKE) wait-for-redis
+	@echo ""
+	@$(MAKE) wait-for-kafka
+	@echo ""
+	@$(MAKE) wait-for-es
+	@echo ""
+	@echo "📝 Creating Kafka topic..."
+	@docker-compose exec -T kafka rpk topic create wikipedia.edits --partitions 3 --replicas 1 2>/dev/null || echo "ℹ️  Topic already exists"
+	@echo ""
+	@echo "🔧 Starting backend services..."
+	@sleep 1
+	@echo "  - Starting processor..."
 	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/processor > processor.log 2>&1 &
-	@echo "Starting ingestor..."
+	@sleep 1
+	@echo "  - Starting ingestor..."
 	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/ingestor > ingestor.log 2>&1 &
-	@echo "Starting API..."
+	@sleep 1
+	@echo "  - Starting API..."
 	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/api > api.log 2>&1 &
 	@sleep 2
 	@echo ""
 	@echo "✅ Backend services started!"
 	@echo ""
-	@echo "To start the web app, run:"
-	@echo "  cd web && npm run dev"
+	@echo "📊 Service Status:"
+	@echo "  API:        http://localhost:8080"
+	@echo "  Grafana:    http://localhost:3000 (admin/admin)"
+	@echo "  Prometheus: http://localhost:9090"
 	@echo ""
-	@echo "View logs:"
-	@echo "  tail -f processor.log"
-	@echo "  tail -f ingestor.log"
-	@echo "  tail -f api.log"
+	@echo "💡 Next steps:"
+	@echo "  • Start web app:  make dev-web"
+	@echo "  • View logs:      tail -f api.log processor.log ingestor.log"
+	@echo "  • Check health:   make health"
+	@echo ""
 
 # Start only backend services (assumes Docker is running)
 dev-backend:
-	@echo "Starting backend services..."
+	@echo "Restarting backend services..."
+	@echo ""
+	@echo "🛑 Stopping existing processes..."
 	-@pkill -f "./bin/api" 2>/dev/null || true
 	-@pkill -f "./bin/ingestor" 2>/dev/null || true
 	-@pkill -f "./bin/processor" 2>/dev/null || true
 	@sleep 1
+	@echo ""
+	@echo "🔍 Checking dependencies..."
+	@$(MAKE) wait-for-redis
+	@$(MAKE) wait-for-kafka
+	@$(MAKE) wait-for-es
+	@echo ""
+	@echo "🔧 Starting backend services..."
 	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/processor > processor.log 2>&1 &
+	@sleep 1
 	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/ingestor > ingestor.log 2>&1 &
+	@sleep 1
 	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/api > api.log 2>&1 &
+	@sleep 2
+	@echo ""
 	@echo "✅ Backend services restarted!"
+	@echo "📊 API available at: http://localhost:8080"
 
 # Start web app
 dev-web:
@@ -104,6 +184,8 @@ kafka-setup:
 start:
 	@echo "Starting all services..."
 	@docker-compose up -d
+	@echo ""
+	@echo "⏳ Services starting... Use 'make health' to check status"
 
 # Stop all services
 stop:
@@ -130,23 +212,24 @@ logs:
 # Check health of all services
 health:
 	@echo "Checking service health..."
+	@echo ""
 	@echo "=== Docker Services Status ==="
 	@docker-compose ps
 	@echo ""
 	@echo "=== Redis Health ==="
-	@docker-compose exec redis redis-cli ping || echo "Redis not responding"
+	@docker-compose exec redis redis-cli ping || echo "❌ Redis not responding"
 	@echo ""
 	@echo "=== Kafka Health ==="
-	@docker-compose exec kafka rpk cluster health || echo "Kafka not responding"
+	@docker-compose exec kafka rpk cluster health || echo "❌ Kafka not responding"
 	@echo ""
 	@echo "=== Elasticsearch Health ==="
-	@curl -s http://localhost:9200/_cluster/health?pretty || echo "Elasticsearch not responding"
+	@curl -s http://localhost:9200/_cluster/health?pretty || echo "❌ Elasticsearch not responding"
 	@echo ""
 	@echo "=== Prometheus Health ==="
-	@curl -s http://localhost:9090/-/healthy || echo "Prometheus not responding"
+	@curl -s http://localhost:9090/-/healthy || echo "❌ Prometheus not responding"
 	@echo ""
 	@echo "=== Grafana Health ==="
-	@curl -s http://localhost:3000/api/health || echo "Grafana not responding"
+	@curl -s http://localhost:3000/api/health || echo "❌ Grafana not responding"
 
 # Run all tests (placeholder)
 test:

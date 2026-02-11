@@ -196,14 +196,25 @@ func (o *processorOrchestrator) initInfrastructure() error {
 
 	// Initialize Elasticsearch client (shared, if enabled)
 	if o.cfg.Elasticsearch.Enabled {
-		esClient, esErr := storage.NewElasticsearchClient(&o.cfg.Elasticsearch)
-		if esErr != nil {
-			o.logger.Warn().Err(esErr).Msg("Failed to create Elasticsearch client, indexing disabled")
-		} else {
-			o.esClient = esClient
-			o.esClient.StartBulkProcessor()
-			o.logger.Info().Msg("Connected to Elasticsearch")
-			o.registerComponent("elasticsearch")
+		// Retry connecting to Elasticsearch to tolerate startup ordering
+		maxAttempts := 30
+		attempt := 0
+		for {
+			attempt++
+			esClient, esErr := storage.NewElasticsearchClient(&o.cfg.Elasticsearch)
+			if esErr == nil {
+				o.esClient = esClient
+				o.esClient.StartBulkProcessor()
+				o.logger.Info().Msg("Connected to Elasticsearch")
+				o.registerComponent("elasticsearch")
+				break
+			}
+			o.logger.Warn().Err(esErr).Int("attempt", attempt).Msg("Elasticsearch not ready, retrying")
+			if attempt >= maxAttempts {
+				o.logger.Warn().Err(esErr).Msg("Failed to create Elasticsearch client after retries, indexing disabled")
+				break
+			}
+			time.Sleep(2 * time.Second)
 		}
 	}
 

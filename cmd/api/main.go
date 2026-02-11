@@ -72,11 +72,23 @@ func main() {
 	// ---- Elasticsearch (optional) ----
 	var esClient *storage.ElasticsearchClient
 	if cfg.Elasticsearch.Enabled {
-		esClient, err = storage.NewElasticsearchClient(&cfg.Elasticsearch)
-		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to connect to Elasticsearch (search disabled)")
-		} else {
-			logger.Info().Str("url", cfg.Elasticsearch.URL).Msg("Connected to Elasticsearch")
+		// Retry connecting to Elasticsearch for a short period to handle startup races
+		maxAttempts := 30
+		attempt := 0
+		for {
+			attempt++
+			esClient, err = storage.NewElasticsearchClient(&cfg.Elasticsearch)
+			if err == nil {
+				logger.Info().Str("url", cfg.Elasticsearch.URL).Msg("Connected to Elasticsearch")
+				break
+			}
+			logger.Warn().Err(err).Int("attempt", attempt).Msg("Elasticsearch not ready, retrying")
+			if attempt >= maxAttempts {
+				logger.Warn().Err(err).Msg("Failed to connect to Elasticsearch after retries (search disabled)")
+				esClient = nil
+				break
+			}
+			time.Sleep(2 * time.Second)
 		}
 	}
 
