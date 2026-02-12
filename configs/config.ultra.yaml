@@ -54,7 +54,7 @@ kafka:
   session_timeout: 30s
 
 api:
-  port: 8080
+  port: 8081
   rate_limit: 500
   max_websocket_connections: 100  # Limited connections
   rate_limiting:
