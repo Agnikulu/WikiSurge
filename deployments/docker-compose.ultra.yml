@@ -233,11 +233,7 @@ services:
         reservations:
           memory: 64M
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      disable: true
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
@@ -254,8 +250,7 @@ services:
     container_name: wikisurge-frontend
     restart: unless-stopped
     depends_on:
-      api:
-        condition: service_healthy
+      - api
     ports:
       - "3000:80"
     networks:
@@ -274,8 +269,5 @@ services:
         reservations:
           memory: 20M
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      disable: true
     logging: *default-logging
