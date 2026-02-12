@@ -23,7 +23,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository_owner }}/wikisurge
+  IMAGE_PREFIX: agnikulu/wikisurge
 
 jobs:
   # Detect which services need rebuilding
