@@ -28,7 +28,7 @@ ingestor:
 elasticsearch:
   enabled: true
   url: "http://elasticsearch:9200"
-  retention_days: 3
+  retention_days: 1
   max_docs_per_day: 50000
   selective_criteria:
     trending_top_n: 5000

@@ -381,10 +381,10 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 		return fmt.Errorf("failed to publish edit war alert to stream: %w", err)
 	}
 
-	// Mark page as having edit war (1 hour TTL)
+	// Mark page as having edit war (12 hour TTL)
 	// Use editwar:{title} for simple lookups
 	editWarKey := fmt.Sprintf("editwar:%s", alert.PageTitle)
-	if err := ewd.redis.Set(ctx, editWarKey, 1, time.Hour).Err(); err != nil {
+	if err := ewd.redis.Set(ctx, editWarKey, 1, 12*time.Hour).Err(); err != nil {
 		ewd.logger.Warn().Err(err).Str("page", alert.PageTitle).Msg("Failed to set editwar marker key")
 	}
 
@@ -394,18 +394,18 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 	// with the marker when the war ends.
 	startKey := fmt.Sprintf("editwar:start:%s", alert.PageTitle)
 	firstSeen := time.Now().UTC().Format(time.RFC3339)
-	set, err := ewd.redis.SetNX(ctx, startKey, firstSeen, time.Hour).Result()
+	set, err := ewd.redis.SetNX(ctx, startKey, firstSeen, 12*time.Hour).Result()
 	if err != nil {
 		ewd.logger.Warn().Err(err).Str("page", alert.PageTitle).Msg("Failed to set editwar start key")
 	} else if !set {
 		// Key already exists — refresh TTL to keep it alive while war remains active
-		_ = ewd.redis.Expire(ctx, startKey, time.Hour).Err()
+		_ = ewd.redis.Expire(ctx, startKey, 12*time.Hour).Err()
 	}
 
 	// Also set editwar:{wiki}:{title} for indexing strategy compatibility
 	if wiki != "" {
 		editWarWikiKey := fmt.Sprintf("editwar:%s:%s", wiki, alert.PageTitle)
-		if err := ewd.redis.Set(ctx, editWarWikiKey, 1, time.Hour).Err(); err != nil {
+		if err := ewd.redis.Set(ctx, editWarWikiKey, 1, 12*time.Hour).Err(); err != nil {
 			ewd.logger.Warn().Err(err).Str("page", alert.PageTitle).Msg("Failed to set editwar wiki marker key")
 		}
 	}
