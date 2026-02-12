@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -384,6 +385,18 @@ func (r *RedisAlerts) GetEditWarAlertsSince(ctx context.Context, since time.Time
 			if err := json.Unmarshal([]byte(dataStr), &warData); err == nil {
 				entry = warData
 				entry["active"] = false
+
+				// Ensure there's an explicit last_edit timestamp; if the detector
+				// didn't set one, derive it from the Redis stream message ID
+				// (format: <ms>-<seq>) so the frontend can synthesize timelines.
+				if _, hasLast := entry["last_edit"]; !hasLast {
+					if parts := strings.Split(message.ID, "-"); len(parts) > 0 {
+						if ms, err := strconv.ParseInt(parts[0], 10, 64); err == nil {
+							entry["last_edit"] = time.UnixMilli(ms).UTC().Format(time.RFC3339)
+						}
+					}
+				}
+
 				wars = append(wars, entry)
 				continue
 			}
@@ -446,14 +459,25 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 			}
 
 			// Derive approximate start time from the marker key's TTL.
-			now := time.Now()
-			startTime := now
-			markerKey := key
-			ttl, ttlErr := r.client.TTL(ctx, markerKey).Result()
-			if ttlErr == nil && ttl > 0 {
-				elapsed := 3600*time.Second - ttl
-				if elapsed > 0 {
-					startTime = now.Add(-elapsed)
+			// Prefer an explicit persisted start time if present.
+			startTime := time.Time{}
+			startKey := fmt.Sprintf("editwar:start:%s", pageTitle)
+			if s, err := r.client.Get(ctx, startKey).Result(); err == nil && s != "" {
+				if t, err := time.Parse(time.RFC3339, s); err == nil {
+					startTime = t
+				}
+			}
+			// Fallback to TTL-derived approximation if no explicit start time.
+			if startTime.IsZero() {
+				now := time.Now()
+				startTime = now
+				markerKey := key
+				ttl, ttlErr := r.client.TTL(ctx, markerKey).Result()
+				if ttlErr == nil && ttl > 0 {
+					elapsed := 3600*time.Second - ttl
+					if elapsed > 0 {
+						startTime = now.Add(-elapsed)
+					}
 				}
 			}
 
@@ -495,7 +519,7 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				"editors":      editors,
 				"active":       true,
 				"start_time":   startTime.UTC().Format(time.RFC3339),
-				"last_edit":    now.UTC().Format(time.RFC3339),
+				"last_edit":    time.Now().UTC().Format(time.RFC3339),
 			}
 			activeWars = append(activeWars, war)
 		}

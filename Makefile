@@ -1,5 +1,9 @@
 .PHONY: setup kafka-setup start stop stop-all clean reset logs health test dev dev-backend dev-web help wait-for-es wait-for-kafka wait-for-redis
 
+# Configuration - Using budget mode by default
+COMPOSE_FILE := deployments/docker-compose.budget.yml
+CONFIG_FILE := configs/config.budget.yaml
+
 # Show available commands
 help:
 	@echo "WikiSurge - Available Commands"
@@ -30,10 +34,10 @@ help:
 	@echo "  make clean       - Remove containers, volumes, logs, binaries, and web artifacts"
 	@echo ""
 
-# Wait for Elasticsearch to be ready
+# Wait for Elasticsearch to be ready (longer timeout for budget ES startup)
 wait-for-es:
 	@echo "Waiting for Elasticsearch to be ready..."
-	@timeout=60; \
+	@timeout=120; \
 	elapsed=0; \
 	while [ $$elapsed -lt $$timeout ]; do \
 		if curl -sf http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s > /dev/null 2>&1; then \
@@ -41,8 +45,8 @@ wait-for-es:
 			exit 0; \
 		fi; \
 		echo "⏳ Waiting for Elasticsearch... ($$elapsed/$$timeout seconds)"; \
-		sleep 2; \
-		elapsed=$$((elapsed + 2)); \
+		sleep 3; \
+		elapsed=$$((elapsed + 3)); \
 	done; \
 	echo "❌ Elasticsearch failed to start within $$timeout seconds"; \
 	exit 1
@@ -53,7 +57,7 @@ wait-for-kafka:
 	@timeout=60; \
 	elapsed=0; \
 	while [ $$elapsed -lt $$timeout ]; do \
-		if docker-compose exec -T kafka rpk cluster health > /dev/null 2>&1; then \
+		if docker-compose -f $(COMPOSE_FILE) exec -T kafka rpk cluster health > /dev/null 2>&1; then \
 			echo "✅ Kafka is ready!"; \
 			exit 0; \
 		fi; \
@@ -70,7 +74,7 @@ wait-for-redis:
 	@timeout=30; \
 	elapsed=0; \
 	while [ $$elapsed -lt $$timeout ]; do \
-		if docker-compose exec -T redis redis-cli ping > /dev/null 2>&1; then \
+		if docker-compose -f $(COMPOSE_FILE) exec -T redis redis-cli ping > /dev/null 2>&1; then \
 			echo "✅ Redis is ready!"; \
 			exit 0; \
 		fi; \
@@ -87,6 +91,7 @@ stop-all:
 	-@pkill -f "./bin/api" 2>/dev/null || true
 	-@pkill -f "./bin/ingestor" 2>/dev/null || true
 	-@pkill -f "./bin/processor" 2>/dev/null || true
+	@docker-compose -f $(COMPOSE_FILE) down 2>/dev/null || true
 	@docker-compose down 2>/dev/null || true
 	@echo "✅ All services stopped!"
 
@@ -94,12 +99,14 @@ stop-all:
 reset: stop-all clean
 	@echo "✅ Full reset complete!"
 
-# Development mode - start everything with proper health checks
+# Development mode - start everything with proper health checks (BUDGET MODE)
 dev: reset build
-	@echo "Starting development environment..."
+	@echo "Starting development environment (BUDGET MODE)..."
+	@echo "Using: $(COMPOSE_FILE)"
+	@echo "Config: $(CONFIG_FILE)"
 	@echo ""
 	@echo "🚀 Starting Docker services..."
-	@docker-compose up -d
+	@docker-compose -f $(COMPOSE_FILE) up -d --build
 	@echo ""
 	@$(MAKE) wait-for-redis
 	@echo ""
@@ -108,26 +115,27 @@ dev: reset build
 	@$(MAKE) wait-for-es
 	@echo ""
 	@echo "📝 Creating Kafka topic..."
-	@docker-compose exec -T kafka rpk topic create wikipedia.edits --partitions 3 --replicas 1 2>/dev/null || echo "ℹ️  Topic already exists"
+	@docker-compose -f $(COMPOSE_FILE) exec -T kafka rpk topic create wikipedia.edits --partitions 3 --replicas 1 2>/dev/null || echo "ℹ️  Topic already exists"
 	@echo ""
 	@echo "🔧 Starting backend services..."
 	@sleep 1
 	@echo "  - Starting processor..."
-	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/processor > processor.log 2>&1 &
+	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/processor > processor.log 2>&1 &
 	@sleep 1
 	@echo "  - Starting ingestor..."
-	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/ingestor > ingestor.log 2>&1 &
+	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/ingestor > ingestor.log 2>&1 &
 	@sleep 1
 	@echo "  - Starting API..."
-	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/api > api.log 2>&1 &
+	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/api > api.log 2>&1 &
 	@sleep 2
 	@echo ""
 	@echo "✅ Backend services started!"
 	@echo ""
-	@echo "📊 Service Status:"
+	@echo "📊 Service Status (BUDGET MODE - ~$9/month):"
 	@echo "  API:        http://localhost:8080"
-	@echo "  Grafana:    http://localhost:3000 (admin/admin)"
+	@echo "  Grafana:    http://localhost:3000 (admin/wikisurge123)"
 	@echo "  Prometheus: http://localhost:9090"
+	@echo "  ES:         http://localhost:9200 (6h retention)"
 	@echo ""
 	@echo "💡 Next steps:"
 	@echo "  • Start web app:  make dev-web"
@@ -137,7 +145,7 @@ dev: reset build
 
 # Start only backend services (assumes Docker is running)
 dev-backend:
-	@echo "Restarting backend services..."
+	@echo "Restarting backend services (BUDGET MODE)..."
 	@echo ""
 	@echo "🛑 Stopping existing processes..."
 	-@pkill -f "./bin/api" 2>/dev/null || true
@@ -151,11 +159,11 @@ dev-backend:
 	@$(MAKE) wait-for-es
 	@echo ""
 	@echo "🔧 Starting backend services..."
-	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/processor > processor.log 2>&1 &
+	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/processor > processor.log 2>&1 &
 	@sleep 1
-	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/ingestor > ingestor.log 2>&1 &
+	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/ingestor > ingestor.log 2>&1 &
 	@sleep 1
-	@CONFIG_PATH=configs/config.dev.yaml nohup ./bin/api > api.log 2>&1 &
+	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/api > api.log 2>&1 &
 	@sleep 2
 	@echo ""
 	@echo "✅ Backend services restarted!"
@@ -182,20 +190,21 @@ kafka-setup:
 
 # Start all Docker services
 start:
-	@echo "Starting all services..."
-	@docker-compose up -d
+	@echo "Starting all services (BUDGET MODE)..."
+	@docker-compose -f $(COMPOSE_FILE) up -d
 	@echo ""
 	@echo "⏳ Services starting... Use 'make health' to check status"
 
 # Stop all services
 stop:
 	@echo "Stopping all services..."
-	@docker-compose down
+	@docker-compose -f $(COMPOSE_FILE) down
 
 # Stop and remove volumes
 clean:
 	@echo "Cleaning up services and volumes..."
-	@docker-compose down -v
+	@docker-compose -f $(COMPOSE_FILE) down -v 2>/dev/null || true
+	@docker-compose down -v 2>/dev/null || true
 	@docker system prune -f
 	@echo "Removing log files..."
 	@rm -f *.log
@@ -207,20 +216,20 @@ clean:
 
 # Tail logs from all services
 logs:
-	@docker-compose logs -f
+	@docker-compose -f $(COMPOSE_FILE) logs -f
 
 # Check health of all services
 health:
-	@echo "Checking service health..."
+	@echo "Checking service health (BUDGET MODE)..."
 	@echo ""
 	@echo "=== Docker Services Status ==="
-	@docker-compose ps
+	@docker-compose -f $(COMPOSE_FILE) ps
 	@echo ""
 	@echo "=== Redis Health ==="
-	@docker-compose exec redis redis-cli ping || echo "❌ Redis not responding"
+	@docker-compose -f $(COMPOSE_FILE) exec -T redis redis-cli ping || echo "❌ Redis not responding"
 	@echo ""
 	@echo "=== Kafka Health ==="
-	@docker-compose exec kafka rpk cluster health || echo "❌ Kafka not responding"
+	@docker-compose -f $(COMPOSE_FILE) exec -T kafka rpk cluster health || echo "❌ Kafka not responding"
 	@echo ""
 	@echo "=== Elasticsearch Health ==="
 	@curl -s http://localhost:9200/_cluster/health?pretty || echo "❌ Elasticsearch not responding"

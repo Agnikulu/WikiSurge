@@ -388,6 +388,20 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 		ewd.logger.Warn().Err(err).Str("page", alert.PageTitle).Msg("Failed to set editwar marker key")
 	}
 
+	// Persist the first-seen start time for this edit war so UI can show a
+	// stable duration. Use SETNX to avoid overwriting an existing first-seen
+	// timestamp, but refresh TTL on each publish so the key expires together
+	// with the marker when the war ends.
+	startKey := fmt.Sprintf("editwar:start:%s", alert.PageTitle)
+	firstSeen := time.Now().UTC().Format(time.RFC3339)
+	set, err := ewd.redis.SetNX(ctx, startKey, firstSeen, time.Hour).Result()
+	if err != nil {
+		ewd.logger.Warn().Err(err).Str("page", alert.PageTitle).Msg("Failed to set editwar start key")
+	} else if !set {
+		// Key already exists — refresh TTL to keep it alive while war remains active
+		_ = ewd.redis.Expire(ctx, startKey, time.Hour).Err()
+	}
+
 	// Also set editwar:{wiki}:{title} for indexing strategy compatibility
 	if wiki != "" {
 		editWarWikiKey := fmt.Sprintf("editwar:%s:%s", wiki, alert.PageTitle)

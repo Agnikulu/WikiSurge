@@ -6,18 +6,6 @@ interface EditorConflictGraphProps {
   war: EditWar;
 }
 
-/** Deterministic color palette for editors */
-const EDITOR_COLORS = [
-  'from-blue-400 to-blue-600',
-  'from-red-400 to-red-600',
-  'from-green-400 to-green-600',
-  'from-purple-400 to-purple-600',
-  'from-orange-400 to-orange-600',
-  'from-teal-400 to-teal-600',
-  'from-pink-400 to-pink-600',
-  'from-yellow-400 to-yellow-600',
-];
-
 const EDITOR_BG_COLORS = [
   'bg-blue-900/10 border-blue-700/20',
   'bg-red-900/10 border-red-700/20',
@@ -74,7 +62,6 @@ export function EditorConflictGraph({ war }: EditorConflictGraphProps) {
       {/* Editor nodes */}
       <div className="flex flex-wrap gap-3 justify-center">
         {editors.map((editor, idx) => {
-          const gradient = EDITOR_COLORS[idx % EDITOR_COLORS.length];
           const cardStyle = EDITOR_BG_COLORS[idx % EDITOR_BG_COLORS.length];
           const sizeClass =
             editors.length <= 3

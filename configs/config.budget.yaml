@@ -1,0 +1,69 @@
+# Budget Configuration - All features with minimal retention
+# Target: 4GB RAM server (~$9/month on Hetzner)
+# Retention: 6 hours for all data
+
+features:
+  elasticsearch_indexing: true
+  trending: true
+  edit_wars: true
+  websockets: true
+
+ingestor:
+  exclude_bots: true
+  allowed_languages: ["en"]  # Single language to reduce volume
+  rate_limit: 100
+  burst_limit: 200
+  reconnect_delay: 1s
+  max_reconnect_delay: 60s
+  metrics_port: 2112
+
+elasticsearch:
+  enabled: true
+  url: "http://elasticsearch:9200"
+  retention_days: 1          # Minimum for ILM; curator handles 6h cleanup
+  max_docs_per_day: 2000     # Limit indexing to reduce storage
+  selective_criteria:
+    trending_top_n: 100      # Only index top 100 trending
+    spike_ratio_min: 2.0     # Higher threshold = fewer docs
+    edit_war_enabled: true
+
+redis:
+  url: "redis://redis:6379"
+  max_memory: "256mb"
+  eviction_policy: "allkeys-lru"
+  hot_pages:
+    max_tracked: 500         # Reduced from 5000
+    promotion_threshold: 5
+    window_duration: 15m     # Shorter window
+    max_members_per_page: 50
+    hot_threshold: 3
+    cleanup_interval: 5m
+  trending:
+    enabled: true
+    max_pages: 500           # Reduced from 10000
+    half_life_minutes: 30.0  # Faster decay
+    prune_interval: 5m
+
+kafka:
+  brokers:
+    - "kafka:9092"
+  consumer_group: "wikisurge-budget"
+  max_poll_records: 500
+  session_timeout: 30s
+
+api:
+  port: 8080
+  rate_limit: 1000
+  max_websocket_connections: 500
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 1000
+    burst_size: 100
+    key_type: "ip"
+    whitelist:
+      - "127.0.0.1"
+      - "::1"
+
+logging:
+  level: "warn"
+  format: "json"
