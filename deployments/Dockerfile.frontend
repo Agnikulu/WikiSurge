@@ -10,6 +10,14 @@ FROM node:18-alpine AS builder
 
 WORKDIR /build
 
+# Build arguments for Vite
+ARG VITE_API_URL=http://localhost:8081
+ARG VITE_WS_URL=ws://localhost:8081
+
+# Set as environment variables for Vite build
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_WS_URL=$VITE_WS_URL
+
 # Cache dependencies
 COPY web/package.json web/package-lock.json* ./
 RUN npm ci --no-audit --no-fund
