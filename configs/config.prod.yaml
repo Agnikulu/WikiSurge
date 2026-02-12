@@ -8,6 +8,7 @@ features:
 ingestor:
   exclude_bots: true
   allowed_languages: ["en"]
+  allowed_namespaces: [0]     # Main namespace only (0=articles)
   rate_limit: 200
   burst_limit: 400
   reconnect_delay: 1s

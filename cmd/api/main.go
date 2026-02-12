@@ -21,12 +21,21 @@ import (
 
 func main() {
 	// ---- Flags ----
-	configPath := flag.String("config", "configs/config.dev.yaml", "Path to configuration file")
+	configPath := flag.String("config", "", "Path to configuration file")
 	portOverride := flag.Int("port", 0, "Override API port (default from config)")
 	flag.Parse()
 
+	// Determine config path: flag > env var > default
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = os.Getenv("CONFIG_PATH")
+	}
+	if cfgPath == "" {
+		cfgPath = "configs/config.dev.yaml"
+	}
+
 	// ---- Configuration ----
-	cfg, err := config.LoadConfig(*configPath)
+	cfg, err := config.LoadConfig(cfgPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
 		os.Exit(1)
@@ -39,7 +48,7 @@ func main() {
 	// ---- Logger ----
 	level, _ := zerolog.ParseLevel(cfg.Logging.Level)
 	logger := zerolog.New(os.Stdout).With().Timestamp().Str("service", "wikisurge-api").Logger().Level(level)
-	logger.Info().Str("config", *configPath).Int("port", cfg.API.Port).Msg("Starting WikiSurge API Server")
+	logger.Info().Str("config", cfgPath).Int("port", cfg.API.Port).Msg("Starting WikiSurge API Server")
 
 	// ---- Metrics ----
 	metrics.InitMetrics()

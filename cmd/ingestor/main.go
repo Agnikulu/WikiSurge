@@ -21,21 +21,30 @@ import (
 func main() {
 	// Parse command line flags
 	var (
-		configPath = flag.String("config", "configs/config.dev.yaml", "Path to configuration file")
+		configPath = flag.String("config", "", "Path to configuration file")
 		verbose    = flag.Bool("verbose", false, "Enable debug logging")
 	)
 	flag.Parse()
 
+	// Determine config path: flag > env var > default
+	cfgPath := *configPath
+	if cfgPath == "" {
+		cfgPath = os.Getenv("CONFIG_PATH")
+	}
+	if cfgPath == "" {
+		cfgPath = "configs/config.dev.yaml"
+	}
+
 	// Load configuration
-	cfg, err := config.LoadConfig(*configPath)
+	cfg, err := config.LoadConfig(cfgPath)
 	if err != nil {
-		log.Fatal().Err(err).Str("path", *configPath).Msg("Failed to load configuration")
+		log.Fatal().Err(err).Str("path", cfgPath).Msg("Failed to load configuration")
 	}
 
 	// Initialize logger
 	logger := setupLogger(cfg, *verbose)
 	logger.Info().
-		Str("config_path", *configPath).
+		Str("config_path", cfgPath).
 		Bool("verbose", *verbose).
 		Msg("Starting Wikipedia ingestor")
 

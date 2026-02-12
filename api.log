@@ -1,10 +1,5 @@
-{"level":"info","service":"wikisurge-api","config":"configs/config.dev.yaml","port":8080,"time":"2026-02-12T11:30:08-05:00","message":"Starting WikiSurge API Server"}
-2026/02/12 11:30:08 Starting metrics server on port 2114
-{"level":"info","service":"wikisurge-api","port":2114,"time":"2026-02-12T11:30:08-05:00","message":"Metrics server started"}
-{"level":"info","service":"wikisurge-api","addr":"localhost:6379","time":"2026-02-12T11:30:08-05:00","message":"Connected to Redis"}
-{"level":"info","service":"wikisurge-api","url":"http://localhost:9200","time":"2026-02-12T11:30:08-05:00","message":"Connected to Elasticsearch"}
-{"level":"info","service":"wikisurge-api","component":"api","time":"2026-02-12T11:30:08-05:00","message":"Redis sliding-window rate limiter enabled"}
-2026/02/12 11:30:08 Hot pages cleanup started with interval: 5m0s
-{"level":"info","service":"wikisurge-api","addr":":8080","time":"2026-02-12T11:30:08-05:00","message":"API server listening"}
-{"level":"info","service":"wikisurge-api","component":"api","component":"alert-hub","time":"2026-02-12T11:30:08-05:00","message":"Alert hub started — single shared subscription"}
-{"level":"fatal","service":"wikisurge-api","error":"listen tcp :8080: bind: address already in use","time":"2026-02-12T11:30:08-05:00","message":"API server failed"}
+2026/02/12 12:21:56 Starting metrics server on port 2114
+{"level":"warn","service":"wikisurge-api","error":"failed to ping ES: read tcp 127.0.0.1:52246->127.0.0.1:9200: read: connection reset by peer","attempt":1,"time":"2026-02-12T12:21:59-05:00","message":"Elasticsearch not ready, retrying"}
+{"level":"warn","service":"wikisurge-api","error":"failed to ping ES: read tcp 127.0.0.1:52334->127.0.0.1:9200: read: connection reset by peer","attempt":2,"time":"2026-02-12T12:22:04-05:00","message":"Elasticsearch not ready, retrying"}
+2026/02/12 12:22:08 Hot pages cleanup started with interval: 5m0s
+{"level":"fatal","service":"wikisurge-api","error":"listen tcp :8080: bind: address already in use","time":"2026-02-12T12:22:08-05:00","message":"API server failed"}

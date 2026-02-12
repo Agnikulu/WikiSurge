@@ -1,4 +1,4 @@
-.PHONY: setup kafka-setup start stop stop-all clean reset logs health test dev dev-backend dev-web help wait-for-es wait-for-kafka wait-for-redis
+.PHONY: setup kafka-setup start stop stop-all clean clean-data reset logs health test dev dev-backend dev-web help wait-for-es wait-for-kafka wait-for-redis
 
 # Configuration - Using budget mode by default
 COMPOSE_FILE := deployments/docker-compose.budget.yml
@@ -10,9 +10,9 @@ help:
 	@echo "==============================="
 	@echo ""
 	@echo "Quick Start:"
-	@echo "  make dev         - Clean, build, and start everything (backend only)"
+	@echo "  make dev         - Build Go services, reuse Docker containers, clear data"
 	@echo "  make dev-web     - Start web app (run in separate terminal)"
-	@echo "  make reset       - Stop everything and clean up"
+	@echo "  make reset       - Stop everything and full clean (rebuild containers)"
 	@echo ""
 	@echo "Service Control:"
 	@echo "  make start       - Start Docker services"
@@ -31,6 +31,7 @@ help:
 	@echo "  make urls        - Show service URLs"
 	@echo ""
 	@echo "Cleanup:"
+	@echo "  make clean-data  - Clear logs, Redis, ES, Kafka (keep containers)"
 	@echo "  make clean       - Remove containers, volumes, logs, binaries, and web artifacts"
 	@echo ""
 
@@ -99,23 +100,50 @@ stop-all:
 reset: stop-all clean
 	@echo "✅ Full reset complete!"
 
+# Clean only data (logs, Redis, Elasticsearch) without rebuilding containers
+clean-data:
+	@echo "Cleaning data without rebuilding containers..."
+	@echo "Removing log files..."
+	@rm -f *.log
+	@echo "Clearing Redis data..."
+	@docker-compose -f $(COMPOSE_FILE) exec -T redis redis-cli FLUSHALL 2>/dev/null || true
+	@echo "Clearing Elasticsearch indices..."
+	@curl -sf -X DELETE "http://localhost:9200/wikipedia-*" 2>/dev/null || true
+	@echo "Clearing Kafka topic data..."
+	@docker-compose -f $(COMPOSE_FILE) exec -T kafka rpk topic delete wikipedia.edits 2>/dev/null || true
+	@docker-compose -f $(COMPOSE_FILE) exec -T kafka rpk topic create wikipedia.edits --partitions 3 --replicas 1 2>/dev/null || true
+	@echo "✅ Data cleared!"
+
 # Development mode - start everything with proper health checks (BUDGET MODE)
-dev: reset build
+# Uses existing containers if running, only rebuilds Go services
+dev: 
 	@echo "Starting development environment (BUDGET MODE)..."
 	@echo "Using: $(COMPOSE_FILE)"
 	@echo "Config: $(CONFIG_FILE)"
 	@echo ""
-	@echo "🚀 Starting Docker services..."
-	@docker-compose -f $(COMPOSE_FILE) up -d --build
+	@# Stop any running Go processes
+	-@pkill -f "./bin/api" 2>/dev/null || true
+	-@pkill -f "./bin/ingestor" 2>/dev/null || true
+	-@pkill -f "./bin/processor" 2>/dev/null || true
+	@# Build Go binaries (fast if no changes)
+	@echo "🔨 Building Go services..."
+	@$(MAKE) build
+	@# Check if containers are already running, if not start them
+	@if docker-compose -f $(COMPOSE_FILE) ps 2>/dev/null | grep -q "Up"; then \
+		echo "📦 Docker containers already running, reusing..."; \
+	else \
+		echo "🚀 Starting Docker services..."; \
+		docker-compose -f $(COMPOSE_FILE) up -d; \
+	fi
+	@echo ""
+	@# Clean old data (logs, Redis, ES, Kafka)
+	@$(MAKE) clean-data
 	@echo ""
 	@$(MAKE) wait-for-redis
 	@echo ""
 	@$(MAKE) wait-for-kafka
 	@echo ""
 	@$(MAKE) wait-for-es
-	@echo ""
-	@echo "📝 Creating Kafka topic..."
-	@docker-compose -f $(COMPOSE_FILE) exec -T kafka rpk topic create wikipedia.edits --partitions 3 --replicas 1 2>/dev/null || echo "ℹ️  Topic already exists"
 	@echo ""
 	@echo "🔧 Starting backend services..."
 	@sleep 1
@@ -137,7 +165,7 @@ dev: reset build
 	@echo "  Prometheus: http://localhost:9090"
 	@echo "  ES:         http://localhost:9200 (6h retention)"
 	@echo ""
-	@echo "💡 Next steps:"
+	@echo "💡 Next steps:""
 	@echo "  • Start web app:  make dev-web"
 	@echo "  • View logs:      tail -f api.log processor.log ingestor.log"
 	@echo "  • Check health:   make health"

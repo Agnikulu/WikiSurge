@@ -314,6 +314,37 @@ func (w *WikiStreamClient) shouldProcess(edit *models.WikipediaEdit) bool {
 	return w.ShouldProcess(edit)
 }
 
+// nonMainNamespacePrefixes are title prefixes that indicate non-main namespace articles.
+// These are filtered out as a safeguard even if namespace field is incorrect.
+var nonMainNamespacePrefixes = []string{
+	"User:", "User talk:",
+	"Talk:",
+	"Wikipedia:", "Wikipedia talk:",
+	"File:", "File talk:",
+	"MediaWiki:", "MediaWiki talk:",
+	"Template:", "Template talk:",
+	"Help:", "Help talk:",
+	"Category:", "Category talk:",
+	"Portal:", "Portal talk:",
+	"Draft:", "Draft talk:",
+	"TimedText:", "TimedText talk:",
+	"Module:", "Module talk:",
+	"Gadget:", "Gadget talk:",
+	"Gadget definition:", "Gadget definition talk:",
+	"Special:",
+	"Media:",
+}
+
+// hasNonMainNamespacePrefix checks if the title starts with a non-main namespace prefix.
+func hasNonMainNamespacePrefix(title string) bool {
+	for _, prefix := range nonMainNamespacePrefixes {
+		if len(title) > len(prefix) && title[:len(prefix)] == prefix {
+			return true
+		}
+	}
+	return false
+}
+
 // ShouldProcess is a public version for testing
 func (w *WikiStreamClient) ShouldProcess(edit *models.WikipediaEdit) bool {
 	// Filter by bot status
@@ -336,6 +367,28 @@ func (w *WikiStreamClient) ShouldProcess(edit *models.WikipediaEdit) bool {
 			metrics.EditsFilteredTotal.WithLabelValues("language").Inc()
 			return false
 		}
+	}
+	
+	// Filter by namespace (0=Main articles, 1=Talk, 2=User, etc.)
+	if len(w.config.Ingestor.AllowedNamespaces) > 0 {
+		allowed := false
+		for _, ns := range w.config.Ingestor.AllowedNamespaces {
+			if edit.Namespace == ns {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			metrics.EditsFilteredTotal.WithLabelValues("namespace").Inc()
+			return false
+		}
+	}
+	
+	// Additional safeguard: filter by title prefix even if namespace is 0
+	// This catches any edge cases where namespace field might be incorrect
+	if hasNonMainNamespacePrefix(edit.Title) {
+		metrics.EditsFilteredTotal.WithLabelValues("title_prefix").Inc()
+		return false
 	}
 	
 	// Filter by edit type

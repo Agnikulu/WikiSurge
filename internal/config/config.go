@@ -31,13 +31,14 @@ type Features struct {
 
 // Ingestor configuration for Wikipedia SSE client
 type Ingestor struct {
-	ExcludeBots      bool     `yaml:"exclude_bots"`
-	AllowedLanguages []string `yaml:"allowed_languages"`
-	RateLimit        int      `yaml:"rate_limit"`
-	BurstLimit       int      `yaml:"burst_limit"`
-	ReconnectDelay   time.Duration `yaml:"reconnect_delay"`
+	ExcludeBots       bool     `yaml:"exclude_bots"`
+	AllowedLanguages  []string `yaml:"allowed_languages"`
+	AllowedNamespaces []int    `yaml:"allowed_namespaces"` // Wikipedia namespaces: 0=Main, 1=Talk, 2=User, etc. Empty = all
+	RateLimit         int      `yaml:"rate_limit"`
+	BurstLimit        int      `yaml:"burst_limit"`
+	ReconnectDelay    time.Duration `yaml:"reconnect_delay"`
 	MaxReconnectDelay time.Duration `yaml:"max_reconnect_delay"`
-	MetricsPort      int      `yaml:"metrics_port"`
+	MetricsPort       int      `yaml:"metrics_port"`
 }
 
 // Elasticsearch configuration

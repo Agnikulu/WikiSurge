@@ -1,0 +1,273 @@
+version: '3.8'
+
+# =============================================================================
+# WikiSurge Ultra-Budget Docker Compose - Minimal 2GB RAM Deployment
+# =============================================================================
+# Target: 2GB RAM server
+#   - DigitalOcean $12/month (2GB Basic Droplet)
+#   - Hetzner CAX11 €3.79/month (4GB ARM - even better)
+#   - Vultr $12/month (2GB Cloud Compute)
+#
+# Memory Budget (~1.2GB total, leaves 800MB for OS):
+#   - Kafka (Redpanda): 350MB
+#   - Redis: 150MB
+#   - Processor: 150MB
+#   - API: 100MB
+#   - Ingestor: 100MB
+#   - Frontend (nginx): 50MB
+#
+# What's REMOVED to fit 2GB:
+#   - Elasticsearch (no search - use Redis trending/hot pages instead)
+#   - Grafana (use /metrics endpoints if needed)
+#   - Prometheus (optional - add back if you have 4GB)
+#
+# Usage:
+#   docker-compose -f deployments/docker-compose.ultra.yml up -d
+#
+# =============================================================================
+
+networks:
+  wikisurge:
+    driver: bridge
+
+volumes:
+  kafka-data:
+  redis-data:
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "3m"
+    max-file: "1"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Kafka (Redpanda) - Message Broker
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: wikisurge-kafka
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://kafka:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://kafka:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr kafka:33145
+      - --advertise-rpc-addr kafka:33145
+      - --smp 1
+      - --reserve-memory 0M
+      - --memory 300M
+      - --overprovisioned
+      - --node-id 0
+      - --check=false
+      # 3-hour retention (10800000ms)
+      - --set redpanda.log_retention_ms=10800000
+      - --set redpanda.log_segment_size=16777216
+    ports:
+      - "19092:19092"
+    volumes:
+      - kafka-data:/var/lib/redpanda/data
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health --api-urls localhost:9644 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Redis - In-Memory Store (Hot Pages, Trending, Stats)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: wikisurge-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --appendonly no
+      --save ""
+      --loglevel warning
+      --tcp-keepalive 60
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+        reservations:
+          memory: 100M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Ingestor - Wikipedia SSE Consumer
+  # ---------------------------------------------------------------------------
+  ingestor:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.ingestor
+    image: wikisurge/ingestor:ultra
+    container_name: wikisurge-ingestor
+    restart: always
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - CONFIG_PATH=/app/configs/config.ultra.yaml
+      - LOG_LEVEL=error
+      - LOG_FORMAT=json
+      - GOGC=50
+      - GOMEMLIMIT=90MiB
+    volumes:
+      - ../configs:/app/configs:ro
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+        reservations:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2112/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Processor - Edit Processing (NO Elasticsearch)
+  # ---------------------------------------------------------------------------
+  processor:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.processor
+    image: wikisurge/processor:ultra
+    container_name: wikisurge-processor
+    restart: always
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - CONFIG_PATH=/app/configs/config.ultra.yaml
+      - LOG_LEVEL=error
+      - LOG_FORMAT=json
+      - GOGC=50
+      - GOMEMLIMIT=140MiB
+    volumes:
+      - ../configs:/app/configs:ro
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+        reservations:
+          memory: 100M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2112/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # API - REST + WebSocket Server
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.api
+    image: wikisurge/api:ultra
+    container_name: wikisurge-api
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - CONFIG_PATH=/app/configs/config.ultra.yaml
+      - API_PORT=8080
+      - LOG_LEVEL=error
+      - LOG_FORMAT=json
+      - GOGC=50
+      - GOMEMLIMIT=90MiB
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../configs:/app/configs:ro
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+        reservations:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Frontend - React Dashboard (served by nginx)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.frontend
+      args:
+        - VITE_API_URL=http://localhost:8080
+        - VITE_WS_URL=ws://localhost:8080
+    image: wikisurge/frontend:ultra
+    container_name: wikisurge-frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+        reservations:
+          memory: 20M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging

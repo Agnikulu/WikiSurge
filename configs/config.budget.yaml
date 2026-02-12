@@ -11,6 +11,7 @@ features:
 ingestor:
   exclude_bots: true
   allowed_languages: ["en"]  # Single language to reduce volume
+  allowed_namespaces: [0]     # Main namespace only (0=articles, excludes User:, Talk:, Draft:, etc.)
   rate_limit: 100
   burst_limit: 200
   reconnect_delay: 1s
@@ -19,7 +20,7 @@ ingestor:
 
 elasticsearch:
   enabled: true
-  url: "http://elasticsearch:9200"
+  url: "http://localhost:9200"
   retention_days: 1          # Minimum for ILM; curator handles 6h cleanup
   max_docs_per_day: 2000     # Limit indexing to reduce storage
   selective_criteria:
@@ -28,7 +29,7 @@ elasticsearch:
     edit_war_enabled: true
 
 redis:
-  url: "redis://redis:6379"
+  url: "redis://localhost:6379"
   max_memory: "256mb"
   eviction_policy: "allkeys-lru"
   hot_pages:
@@ -46,7 +47,7 @@ redis:
 
 kafka:
   brokers:
-    - "kafka:9092"
+    - "localhost:19092"
   consumer_group: "wikisurge-budget"
   max_poll_records: 500
   session_timeout: 30s

@@ -11,6 +11,7 @@ import (
 type WikipediaEdit struct {
 	ID        int64  `json:"id"`
 	Type      string `json:"type"`
+	Namespace int    `json:"ns"`  // Wikipedia namespace: 0=Main, 1=Talk, 2=User, etc.
 	Title     string `json:"title"`
 	User      string `json:"user"`
 	Bot       bool   `json:"bot"`
@@ -40,6 +41,11 @@ func (e *WikipediaEdit) Language() string {
 		return ""
 	}
 	return e.Wiki[:2]
+}
+
+// IsMainNamespace returns true if this edit is in the main article namespace (ns=0)
+func (e *WikipediaEdit) IsMainNamespace() bool {
+	return e.Namespace == 0
 }
 
 // IsSignificant returns true if the absolute byte change is greater than 100

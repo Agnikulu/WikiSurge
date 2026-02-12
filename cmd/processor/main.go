@@ -80,8 +80,16 @@ type processorOrchestrator struct {
 func main() {
 	// Parse command line flags
 	var configPath string
-	flag.StringVar(&configPath, "config", "configs/config.dev.yaml", "Path to configuration file")
+	flag.StringVar(&configPath, "config", "", "Path to configuration file")
 	flag.Parse()
+
+	// Determine config path: flag > env var > default
+	if configPath == "" {
+		configPath = os.Getenv("CONFIG_PATH")
+	}
+	if configPath == "" {
+		configPath = "configs/config.dev.yaml"
+	}
 
 	// Load configuration
 	cfg, err := config.LoadConfig(configPath)

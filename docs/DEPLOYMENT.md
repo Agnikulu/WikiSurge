@@ -1,6 +1,7 @@
 # WikiSurge Deployment Guide
 
 ## Table of Contents
+- [Ultra-Budget Deployment ($4-12/month)](#ultra-budget-deployment-4-12month) ⭐ NEW
 - [Prerequisites](#prerequisites)
 - [Local Development](#local-development)
 - [Production Deployment](#production-deployment)
@@ -8,6 +9,168 @@
 - [Initial Setup](#initial-setup)
 - [Verification](#verification)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## Ultra-Budget Deployment ($4-12/month)
+
+Deploy WikiSurge on a cheap VPS in under 10 minutes.
+
+### Recommended Providers
+
+| Provider | Specs | Price | Best For |
+|----------|-------|-------|----------|
+| **Hetzner CAX11** | 4GB RAM, 2 ARM vCPU | €3.79/mo (~$4) | Best value |
+| **DigitalOcean** | 2GB RAM, 1 vCPU | $12/mo | Easy US hosting |
+| **Vultr** | 2GB RAM, 1 vCPU | $12/mo | Global locations |
+| **Linode** | 2GB RAM, 1 vCPU | $12/mo | Good support |
+
+### Quick Deploy (One Command)
+
+#### Option 1: Hetzner (Recommended - $4/month)
+
+1. **Create server** at [console.hetzner.cloud](https://console.hetzner.cloud):
+   - Click "Add Server"
+   - Location: Any (Falkenstein is cheapest)
+   - Image: Ubuntu 22.04
+   - Type: CAX11 (€3.79/mo)
+   - Add your SSH key
+   - Create
+
+2. **SSH in and deploy:**
+```bash
+ssh root@YOUR_SERVER_IP
+
+# One-command deploy:
+curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/WikiSurge/main/scripts/deploy-ultra.sh | bash
+```
+
+#### Option 2: DigitalOcean ($12/month)
+
+1. **Create Droplet** at [cloud.digitalocean.com](https://cloud.digitalocean.com):
+   - Click "Create" → "Droplets"
+   - Region: Any
+   - Image: Ubuntu 22.04
+   - Size: Basic $12/mo (2GB RAM)
+   - Add SSH key
+   - Create
+
+2. **SSH in and deploy:**
+```bash
+ssh root@YOUR_DROPLET_IP
+
+# One-command deploy:
+curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/WikiSurge/main/scripts/deploy-ultra.sh | bash
+```
+
+### Manual Deploy
+
+If you prefer to run commands step by step:
+
+```bash
+# 1. SSH into your server
+ssh root@YOUR_SERVER_IP
+
+# 2. Install Docker
+curl -fsSL https://get.docker.com | sh
+
+# 3. Clone WikiSurge
+git clone https://github.com/YOUR_USERNAME/WikiSurge.git /opt/wikisurge
+cd /opt/wikisurge
+
+# 4. Deploy with ultra-budget config
+docker compose -f deployments/docker-compose.ultra.yml up -d
+
+# 5. Check status
+docker compose -f deployments/docker-compose.ultra.yml ps
+```
+
+### What's Different in Ultra-Budget Mode?
+
+| Feature | Full | Budget | Ultra |
+|---------|------|--------|-------|
+| RAM Required | 16GB | 4GB | 2GB |
+| Elasticsearch | ✅ | ✅ | ❌ |
+| Grafana | ✅ | ✅ | ❌ |
+| Prometheus | ✅ | ✅ | ❌ |
+| Search | ✅ | ✅ | ❌ |
+| Trending | ✅ | ✅ | ✅ |
+| Edit Wars | ✅ | ✅ | ✅ |
+| Live Feed | ✅ | ✅ | ✅ |
+| WebSockets | ✅ | ✅ | ✅ |
+| Hot Pages | ✅ | ✅ | ✅ |
+| Retention | 7 days | 6 hours | 3 hours |
+
+### Management Commands
+
+After deployment, use these commands:
+
+```bash
+wikisurge status    # Check service status
+wikisurge logs      # View all logs
+wikisurge logs api  # View specific service logs
+wikisurge restart   # Restart all services
+wikisurge update    # Pull latest code and redeploy
+wikisurge stop      # Stop all services
+wikisurge start     # Start all services
+```
+
+### Accessing Your Dashboard
+
+After deployment completes:
+
+- **Dashboard:** `http://YOUR_SERVER_IP`
+- **API:** `http://YOUR_SERVER_IP:8080`
+- **Health:** `http://YOUR_SERVER_IP:8080/health`
+
+### Adding a Domain (Optional)
+
+```bash
+# 1. Point your domain's A record to your server IP
+
+# 2. Install Caddy for automatic HTTPS
+apt install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+apt update && apt install caddy
+
+# 3. Configure Caddy
+cat > /etc/caddy/Caddyfile << EOF
+yourdomain.com {
+    reverse_proxy localhost:80
+}
+api.yourdomain.com {
+    reverse_proxy localhost:8080
+}
+EOF
+
+# 4. Restart Caddy
+systemctl restart caddy
+```
+
+### Troubleshooting Ultra-Budget
+
+**Out of memory?**
+```bash
+# Check memory usage
+free -h
+docker stats --no-stream
+
+# Add more swap if needed
+fallocate -l 2G /swapfile2
+chmod 600 /swapfile2
+mkswap /swapfile2
+swapon /swapfile2
+```
+
+**Services not starting?**
+```bash
+# Check logs
+wikisurge logs
+
+# Restart everything
+wikisurge restart
+```
 
 ---
 

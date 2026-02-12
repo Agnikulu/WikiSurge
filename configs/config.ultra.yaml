@@ -1,0 +1,71 @@
+# Ultra-Budget Configuration - Minimum viable deployment
+# Target: 2GB RAM server ($12/month DigitalOcean, $4/month Hetzner CAX11)
+# Retention: 3 hours for all data
+# Memory footprint: ~1.2GB total (leaves headroom for OS)
+#
+# Trade-offs:
+#   - NO Elasticsearch (no search, but trending/edit-wars still work via Redis)
+#   - NO Grafana/Prometheus (use /metrics endpoints directly if needed)
+#   - English Wikipedia only
+#   - 3-hour data retention
+#   - 100 max WebSocket connections
+
+features:
+  elasticsearch_indexing: false  # DISABLED - saves 768MB RAM
+  trending: true
+  edit_wars: true
+  websockets: true
+
+ingestor:
+  exclude_bots: true
+  allowed_languages: ["en"]      # English only - reduces volume by ~90%
+  allowed_namespaces: [0]        # Main articles only
+  rate_limit: 50                 # Lower rate limit
+  burst_limit: 100
+  reconnect_delay: 2s
+  max_reconnect_delay: 60s
+  metrics_port: 2112
+
+elasticsearch:
+  enabled: false                 # Completely disabled to save memory
+
+redis:
+  url: "redis://localhost:6379"
+  max_memory: "128mb"            # Minimal Redis footprint
+  eviction_policy: "allkeys-lru"
+  hot_pages:
+    max_tracked: 200             # Reduced tracking
+    promotion_threshold: 5
+    window_duration: 10m
+    max_members_per_page: 30
+    hot_threshold: 3
+    cleanup_interval: 3m
+  trending:
+    enabled: true
+    max_pages: 200               # Limited trending pages
+    half_life_minutes: 20.0      # Faster decay for 3h window
+    prune_interval: 3m
+
+kafka:
+  brokers:
+    - "localhost:19092"
+  consumer_group: "wikisurge-ultra"
+  max_poll_records: 100
+  session_timeout: 30s
+
+api:
+  port: 8080
+  rate_limit: 500
+  max_websocket_connections: 100  # Limited connections
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 500
+    burst_size: 50
+    key_type: "ip"
+    whitelist:
+      - "127.0.0.1"
+      - "::1"
+
+logging:
+  level: "error"                 # Minimal logging to save disk/CPU
+  format: "json"

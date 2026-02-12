@@ -323,6 +323,179 @@ func TestWikiStreamClient_shouldProcess_Combined(t *testing.T) {
 	}
 }
 
+func TestWikiStreamClient_shouldProcess_NamespaceFilter(t *testing.T) {
+	logger := zerolog.New(nil).With().Timestamp().Logger()
+	mockProd := newMockProducer()
+
+	tests := []struct {
+		name              string
+		allowedNamespaces []int
+		editNamespace     int
+		expected          bool
+	}{
+		{
+			name:              "no namespace filter",
+			allowedNamespaces: []int{},
+			editNamespace:     1,
+			expected:          true,
+		},
+		{
+			name:              "main namespace allowed",
+			allowedNamespaces: []int{0},
+			editNamespace:     0,
+			expected:          true,
+		},
+		{
+			name:              "talk namespace not allowed",
+			allowedNamespaces: []int{0},
+			editNamespace:     1,
+			expected:          false,
+		},
+		{
+			name:              "user namespace not allowed",
+			allowedNamespaces: []int{0},
+			editNamespace:     2,
+			expected:          false,
+		},
+		{
+			name:              "user talk namespace not allowed",
+			allowedNamespaces: []int{0},
+			editNamespace:     3,
+			expected:          false,
+		},
+		{
+			name:              "draft namespace not allowed",
+			allowedNamespaces: []int{0},
+			editNamespace:     118,
+			expected:          false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Ingestor: config.Ingestor{
+					AllowedNamespaces: tt.allowedNamespaces,
+				},
+			}
+			
+			client := NewWikiStreamClient(cfg, logger, mockProd)
+			
+			edit := &models.WikipediaEdit{
+				Namespace: tt.editNamespace,
+				Type:      "edit",
+				Bot:       false,
+				Wiki:      "enwiki",
+			}
+			
+			result := client.shouldProcess(edit)
+			if result != tt.expected {
+				t.Errorf("shouldProcess() = %t, expected %t for namespace %d with allowed namespaces %v", 
+					result, tt.expected, tt.editNamespace, tt.allowedNamespaces)
+			}
+		})
+	}
+}
+
+func TestWikiStreamClient_shouldProcess_TitlePrefixFilter(t *testing.T) {
+	logger := zerolog.New(nil).With().Timestamp().Logger()
+	mockProd := newMockProducer()
+
+	// Config with main namespace only
+	cfg := &config.Config{
+		Ingestor: config.Ingestor{
+			AllowedNamespaces: []int{0},
+		},
+	}
+	
+	client := NewWikiStreamClient(cfg, logger, mockProd)
+
+	tests := []struct {
+		name     string
+		title    string
+		expected bool
+	}{
+		{
+			name:     "main article allowed",
+			title:    "Albert Einstein",
+			expected: true,
+		},
+		{
+			name:     "user talk filtered",
+			title:    "User talk:SomeUser",
+			expected: false,
+		},
+		{
+			name:     "user page filtered",
+			title:    "User:SomeUser",
+			expected: false,
+		},
+		{
+			name:     "talk page filtered",
+			title:    "Talk:Albert Einstein",
+			expected: false,
+		},
+		{
+			name:     "draft filtered",
+			title:    "Draft:Some Article",
+			expected: false,
+		},
+		{
+			name:     "wikipedia namespace filtered",
+			title:    "Wikipedia:Village pump",
+			expected: false,
+		},
+		{
+			name:     "template filtered",
+			title:    "Template:Infobox",
+			expected: false,
+		},
+		{
+			name:     "category filtered",
+			title:    "Category:Science",
+			expected: false,
+		},
+		{
+			name:     "file filtered",
+			title:    "File:Example.jpg",
+			expected: false,
+		},
+		{
+			name:     "help filtered",
+			title:    "Help:Editing",
+			expected: false,
+		},
+		{
+			name:     "portal filtered",
+			title:    "Portal:Science",
+			expected: false,
+		},
+		{
+			name:     "module filtered",
+			title:    "Module:Example",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			edit := &models.WikipediaEdit{
+				Title:     tt.title,
+				Namespace: 0, // Set to 0 to test title prefix filter specifically
+				Type:      "edit",
+				Bot:       false,
+				Wiki:      "enwiki",
+			}
+			
+			result := client.shouldProcess(edit)
+			if result != tt.expected {
+				t.Errorf("shouldProcess() = %t, expected %t for title %q", 
+					result, tt.expected, tt.title)
+			}
+		})
+	}
+}
+
 func TestEditParsing(t *testing.T) {
 	// Use past timestamp to pass validation (1 hour ago)
 	pastTimestamp := time.Now().Add(-time.Hour).Unix()
