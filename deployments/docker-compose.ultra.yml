@@ -142,8 +142,6 @@ services:
       - LOG_FORMAT=json
       - GOGC=50
       - GOMEMLIMIT=90MiB
-    volumes:
-      - ../configs:/app/configs:ro
     networks:
       - wikisurge
     deploy:
@@ -181,8 +179,6 @@ services:
       - LOG_FORMAT=json
       - GOGC=50
       - GOMEMLIMIT=140MiB
-    volumes:
-      - ../configs:/app/configs:ro
     networks:
       - wikisurge
     deploy:
@@ -221,8 +217,6 @@ services:
       - GOMEMLIMIT=90MiB
     ports:
       - "8081:8081"
-    volumes:
-      - ../configs:/app/configs:ro
     networks:
       - wikisurge
     deploy:

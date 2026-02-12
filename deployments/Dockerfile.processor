@@ -55,4 +55,4 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=15s \
 
 # Run the binary
 ENTRYPOINT ["/app/processor"]
-CMD ["-config", "/app/configs/config.prod.yaml"]
+CMD ["-config", "/app/configs/config.ultra.yaml"]
