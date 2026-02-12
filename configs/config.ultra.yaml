@@ -4,14 +4,13 @@
 # Memory footprint: ~1.2GB total (leaves headroom for OS)
 #
 # Trade-offs:
-#   - NO Elasticsearch (no search, but trending/edit-wars still work via Redis)
 #   - NO Grafana/Prometheus (use /metrics endpoints directly if needed)
 #   - English Wikipedia only
 #   - 3-hour data retention
 #   - 100 max WebSocket connections
 
 features:
-  elasticsearch_indexing: false  # DISABLED - saves 768MB RAM
+  elasticsearch_indexing: true   # ENABLED - search available
   trending: true
   edit_wars: true
   websockets: true
@@ -27,11 +26,19 @@ ingestor:
   metrics_port: 2112
 
 elasticsearch:
-  enabled: false                 # Completely disabled to save memory
+  enabled: true
+  url: "http://elasticsearch:9200"
+  retention_days: 3
+  max_docs_per_day: 50000
+  selective_criteria:
+    trending_top_n: 5000
+    spike_ratio_min: 1.1
+    edit_war_enabled: true
+    sample_rate: 0.3  # Index 30% of edits
 
 redis:
   url: "redis://redis:6379"
-  max_memory: "128mb"            # Minimal Redis footprint
+  max_memory: "256mb"            # Increased for 8GB server
   eviction_policy: "allkeys-lru"
   hot_pages:
     max_tracked: 200             # Reduced tracking
