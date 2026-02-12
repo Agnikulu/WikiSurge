@@ -192,7 +192,11 @@ services:
         reservations:
           memory: 64M
     healthcheck:
-      disable: true
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
@@ -222,5 +226,9 @@ services:
         reservations:
           memory: 20M
     healthcheck:
-      disable: true
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/nginx-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     logging: *default-logging
