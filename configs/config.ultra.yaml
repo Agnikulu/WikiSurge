@@ -30,7 +30,7 @@ elasticsearch:
   enabled: false                 # Completely disabled to save memory
 
 redis:
-  url: "redis://localhost:6379"
+  url: "redis://redis:6379"
   max_memory: "128mb"            # Minimal Redis footprint
   eviction_policy: "allkeys-lru"
   hot_pages:
@@ -48,7 +48,7 @@ redis:
 
 kafka:
   brokers:
-    - "localhost:19092"
+    - "kafka:9092"
   consumer_group: "wikisurge-ultra"
   max_poll_records: 100
   session_timeout: 30s
