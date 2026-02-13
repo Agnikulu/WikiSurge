@@ -32,7 +32,18 @@ export function Footer() {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] font-mono" style={{ color: 'rgba(0,255,136,0.3)' }}>
           {/* Left: attribution */}
           <p className="flex items-center gap-1">
-            Made with <Heart className="h-3 w-3" style={{ color: '#ff4444', fill: '#ff4444' }} aria-hidden="true" /> by WikiSurge
+            Made with <Heart className="h-3 w-3" style={{ color: '#ff4444', fill: '#ff4444' }} aria-hidden="true" /> by{' '}
+            <a
+              href="https://agnikbanerjee.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors"
+              style={{ color: 'rgba(0,255,136,0.5)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#00ff88')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(0,255,136,0.5)')}
+            >
+              Agnik Banerjee
+            </a>
           </p>
 
           {/* Center: copyright */}
