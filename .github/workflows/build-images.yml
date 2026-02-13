@@ -177,5 +177,12 @@ jobs:
     steps:
       - name: Trigger Coolify Deployment
         run: |
-          curl -s -o /dev/null -w "%{http_code}" "${{ secrets.COOLIFY_WEBHOOK_URL }}"
-          echo " - Coolify deploy triggered"
+          HTTP_CODE=$(curl -sk -o /tmp/response.txt -w "%{http_code}" -X GET "${{ secrets.COOLIFY_WEBHOOK_URL }}" || true)
+          echo "HTTP Status: $HTTP_CODE"
+          cat /tmp/response.txt || true
+          echo ""
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+            echo "Coolify deploy triggered successfully"
+          else
+            echo "Warning: Coolify webhook returned $HTTP_CODE (deploy may need manual trigger)"
+          fi
