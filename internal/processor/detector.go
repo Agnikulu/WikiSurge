@@ -31,6 +31,8 @@ type SpikeDetector struct {
 	minimumEdits         int
 	logger               zerolog.Logger
 	mu                   sync.RWMutex
+	cooldowns            map[string]time.Time // page -> last alert time
+	cooldownDuration     time.Duration
 }
 
 // SpikeAlert represents a detected spike event
@@ -110,6 +112,8 @@ func NewSpikeDetector(hotPages *storage.HotPageTracker, redis *redis.Client, cfg
 		spikeRatioThreshold:  5.0, // Default threshold
 		minimumEdits:         3,   // Minimum edits in 5 minutes to consider
 		logger:               logger.With().Str("component", "spike_detector").Logger(),
+		cooldowns:            make(map[string]time.Time),
+		cooldownDuration:     10 * time.Minute, // Suppress duplicate alerts for 10 minutes per page
 	}
 }
 
@@ -149,6 +153,24 @@ func (sd *SpikeDetector) ProcessEdit(ctx context.Context, edit *models.Wikipedia
 	// Detect spike
 	alert := sd.detectSpike(edit.Title, stats)
 	if alert != nil {
+		// Check cooldown to prevent duplicate alerts
+		sd.mu.Lock()
+		if lastAlert, exists := sd.cooldowns[edit.Title]; exists && time.Since(lastAlert) < sd.cooldownDuration {
+			sd.mu.Unlock()
+			return nil // Still in cooldown, suppress duplicate
+		}
+		sd.cooldowns[edit.Title] = time.Now()
+		// Clean up expired cooldowns periodically
+		if len(sd.cooldowns) > 500 {
+			now := time.Now()
+			for page, t := range sd.cooldowns {
+				if now.Sub(t) > sd.cooldownDuration {
+					delete(sd.cooldowns, page)
+				}
+			}
+		}
+		sd.mu.Unlock()
+
 		// Spike detected - publish alert
 		if err := sd.publishAlert(ctx, alert); err != nil {
 			sd.logger.Error().Err(err).Str("page", edit.Title).Msg("Failed to publish spike alert")
