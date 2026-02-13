@@ -168,3 +168,14 @@ jobs:
             VITE_WS_URL=wss://api.wikisurge.net
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+  # Trigger Coolify redeploy after all images are built
+  deploy:
+    needs: [build-api, build-processor, build-ingestor, build-frontend]
+    if: always() && !cancelled() && (needs.build-api.result == 'success' || needs.build-api.result == 'skipped') && (needs.build-processor.result == 'success' || needs.build-processor.result == 'skipped') && (needs.build-ingestor.result == 'success' || needs.build-ingestor.result == 'skipped') && (needs.build-frontend.result == 'success' || needs.build-frontend.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify Deployment
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" "${{ secrets.COOLIFY_WEBHOOK_URL }}"
+          echo " - Coolify deploy triggered"
