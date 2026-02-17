@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -350,6 +351,13 @@ func (w *WikiStreamClient) ShouldProcess(edit *models.WikipediaEdit) bool {
 	// Filter by bot status
 	if w.config.Ingestor.ExcludeBots && edit.Bot {
 		metrics.EditsFilteredTotal.WithLabelValues("bot").Inc()
+		return false
+	}
+
+	// Only accept edits from actual Wikipedia projects (*.wikipedia.org).
+	// This excludes Wikidata, Wiktionary, Commons, Meta, etc.
+	if !strings.Contains(edit.ServerURL, "wikipedia.org") {
+		metrics.EditsFilteredTotal.WithLabelValues("non_wikipedia").Inc()
 		return false
 	}
 	
