@@ -22,7 +22,7 @@ function langFlag(lang: string | undefined): string {
 }
 
 export function TrendingCard({ page, rank, previousRank, isNew }: TrendingCardProps) {
-  const wikiUrl = buildWikiUrl(page.title);
+  const wikiUrl = buildWikiUrl(page.title, page.server_url);
 
   // Determine trending direction vs previous position
   let TrendIcon = Minus;

@@ -82,7 +82,7 @@ export function EditorConflictGraph({ war }: EditorConflictGraphProps) {
 
               {/* Name */}
               <a
-                href={`https://en.wikipedia.org/wiki/User:${encodeURIComponent(editor.replace(/ /g, '_'))}`}
+                href={`${war.server_url || 'https://en.wikipedia.org'}/wiki/User:${encodeURIComponent(editor.replace(/ /g, '_'))}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-medium hover:underline truncate max-w-[90px] text-center"

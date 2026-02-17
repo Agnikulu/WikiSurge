@@ -41,6 +41,7 @@ type PageStats struct {
 	UniqueEditors    []string  `json:"unique_editors"`
 	LastByteChange   int64     `json:"last_byte_change"`
 	TotalEdits       int64     `json:"total_edits"`
+	ServerURL        string    `json:"server_url,omitempty"`
 }
 
 // NewHotPageTracker creates a new hot page tracker with bounded memory
@@ -176,7 +177,12 @@ func (h *HotPageTracker) promoteToHot(ctx context.Context, edit *models.Wikipedi
 	// Set byte change
 	byteChange := edit.Length.New - edit.Length.Old
 	pipe.HSet(ctx, metadataKey, "last_byte_change", byteChange)
-	
+
+	// Persist the server_url so API can build correct wiki links for any language
+	if edit.ServerURL != "" {
+		pipe.HSetNX(ctx, metadataKey, "server_url", edit.ServerURL)
+	}
+
 	// EXPIRE window key to windowDuration + buffer
 	bufferDuration := h.windowDuration + (10 * time.Minute)
 	pipe.Expire(ctx, windowKey, bufferDuration)
@@ -367,6 +373,9 @@ func (h *HotPageTracker) GetPageStats(ctx context.Context, pageTitle string) (*P
 	if totalEditsStr, exists := metadata["edit_count"]; exists {
 		totalEdits, _ = strconv.ParseInt(totalEditsStr, 10, 64)
 	}
+
+	// Server URL for building correct wiki links
+	serverURL := metadata["server_url"]
 	
 	return &PageStats{
 		EditsLastHour:  editsLastHour,
@@ -374,6 +383,7 @@ func (h *HotPageTracker) GetPageStats(ctx context.Context, pageTitle string) (*P
 		UniqueEditors:  uniqueEditors,
 		LastByteChange: lastByteChange,
 		TotalEdits:     totalEdits,
+		ServerURL:      serverURL,
 	}, nil
 }
 
@@ -573,6 +583,7 @@ type HotPage struct {
 	EditCount    int       `json:"edit_count"`
 	EditorsCount int       `json:"editors_count"`
 	LastActivity time.Time `json:"last_activity"`
+	ServerURL    string    `json:"server_url,omitempty"`
 }
 
 // TrackEdit is a legacy method that calls ProcessEdit
@@ -605,6 +616,7 @@ func (h *HotPageTracker) GetHotPages(ctx context.Context, limit int) ([]HotPage,
 			EditCount:    int(stats.TotalEdits),
 			EditorsCount: len(stats.UniqueEditors),
 			LastActivity: time.Now(), // Approximate
+			ServerURL:    stats.ServerURL,
 		})
 	}
 	

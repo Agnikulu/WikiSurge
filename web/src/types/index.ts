@@ -39,6 +39,7 @@ export interface TrendingPage {
   last_edit: string;
   rank: number;
   language: string;
+  server_url?: string;
 }
 
 export interface SpikeAlert {

@@ -24,12 +24,13 @@ import (
 
 // TrendingPageResponse represents a single trending page.
 type TrendingPageResponse struct {
-	Title    string  `json:"title"`
-	Score    float64 `json:"score"`
-	Edits1h int64   `json:"edits_1h"`
-	LastEdit string  `json:"last_edit"`
-	Rank     int     `json:"rank"`
-	Language string  `json:"language,omitempty"`
+	Title     string  `json:"title"`
+	Score     float64 `json:"score"`
+	Edits1h   int64   `json:"edits_1h"`
+	LastEdit  string  `json:"last_edit"`
+	Rank      int     `json:"rank"`
+	Language  string  `json:"language,omitempty"`
+	ServerURL string  `json:"server_url,omitempty"`
 }
 
 func (s *APIServer) handleGetTrending(w http.ResponseWriter, r *http.Request) {
@@ -59,8 +60,11 @@ func (s *APIServer) handleGetTrending(w http.ResponseWriter, r *http.Request) {
 	results := make([]TrendingPageResponse, 0, len(entries))
 
 	for i, e := range entries {
-		// Detect language from page title convention (e.g. "en.wikipedia.org:Page")
-		lang := extractLanguage(e.PageTitle)
+		// Detect language from server_url or page title convention
+		lang := extractLanguageFromURL(e.ServerURL)
+		if lang == "" {
+			lang = extractLanguage(e.PageTitle)
+		}
 
 		if params.Language != "" && lang != params.Language {
 			continue
@@ -68,11 +72,21 @@ func (s *APIServer) handleGetTrending(w http.ResponseWriter, r *http.Request) {
 
 		// Enrich with edit count from hot page tracker
 		var edits1h int64
+		var hotServerURL string
 		if s.hotPages != nil {
 			stats, err := s.hotPages.GetPageStats(ctx, e.PageTitle)
 			if err == nil && stats != nil {
 				edits1h = stats.EditsLastHour
+				if stats.ServerURL != "" {
+					hotServerURL = stats.ServerURL
+				}
 			}
+		}
+
+		// Prefer trending entry's server_url, fall back to hot page's
+		serverURL := e.ServerURL
+		if serverURL == "" {
+			serverURL = hotServerURL
 		}
 
 		lastEdit := ""
@@ -81,12 +95,13 @@ func (s *APIServer) handleGetTrending(w http.ResponseWriter, r *http.Request) {
 		}
 
 		results = append(results, TrendingPageResponse{
-			Title:    e.PageTitle,
-			Score:    e.CurrentScore,
-			Edits1h:  edits1h,
-			LastEdit: lastEdit,
-			Rank:     i + 1,
-			Language: lang,
+			Title:     e.PageTitle,
+			Score:     e.CurrentScore,
+			Edits1h:   edits1h,
+			LastEdit:  lastEdit,
+			Rank:      i + 1,
+			Language:  lang,
+			ServerURL: serverURL,
 		})
 	}
 
@@ -794,6 +809,10 @@ func (s *APIServer) parseSearchResponse(result map[string]interface{}, query str
 					}
 					if v, ok := source["wiki"].(string); ok {
 						hit.Wiki = v
+						// Derive server_url from wiki field (e.g., "zhwiki" -> "https://zh.wikipedia.org")
+						if lang := strings.TrimSuffix(v, "wiki"); lang != "" {
+							hit.ServerURL = fmt.Sprintf("https://%s.wikipedia.org", lang)
+						}
 					}
 					if v, ok := source["language"].(string); ok {
 						hit.Language = v
@@ -835,5 +854,21 @@ func extractLanguage(pageTitle string) string {
 		}
 	}
 	// Default: unknown
+	return ""
+}
+
+// extractLanguageFromURL extracts a language code from a Wikipedia server URL.
+// For example, "https://en.wikipedia.org" returns "en", "https://zh.wikipedia.org" returns "zh".
+func extractLanguageFromURL(serverURL string) string {
+	if serverURL == "" {
+		return ""
+	}
+	// Strip protocol
+	u := strings.TrimPrefix(serverURL, "https://")
+	u = strings.TrimPrefix(u, "http://")
+	// Extract subdomain before ".wikipedia.org"
+	if idx := strings.Index(u, ".wikipedia.org"); idx > 0 {
+		return u[:idx]
+	}
 	return ""
 }

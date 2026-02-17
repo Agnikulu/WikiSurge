@@ -46,6 +46,7 @@ type SearchHit struct {
 	Wiki       string  `json:"wiki"`
 	Score      float64 `json:"score"`
 	Language   string  `json:"language,omitempty"`
+	ServerURL  string  `json:"server_url,omitempty"`
 }
 
 // AlertsResponse is returned by GET /api/alerts.

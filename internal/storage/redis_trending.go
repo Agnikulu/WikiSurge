@@ -73,6 +73,7 @@ type TrendingEntry struct {
 	RawScore     float64 `json:"raw_score"`
 	LastUpdated  int64   `json:"last_updated"`
 	CurrentScore float64 `json:"current_score"`
+	ServerURL    string  `json:"server_url,omitempty"`
 }
 
 // TrendingMetrics groups all trending-related Prometheus metrics
@@ -277,6 +278,7 @@ func (t *TrendingScorer) GetTopTrending(limit int) ([]*TrendingEntry, error) {
 			RawScore:     rawScore,
 			LastUpdated:  lastUpdated,
 			CurrentScore: currentScore,
+			ServerURL:    data["server_url"],
 		})
 	}
 	
@@ -484,5 +486,15 @@ func (t *TrendingScorer) ProcessEdit(edit *models.WikipediaEdit) error {
 	}
 	
 	increment := t.calculateIncrement(edit)
-	return t.IncrementScore(edit.Title, increment)
+	if err := t.IncrementScore(edit.Title, increment); err != nil {
+		return err
+	}
+
+	// Persist server_url so API can build correct wiki links for any language
+	if edit.ServerURL != "" {
+		pageKey := fmt.Sprintf("trending:%s", edit.Title)
+		_ = t.redis.HSetNX(context.Background(), pageKey, "server_url", edit.ServerURL).Err()
+	}
+
+	return nil
 }
