@@ -97,6 +97,7 @@ export interface EditWar {
   start_time: string;
   last_edit: string;
   active: boolean;
+  server_url?: string;
 }
 
 /** Extended edit-war detail with per-editor breakdown and timeline entries */

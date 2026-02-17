@@ -10,7 +10,7 @@ features:
 
 ingestor:
   exclude_bots: true
-  allowed_languages: ["en"]  # Single language to reduce volume
+  allowed_languages: []       # Empty = all languages accepted
   allowed_namespaces: [0]     # Main namespace only (0=articles, excludes User:, Talk:, Draft:, etc.)
   rate_limit: 100
   burst_limit: 200

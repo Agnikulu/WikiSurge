@@ -253,13 +253,32 @@ func (ewd *EditWarDetector) detectEditWar(ctx context.Context, pageTitle string)
 	// All conditions met — calculate severity and create alert
 	severity := ewd.calculateEditWarSeverity(totalEdits, uniqueEditors, revertCount)
 
+	// Derive start time from the editwar:editors key's TTL to approximate
+	// when the first edit in this window occurred.
+	editorsKey2 := fmt.Sprintf("editwar:editors:%s", pageTitle)
+	startTime := time.Now().Add(-ewd.timeWindow) // fallback
+	ttl, ttlErr := ewd.redis.TTL(ctx, editorsKey2).Result()
+	if ttlErr == nil && ttl > 0 && ttl <= ewd.timeWindow {
+		// elapsed = window - remaining TTL
+		elapsed := ewd.timeWindow - ttl
+		startTime = time.Now().Add(-elapsed)
+	}
+
+	// Also check for a persisted first-seen timestamp
+	startKey := fmt.Sprintf("editwar:start:%s", pageTitle)
+	if s, sErr := ewd.redis.Get(ctx, startKey).Result(); sErr == nil && s != "" {
+		if t, pErr := time.Parse(time.RFC3339, s); pErr == nil {
+			startTime = t
+		}
+	}
+
 	alert := &EditWarAlert{
 		PageTitle:   pageTitle,
 		EditorCount: uniqueEditors,
 		EditCount:   totalEdits,
 		RevertCount: revertCount,
 		Severity:    severity,
-		StartTime:   time.Now().Add(-ewd.timeWindow),
+		StartTime:   startTime,
 		Editors:     editors,
 	}
 
@@ -388,12 +407,22 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 		ewd.logger.Warn().Err(err).Str("page", alert.PageTitle).Msg("Failed to set editwar marker key")
 	}
 
+	// Persist server_url so the frontend can build correct wiki links
+	if wiki != "" {
+		lang := strings.TrimSuffix(wiki, "wiki")
+		serverURL := fmt.Sprintf("https://%s.wikipedia.org", lang)
+		urlKey := fmt.Sprintf("editwar:serverurl:%s", alert.PageTitle)
+		_ = ewd.redis.Set(ctx, urlKey, serverURL, 12*time.Hour).Err()
+	}
+
 	// Persist the first-seen start time for this edit war so UI can show a
 	// stable duration. Use SETNX to avoid overwriting an existing first-seen
 	// timestamp, but refresh TTL on each publish so the key expires together
 	// with the marker when the war ends.
+	// Persist the actual start time from the alert (derived from edit data)
+	// rather than time.Now() so that duration tracking reflects reality.
 	startKey := fmt.Sprintf("editwar:start:%s", alert.PageTitle)
-	firstSeen := time.Now().UTC().Format(time.RFC3339)
+	firstSeen := alert.StartTime.UTC().Format(time.RFC3339)
 	set, err := ewd.redis.SetNX(ctx, startKey, firstSeen, 12*time.Hour).Result()
 	if err != nil {
 		ewd.logger.Warn().Err(err).Str("page", alert.PageTitle).Msg("Failed to set editwar start key")
@@ -454,13 +483,29 @@ func (ewd *EditWarDetector) GetActiveEditWars(ctx context.Context) ([]*EditWarAl
 
 			severity := ewd.calculateEditWarSeverity(totalEdits, len(editors), revertCount)
 
+			// Derive start time from persisted key or TTL
+			warStart := time.Now().Add(-ewd.timeWindow) // fallback
+			startKey := fmt.Sprintf("editwar:start:%s", pageTitle)
+			if s, sErr := ewd.redis.Get(ctx, startKey).Result(); sErr == nil && s != "" {
+				if t, pErr := time.Parse(time.RFC3339, s); pErr == nil {
+					warStart = t
+				}
+			} else {
+				// Try TTL-based approximation
+				ttl, ttlErr := ewd.redis.TTL(ctx, key).Result()
+				if ttlErr == nil && ttl > 0 && ttl <= ewd.timeWindow {
+					elapsed := ewd.timeWindow - ttl
+					warStart = time.Now().Add(-elapsed)
+				}
+			}
+
 			activeWars = append(activeWars, &EditWarAlert{
 				PageTitle:   pageTitle,
 				EditorCount: len(editors),
 				EditCount:   totalEdits,
 				RevertCount: revertCount,
 				Severity:    severity,
-				StartTime:   time.Now().Add(-ewd.timeWindow),
+				StartTime:   warStart,
 				Editors:     editors,
 			})
 		}

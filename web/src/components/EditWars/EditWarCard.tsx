@@ -63,7 +63,7 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
   const severity = getSeverityColor(war.severity);
   const accentBorder =
     SEVERITY_BORDER[war.severity.toLowerCase()] ?? 'border-l-blue-400';
-  const wikiUrl = buildWikiUrl(war.page_title);
+  const wikiUrl = buildWikiUrl(war.page_title, war.server_url);
   const historyUrl = `${wikiUrl}?action=history`;
 
   return (
@@ -159,7 +159,7 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
           {war.editors.slice(0, 6).map((editor) => (
             <a
               key={editor}
-              href={`https://en.wikipedia.org/wiki/User:${encodeURIComponent(editor.replace(/ /g, '_'))}`}
+              href={buildWikiUrl(`User:${editor}`, war.server_url)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 px-2 py-0.5 bg-monitor-card border border-monitor-border rounded-full text-xs transition-colors text-monitor-text"
@@ -254,7 +254,7 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
                 {war.editors.map((editor) => (
                   <li key={editor}>
                     <a
-                      href={`https://en.wikipedia.org/wiki/User:${encodeURIComponent(editor.replace(/ /g, '_'))}`}
+                      href={buildWikiUrl(`User:${editor}`, war.server_url)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-monitor-text"

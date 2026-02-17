@@ -35,12 +35,12 @@ func (e *WikipediaEdit) ByteChange() int {
 }
 
 // Language extracts the language code from the wiki field
-// For example, "enwiki" returns "en", "eswiki" returns "es"
+// For example, "enwiki" returns "en", "eswiki" returns "es", "simplewiki" returns "simple"
 func (e *WikipediaEdit) Language() string {
 	if len(e.Wiki) < 2 {
 		return ""
 	}
-	return e.Wiki[:2]
+	return strings.TrimSuffix(e.Wiki, "wiki")
 }
 
 // IsMainNamespace returns true if this edit is in the main article namespace (ns=0)

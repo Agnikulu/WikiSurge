@@ -510,6 +510,13 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 
 			severity := classifyEditWarSeverity(len(editors), totalEdits, revertCount)
 
+			// Retrieve persisted server URL for frontend wiki link building
+			serverURL := ""
+			urlKey := fmt.Sprintf("editwar:serverurl:%s", pageTitle)
+			if u, uErr := r.client.Get(ctx, urlKey).Result(); uErr == nil && u != "" {
+				serverURL = u
+			}
+
 			war := map[string]interface{}{
 				"page_title":   pageTitle,
 				"editor_count": max(len(editors), 2), // at least 2 editors triggered the war
@@ -520,6 +527,7 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				"active":       true,
 				"start_time":   startTime.UTC().Format(time.RFC3339),
 				"last_edit":    time.Now().UTC().Format(time.RFC3339),
+				"server_url":   serverURL,
 			}
 			activeWars = append(activeWars, war)
 		}

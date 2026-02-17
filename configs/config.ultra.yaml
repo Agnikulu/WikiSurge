@@ -17,7 +17,7 @@ features:
 
 ingestor:
   exclude_bots: true
-  allowed_languages: ["en"]      # English only - reduces volume by ~90%
+  allowed_languages: []           # Empty = all languages accepted
   allowed_namespaces: [0]        # Main articles only
   rate_limit: 50                 # Lower rate limit
   burst_limit: 100

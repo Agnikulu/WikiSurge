@@ -37,16 +37,17 @@ func NewStatsTracker(client *redis.Client) *StatsTracker {
 func (st *StatsTracker) RecordEdit(ctx context.Context, language string, isBot bool) error {
 	pipe := st.redis.Pipeline()
 
-	// Increment per-language counter (expires daily)
-	langKey := "stats:languages"
+	// Increment per-language counter partitioned by date so it resets daily
+	dateStr := time.Now().UTC().Format("2006-01-02")
+	langKey := fmt.Sprintf("stats:languages:%s", dateStr)
 	pipe.HIncrBy(ctx, langKey, language, 1)
 	pipe.Expire(ctx, langKey, 25*time.Hour)
 
-	// Increment total counter
+	// Increment total counter for today
 	pipe.HIncrBy(ctx, langKey, "__total__", 1)
 
-	// Increment human/bot counter
-	botKey := "stats:edit_types"
+	// Increment human/bot counter partitioned by date
+	botKey := fmt.Sprintf("stats:edit_types:%s", dateStr)
 	if isBot {
 		pipe.HIncrBy(ctx, botKey, "bot", 1)
 	} else {
@@ -71,9 +72,11 @@ func (st *StatsTracker) RecordEdit(ctx context.Context, language string, isBot b
 	return err
 }
 
-// GetLanguageCounts returns edit counts per language, sorted by count descending.
+// GetLanguageCounts returns edit counts per language for today, sorted by count descending.
 func (st *StatsTracker) GetLanguageCounts(ctx context.Context) ([]LanguageCount, int64, error) {
-	data, err := st.redis.HGetAll(ctx, "stats:languages").Result()
+	dateStr := time.Now().UTC().Format("2006-01-02")
+	langKey := fmt.Sprintf("stats:languages:%s", dateStr)
+	data, err := st.redis.HGetAll(ctx, langKey).Result()
 	if err != nil {
 		return nil, 0, err
 	}
@@ -96,9 +99,11 @@ func (st *StatsTracker) GetLanguageCounts(ctx context.Context) ([]LanguageCount,
 	return counts, total, nil
 }
 
-// GetEditTypes returns human vs bot edit counts.
+// GetEditTypes returns human vs bot edit counts for today.
 func (st *StatsTracker) GetEditTypes(ctx context.Context) (human, bot int64, err error) {
-	data, err := st.redis.HGetAll(ctx, "stats:edit_types").Result()
+	dateStr := time.Now().UTC().Format("2006-01-02")
+	botKey := fmt.Sprintf("stats:edit_types:%s", dateStr)
+	data, err := st.redis.HGetAll(ctx, botKey).Result()
 	if err != nil {
 		return 0, 0, err
 	}
@@ -109,7 +114,9 @@ func (st *StatsTracker) GetEditTypes(ctx context.Context) (human, bot int64, err
 
 // GetDailyEditCount returns the total edit count for today.
 func (st *StatsTracker) GetDailyEditCount(ctx context.Context) (int64, error) {
-	totalStr, err := st.redis.HGet(ctx, "stats:languages", "__total__").Result()
+	dateStr := time.Now().UTC().Format("2006-01-02")
+	langKey := fmt.Sprintf("stats:languages:%s", dateStr)
+	totalStr, err := st.redis.HGet(ctx, langKey, "__total__").Result()
 	if err == redis.Nil {
 		return 0, nil
 	}
