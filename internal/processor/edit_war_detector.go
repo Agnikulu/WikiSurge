@@ -48,6 +48,7 @@ type EditWarAlert struct {
 	Severity    string    `json:"severity"`
 	StartTime   time.Time `json:"start_time"`
 	Editors     []string  `json:"editors"`
+	ServerURL   string    `json:"server_url,omitempty"`
 }
 
 // EditWarMetrics contains Prometheus metrics for edit war detection
@@ -181,6 +182,7 @@ func (ewd *EditWarDetector) ProcessEdit(ctx context.Context, edit *models.Wikipe
 		}
 
 		if alert != nil {
+			alert.ServerURL = edit.ServerURL
 			if err := ewd.publishEditWarAlert(ctx, alert, edit.Wiki); err != nil {
 				ewd.logger.Error().Err(err).Str("page", edit.Title).Msg("Failed to publish edit war alert")
 				return err

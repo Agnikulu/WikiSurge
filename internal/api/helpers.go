@@ -83,6 +83,7 @@ type EditWarEntry struct {
 	LastEdit    string   `json:"last_edit,omitempty"`
 	Editors     []string `json:"editors"`
 	Active      bool     `json:"active"`
+	ServerURL   string   `json:"server_url,omitempty"`
 }
 
 // respondJSON writes a JSON payload with the given HTTP status.

@@ -545,6 +545,9 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 			if le, ok := w["last_edit"].(string); ok {
 				entry.LastEdit = le
 			}
+			if su, ok := w["server_url"].(string); ok {
+				entry.ServerURL = su
+			}
 			results = append(results, entry)
 		}
 
@@ -615,6 +618,9 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			entry.Editors = names
+		}
+		if su, ok := w["server_url"].(string); ok {
+			entry.ServerURL = su
 		}
 		results = append(results, entry)
 		
