@@ -262,7 +262,12 @@ func (h *HotPageTracker) AddEditToWindow(ctx context.Context, pageTitle string, 
 	if edit.User != "" {
 		pipe.HSetNX(ctx, metadataKey, fmt.Sprintf("editor:%s", edit.User), timestamp)
 	}
-	
+
+	// Persist server_url for wiki link building (backfills pages promoted before this field existed)
+	if edit.ServerURL != "" {
+		pipe.HSetNX(ctx, metadataKey, "server_url", edit.ServerURL)
+	}
+
 	// EXPIRE window and metadata
 	bufferDuration := h.windowDuration + (10 * time.Minute)
 	pipe.Expire(ctx, windowKey, bufferDuration)

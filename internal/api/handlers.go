@@ -429,6 +429,14 @@ func (s *APIServer) handleGetAlerts(w http.ResponseWriter, r *http.Request) {
 		if wiki, ok := a.Data["wiki"].(string); ok {
 			entry.Wiki = wiki
 		}
+		// Derive server_url from wiki field, alert data, or page_title server_url
+		if serverURL, ok := a.Data["server_url"].(string); ok && serverURL != "" {
+			entry.ServerURL = serverURL
+		} else if entry.Wiki != "" {
+			if lang := strings.TrimSuffix(entry.Wiki, "wiki"); lang != "" {
+				entry.ServerURL = fmt.Sprintf("https://%s.wikipedia.org", lang)
+			}
+		}
 		if ratio, ok := a.Data["spike_ratio"].(float64); ok {
 			entry.SpikeRatio = ratio
 		}

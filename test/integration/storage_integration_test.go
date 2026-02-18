@@ -216,20 +216,20 @@ func testTrendingTracking(t *testing.T, ctx context.Context, trending *storage.T
 
 func testAlertStreaming(t *testing.T, ctx context.Context, alerts *storage.RedisAlerts) {
 	// Test spike alert
-	err := alerts.PublishSpikeAlert(ctx, "testwiki", "Alert Test Page", 3.5, 15)
+	err := alerts.PublishSpikeAlert(ctx, "testwiki", "Alert Test Page", "https://test.wikipedia.org", 3.5, 15)
 	if err != nil {
 		t.Fatalf("Failed to publish spike alert: %v", err)
 	}
 
 	// Test edit war alert
 	participants := []string{"User1", "User2", "User3"}
-	err = alerts.PublishEditWarAlert(ctx, "testwiki", "Edit War Page", participants, 500)
+	err = alerts.PublishEditWarAlert(ctx, "testwiki", "Edit War Page", "https://test.wikipedia.org", participants, 500)
 	if err != nil {
 		t.Fatalf("Failed to publish edit war alert: %v", err)
 	}
 
 	// Test trending alert
-	err = alerts.PublishTrendingAlert(ctx, "testwiki", "Trending Alert Page", 1, 95.5)
+	err = alerts.PublishTrendingAlert(ctx, "testwiki", "Trending Alert Page", "https://test.wikipedia.org", 1, 95.5)
 	if err != nil {
 		t.Fatalf("Failed to publish trending alert: %v", err)
 	}
@@ -421,7 +421,7 @@ func testEndToEndFlow(t *testing.T, ctx context.Context, hotPages *storage.HotPa
 	}
 
 	// Publish spike alert for the page
-	err = alerts.PublishSpikeAlert(ctx, pageWiki, pageTitle, 4.2, 8)
+	err = alerts.PublishSpikeAlert(ctx, pageWiki, pageTitle, "", 4.2, 8)
 	if err != nil {
 		t.Fatalf("Failed to publish spike alert: %v", err)
 	}

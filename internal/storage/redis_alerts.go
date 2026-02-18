@@ -42,7 +42,7 @@ const (
 )
 
 // PublishSpikeAlert publishes an alert when a page experiences a spike in activity
-func (r *RedisAlerts) PublishSpikeAlert(ctx context.Context, wiki, title string, spikeRatio float64, editCount int) error {
+func (r *RedisAlerts) PublishSpikeAlert(ctx context.Context, wiki, title, serverURL string, spikeRatio float64, editCount int) error {
 	alert := Alert{
 		ID:        fmt.Sprintf("spike-%d", time.Now().UnixNano()),
 		Type:      AlertTypeSpike,
@@ -50,6 +50,7 @@ func (r *RedisAlerts) PublishSpikeAlert(ctx context.Context, wiki, title string,
 		Data: map[string]interface{}{
 			"wiki":        wiki,
 			"title":       title,
+			"server_url":  serverURL,
 			"spike_ratio": spikeRatio,
 			"edit_count":  editCount,
 		},
@@ -59,7 +60,7 @@ func (r *RedisAlerts) PublishSpikeAlert(ctx context.Context, wiki, title string,
 }
 
 // PublishEditWarAlert publishes an alert when edit war activity is detected
-func (r *RedisAlerts) PublishEditWarAlert(ctx context.Context, wiki, title string, participants []string, changeVolume int) error {
+func (r *RedisAlerts) PublishEditWarAlert(ctx context.Context, wiki, title, serverURL string, participants []string, changeVolume int) error {
 	alert := Alert{
 		ID:        fmt.Sprintf("editwar-%d", time.Now().UnixNano()),
 		Type:      AlertTypeEditWar,
@@ -67,6 +68,7 @@ func (r *RedisAlerts) PublishEditWarAlert(ctx context.Context, wiki, title strin
 		Data: map[string]interface{}{
 			"wiki":           wiki,
 			"title":          title,
+			"server_url":     serverURL,
 			"participants":   participants,
 			"change_volume":  changeVolume,
 			"num_editors":    len(participants),
@@ -77,16 +79,17 @@ func (r *RedisAlerts) PublishEditWarAlert(ctx context.Context, wiki, title strin
 }
 
 // PublishTrendingAlert publishes an alert when a page enters top trending
-func (r *RedisAlerts) PublishTrendingAlert(ctx context.Context, wiki, title string, rank int, score float64) error {
+func (r *RedisAlerts) PublishTrendingAlert(ctx context.Context, wiki, title, serverURL string, rank int, score float64) error {
 	alert := Alert{
 		ID:        fmt.Sprintf("trending-%d", time.Now().UnixNano()),
 		Type:      AlertTypeTrending,
 		Timestamp: time.Now(),
 		Data: map[string]interface{}{
-			"wiki":  wiki,
-			"title": title,
-			"rank":  rank,
-			"score": score,
+			"wiki":       wiki,
+			"title":      title,
+			"server_url": serverURL,
+			"rank":       rank,
+			"score":      score,
 		},
 	}
 

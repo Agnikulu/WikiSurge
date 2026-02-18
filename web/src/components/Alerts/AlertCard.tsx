@@ -41,7 +41,7 @@ function SpikeAlertCard({
   severity: ReturnType<typeof getSeverityColor>;
   onDismiss?: (alert: Alert) => void;
 }) {
-  const wikiUrl = buildWikiUrl(alert.page_title);
+  const wikiUrl = buildWikiUrl(alert.page_title, alert.server_url);
 
   return (
     <div
@@ -123,7 +123,7 @@ function EditWarAlertCard({
   severity: ReturnType<typeof getSeverityColor>;
   onDismiss?: (alert: Alert) => void;
 }) {
-  const wikiUrl = buildWikiUrl(alert.page_title);
+  const wikiUrl = buildWikiUrl(alert.page_title, alert.server_url);
 
   return (
     <div

@@ -69,6 +69,7 @@ type AlertEntry struct {
 	RevertCount  int      `json:"revert_count,omitempty"`
 	Editors      []string `json:"editors,omitempty"`
 	Wiki         string   `json:"wiki,omitempty"`
+	ServerURL    string   `json:"server_url,omitempty"`
 }
 
 // EditWarEntry is returned by GET /api/edit-wars.

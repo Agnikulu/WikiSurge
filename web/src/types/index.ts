@@ -50,6 +50,7 @@ export interface SpikeAlert {
   timestamp: string;
   edits_5min: number;
   editor_count?: number; // Optional field from API
+  server_url?: string;
 }
 
 export interface EditWarAlert {
@@ -60,6 +61,7 @@ export interface EditWarAlert {
   revert_count: number;
   severity: string;
   start_time: string;
+  server_url?: string;
 }
 
 export interface Stats {

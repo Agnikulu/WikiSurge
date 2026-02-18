@@ -44,6 +44,7 @@ type SpikeAlert struct {
 	Severity       string    `json:"severity"`
 	Timestamp      time.Time `json:"timestamp"`
 	UniqueEditors  int       `json:"unique_editors"`
+	ServerURL      string    `json:"server_url,omitempty"`
 }
 
 // SpikeDetectorMetrics contains Prometheus metrics for spike detection
@@ -225,6 +226,7 @@ func (sd *SpikeDetector) detectSpike(pageTitle string, stats *storage.PageStats)
 		Severity:      sd.calculateSeverity(ratio),
 		Timestamp:     time.Now(),
 		UniqueEditors: len(stats.UniqueEditors),
+		ServerURL:     stats.ServerURL,
 	}
 
 	return alert

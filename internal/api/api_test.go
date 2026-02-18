@@ -210,8 +210,8 @@ func TestAlerts_DefaultType_BothStreams(t *testing.T) {
 	ctx := context.Background()
 
 	// Publish spike and edit war alerts
-	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "SpikePage", 5.0, 50)
-	_ = srv.alerts.PublishEditWarAlert(ctx, "enwiki", "WarPage", []string{"A", "B"}, 100)
+	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "SpikePage", "https://en.wikipedia.org", 5.0, 50)
+	_ = srv.alerts.PublishEditWarAlert(ctx, "enwiki", "WarPage", "https://en.wikipedia.org", []string{"A", "B"}, 100)
 
 	// No type param → queries both streams
 	rec := doRequest(srv, "GET", "/api/alerts")
@@ -233,7 +233,7 @@ func TestAlerts_WithSpikeData(t *testing.T) {
 	srv, _ := testServer(t)
 
 	ctx := context.Background()
-	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "TestPage", 3.5, 42)
+	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "TestPage", "https://en.wikipedia.org", 3.5, 42)
 
 	rec := doRequest(srv, "GET", "/api/alerts?type=spike&limit=5")
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -251,9 +251,9 @@ func TestAlerts_SeverityFilter(t *testing.T) {
 	ctx := context.Background()
 
 	// Low severity (ratio=1.5), medium (ratio=3.0), high (ratio=6.0)
-	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "LowPage", 1.5, 10)
-	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "MediumPage", 3.0, 20)
-	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "HighPage", 6.0, 50)
+	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "LowPage", "https://en.wikipedia.org", 1.5, 10)
+	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "MediumPage", "https://en.wikipedia.org", 3.0, 20)
+	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "HighPage", "https://en.wikipedia.org", 6.0, 50)
 
 	rec := doRequest(srv, "GET", "/api/alerts?type=spike&severity=high")
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -286,7 +286,7 @@ func TestAlerts_Pagination(t *testing.T) {
 
 	// Publish 5 alerts
 	for i := 0; i < 5; i++ {
-		_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", fmt.Sprintf("Page_%d", i), float64(i+1), i*10)
+		_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", fmt.Sprintf("Page_%d", i), "https://en.wikipedia.org", float64(i+1), i*10)
 	}
 
 	// Fetch page 1 (limit=2, offset=0)
@@ -326,7 +326,7 @@ func TestAlerts_SinceFilter(t *testing.T) {
 	srv, _ := testServer(t)
 	ctx := context.Background()
 
-	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "RecentPage", 5.0, 50)
+	_ = srv.alerts.PublishSpikeAlert(ctx, "enwiki", "RecentPage", "https://en.wikipedia.org", 5.0, 50)
 
 	// Use 'since' set to 1 hour ago — should include the alert
 	since := time.Now().Add(-1 * time.Hour).Format(time.RFC3339)
@@ -396,7 +396,7 @@ func TestEditWars_Historical(t *testing.T) {
 	ctx := context.Background()
 
 	// Publish an edit war alert to the stream
-	_ = srv.alerts.PublishEditWarAlert(ctx, "enwiki", "WarPage", []string{"A", "B"}, 100)
+	_ = srv.alerts.PublishEditWarAlert(ctx, "enwiki", "WarPage", "https://en.wikipedia.org", []string{"A", "B"}, 100)
 
 	rec := doRequest(srv, "GET", "/api/edit-wars?active=false")
 	assert.Equal(t, http.StatusOK, rec.Code)

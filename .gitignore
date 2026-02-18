@@ -22,3 +22,4 @@ Thumbs.db
 # Test coverage
 coverage/
 *.coverprofile
+*.log
