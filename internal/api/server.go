@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Agnikulu/WikiSurge/internal/config"
+	"github.com/Agnikulu/WikiSurge/internal/llm"
 	"github.com/Agnikulu/WikiSurge/internal/models"
 	"github.com/Agnikulu/WikiSurge/internal/storage"
 	"github.com/redis/go-redis/v9"
@@ -31,6 +32,7 @@ type APIServer struct {
 	rateLimiter    *RateLimiter
 	wsHub          *WebSocketHub
 	alertHub       *AlertHub
+	analysisService *llm.AnalysisService
 	version        string
 
 	// Stats cache
@@ -78,6 +80,26 @@ func NewAPIServer(
 	s.alertHub = NewAlertHub(alerts, s.logger)
 	go s.alertHub.Run()
 
+	// LLM analysis service for edit war conflict summaries.
+	if cfg.LLM.Enabled {
+		llmClient := llm.NewClient(llm.Config{
+			Provider:    llm.Provider(cfg.LLM.Provider),
+			APIKey:      cfg.LLM.APIKey,
+			Model:       cfg.LLM.Model,
+			BaseURL:     cfg.LLM.BaseURL,
+			MaxTokens:   cfg.LLM.MaxTokens,
+			Temperature: cfg.LLM.Temperature,
+			Timeout:     cfg.LLM.Timeout,
+		}, s.logger)
+		s.analysisService = llm.NewAnalysisService(llmClient, redisClient, cfg.LLM.CacheTTL, s.logger)
+		s.logger.Info().Str("provider", cfg.LLM.Provider).Str("model", cfg.LLM.Model).Msg("LLM analysis service enabled")
+	} else {
+		// Even without LLM, provide heuristic fallback
+		llmClient := llm.NewClient(llm.Config{}, s.logger)
+		s.analysisService = llm.NewAnalysisService(llmClient, redisClient, cfg.LLM.CacheTTL, s.logger)
+		s.logger.Info().Msg("LLM not configured — edit war analysis will use heuristic fallback")
+	}
+
 	s.setupRoutes()
 	return s
 }
@@ -94,6 +116,8 @@ func (s *APIServer) setupRoutes() {
 	s.router.HandleFunc("GET /api/stats", s.handleGetStats)
 	s.router.HandleFunc("GET /api/alerts", s.handleGetAlerts)
 	s.router.HandleFunc("GET /api/edit-wars", s.handleGetEditWars)
+	s.router.HandleFunc("GET /api/edit-wars/analysis", s.handleGetEditWarAnalysis)
+	s.router.HandleFunc("GET /api/edit-wars/timeline", s.handleGetEditWarTimeline)
 	s.router.HandleFunc("GET /api/timeline", s.handleGetTimeline)
 	s.router.HandleFunc("GET /api/search", s.handleSearch)
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Agnikulu/WikiSurge/internal/config"
+	"github.com/Agnikulu/WikiSurge/internal/llm"
 	"github.com/Agnikulu/WikiSurge/internal/metrics"
 	"github.com/Agnikulu/WikiSurge/internal/models"
 	"github.com/Agnikulu/WikiSurge/internal/storage"
@@ -26,17 +27,21 @@ var (
 
 // EditWarDetector detects ongoing editorial conflicts in real-time
 type EditWarDetector struct {
-	redis       *redis.Client
-	hotPages    *storage.HotPageTracker
-	config      *config.Config
-	alertStream string
-	metrics     *EditWarMetrics
-	minEdits    int
-	minEditors  int
-	minReverts  int
-	timeWindow  time.Duration
-	logger      zerolog.Logger
-	mu          sync.RWMutex
+	redis            *redis.Client
+	hotPages         *storage.HotPageTracker
+	config           *config.Config
+	alertStream      string
+	metrics          *EditWarMetrics
+	analysisService  *llm.AnalysisService
+	minEdits         int
+	minEditors       int
+	minReverts       int
+	timeWindow       time.Duration
+	logger           zerolog.Logger
+	mu               sync.RWMutex
+	cooldowns        map[string]time.Time // page -> last alert time
+	cooldownDuration time.Duration
+	reanalyzeEvery   int // re-run LLM analysis every N edits on active wars (0=disabled)
 }
 
 // EditWarAlert represents a detected edit war event
@@ -108,17 +113,26 @@ func NewEditWarDetector(hotPages *storage.HotPageTracker, redisClient *redis.Cli
 	})
 
 	return &EditWarDetector{
-		redis:       redisClient,
-		hotPages:    hotPages,
-		config:      cfg,
-		alertStream: "alerts:editwars",
-		metrics:     sharedEditWarMetrics,
-		minEdits:    5,
-		minEditors:  2,
-		minReverts:  1,
-		timeWindow:  10 * time.Minute,
-		logger:      logger.With().Str("component", "edit_war_detector").Logger(),
+		redis:            redisClient,
+		hotPages:         hotPages,
+		config:           cfg,
+		alertStream:      "alerts:editwars",
+		metrics:          sharedEditWarMetrics,
+		minEdits:         5,
+		minEditors:       2,
+		minReverts:       1,
+		timeWindow:       10 * time.Minute,
+		logger:           logger.With().Str("component", "edit_war_detector").Logger(),
+		cooldowns:        make(map[string]time.Time),
+		cooldownDuration: 5 * time.Minute, // Suppress duplicate alerts for 5 minutes per page
+		reanalyzeEvery:   cfg.LLM.ReanalyzeEvery,
 	}
+}
+
+// SetAnalysisService attaches an LLM analysis service so edit wars are
+// analysed automatically on detection.
+func (ewd *EditWarDetector) SetAnalysisService(svc *llm.AnalysisService) {
+	ewd.analysisService = svc
 }
 
 // ProcessEdit analyzes each edit for edit war patterns - handler for Kafka consumer
@@ -152,6 +166,22 @@ func (ewd *EditWarDetector) ProcessEdit(ctx context.Context, edit *models.Wikipe
 	pipe.LTrim(ctx, changesKey, -100, -1) // Keep last 100 changes
 	pipe.Expire(ctx, changesKey, ewd.timeWindow)
 
+	// Track edit timeline (user, comment, byte change, timestamp) for LLM analysis.
+	// Only stored for hot pages already in the edit-war tracking path.
+	// Use 12h TTL (matching the edit war marker) so timeline data remains
+	// available for LLM analysis as long as the edit war is shown as active.
+	timelineKey := fmt.Sprintf("editwar:timeline:%s", edit.Title)
+	timelineEntry, _ := json.Marshal(map[string]interface{}{
+		"user":        edit.User,
+		"comment":     edit.Comment,
+		"byte_change": byteChange,
+		"timestamp":   edit.Timestamp,
+		"revision_id": edit.Revision.New,
+	})
+	pipe.RPush(ctx, timelineKey, string(timelineEntry))
+	pipe.LTrim(ctx, timelineKey, -100, -1) // Keep last 100 entries
+	pipe.Expire(ctx, timelineKey, 12*time.Hour)
+
 	_, err = pipe.Exec(ctx)
 	if err != nil {
 		ewd.logger.Error().Err(err).Str("page", edit.Title).Msg("Failed to update editor/change tracking")
@@ -182,6 +212,26 @@ func (ewd *EditWarDetector) ProcessEdit(ctx context.Context, edit *models.Wikipe
 		}
 
 		if alert != nil {
+			// Check cooldown to prevent duplicate alerts for the same page
+			ewd.mu.Lock()
+			if lastAlert, exists := ewd.cooldowns[edit.Title]; exists && time.Since(lastAlert) < ewd.cooldownDuration {
+				ewd.mu.Unlock()
+				// War already known — check if it's time for periodic re-analysis
+				ewd.maybeReanalyze(ctx, edit.Title)
+				return nil // Still in cooldown, suppress duplicate
+			}
+			ewd.cooldowns[edit.Title] = time.Now()
+			// Clean up expired cooldowns periodically
+			if len(ewd.cooldowns) > 500 {
+				now := time.Now()
+				for page, t := range ewd.cooldowns {
+					if now.Sub(t) > ewd.cooldownDuration {
+						delete(ewd.cooldowns, page)
+					}
+				}
+			}
+			ewd.mu.Unlock()
+
 			alert.ServerURL = edit.ServerURL
 			if err := ewd.publishEditWarAlert(ctx, alert, edit.Wiki); err != nil {
 				ewd.logger.Error().Err(err).Str("page", edit.Title).Msg("Failed to publish edit war alert")
@@ -433,6 +483,11 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 		_ = ewd.redis.Expire(ctx, startKey, 12*time.Hour).Err()
 	}
 
+	// Refresh the timeline key TTL to match the 12h edit war marker so
+	// LLM analysis data stays available as long as the war is active.
+	timelineKey := fmt.Sprintf("editwar:timeline:%s", alert.PageTitle)
+	_ = ewd.redis.Expire(ctx, timelineKey, 12*time.Hour).Err()
+
 	// Also set editwar:{wiki}:{title} for indexing strategy compatibility
 	if wiki != "" {
 		editWarWikiKey := fmt.Sprintf("editwar:%s:%s", wiki, alert.PageTitle)
@@ -442,7 +497,55 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 	}
 
 	ewd.metrics.AlertsPublished.Inc()
+
+	// Trigger LLM analysis in the background when a new edit war is detected.
+	// The result is cached in Redis so the API can serve it immediately.
+	if ewd.analysisService != nil {
+		go func(page string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if _, err := ewd.analysisService.Analyze(ctx, page); err != nil {
+				ewd.logger.Warn().Err(err).Str("page", page).Msg("Auto-analysis failed for new edit war")
+			} else {
+				ewd.logger.Info().Str("page", page).Msg("Auto-analysis completed for edit war")
+			}
+		}(alert.PageTitle)
+	}
+
 	return nil
+}
+
+// maybeReanalyze triggers a fresh LLM re-analysis every N edits on an active
+// edit war, using a Redis counter. This keeps the analysis current as the
+// conflict evolves without calling the LLM on every single edit.
+func (ewd *EditWarDetector) maybeReanalyze(ctx context.Context, pageTitle string) {
+	if ewd.analysisService == nil || ewd.reanalyzeEvery <= 0 {
+		return
+	}
+
+	counterKey := fmt.Sprintf("editwar:reanalyze_ctr:%s", pageTitle)
+	count, err := ewd.redis.Incr(ctx, counterKey).Result()
+	if err != nil {
+		return
+	}
+	// Expire with the edit war marker so it cleans itself up
+	if count == 1 {
+		_ = ewd.redis.Expire(ctx, counterKey, 12*time.Hour).Err()
+	}
+
+	if count%int64(ewd.reanalyzeEvery) != 0 {
+		return
+	}
+
+	go func(page string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if _, err := ewd.analysisService.Reanalyze(ctx, page); err != nil {
+			ewd.logger.Warn().Err(err).Str("page", page).Msg("Periodic re-analysis failed")
+		} else {
+			ewd.logger.Info().Str("page", page).Int64("edit_num", count).Msg("Periodic re-analysis completed")
+		}
+	}(pageTitle)
 }
 
 // GetActiveEditWars retrieves all currently active edit wars
@@ -548,4 +651,33 @@ func (ewd *EditWarDetector) GetRecentAlerts(ctx context.Context, since time.Time
 	}
 
 	return alerts, nil
+}
+
+// TimelineEntry represents a single edit in the edit war timeline, stored in Redis.
+type TimelineEntry struct {
+	User       string `json:"user"`
+	Comment    string `json:"comment"`
+	ByteChange int    `json:"byte_change"`
+	Timestamp  int64  `json:"timestamp"`
+	RevisionID int64  `json:"revision_id,omitempty"`
+}
+
+// GetTimeline retrieves the edit timeline for a page's edit war from Redis.
+func (ewd *EditWarDetector) GetTimeline(ctx context.Context, pageTitle string) ([]TimelineEntry, error) {
+	timelineKey := fmt.Sprintf("editwar:timeline:%s", pageTitle)
+	raw, err := ewd.redis.LRange(ctx, timelineKey, 0, -1).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get timeline for %s: %w", pageTitle, err)
+	}
+
+	entries := make([]TimelineEntry, 0, len(raw))
+	for _, r := range raw {
+		var entry TimelineEntry
+		if err := json.Unmarshal([]byte(r), &entry); err != nil {
+			ewd.logger.Warn().Err(err).Msg("Failed to unmarshal timeline entry")
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
 }

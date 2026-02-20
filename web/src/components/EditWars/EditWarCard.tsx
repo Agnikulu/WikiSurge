@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { EditWar } from '../../types';
+import type { EditWar, Side } from '../../types';
 import {
   buildWikiUrl,
   formatTimestamp,
@@ -10,12 +10,15 @@ import { SeverityBadge } from '../Alerts/SeverityBadge';
 import { EditorConflictGraph } from './EditorConflictGraph';
 import { EditWarTimeline } from './EditWarTimeline';
 import {
+  Brain,
   ChevronDown,
   ChevronUp,
   Clock,
   ExternalLink,
   History,
+  Lightbulb,
   RotateCcw,
+  Shield,
   Swords,
   Users,
   X,
@@ -38,21 +41,28 @@ const SEVERITY_BORDER: Record<string, string> = {
 };
 
 /**
- * Calculate a human-readable duration from the start_time to now.
+ * Format a millisecond duration into a human-readable string.
  */
-function durationSince(isoTimestamp: string): string {
-  try {
-    const start = new Date(isoTimestamp).getTime();
-    const diffMs = Date.now() - start;
-    if (diffMs < 0) return 'just started';
+function formatDuration(diffMs: number): string {
+  if (diffMs < 0) return 'just started';
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return 'less than a minute';
+  if (mins < 60) return `${mins} minute${mins !== 1 ? 's' : ''}`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ${mins % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
+}
 
-    const mins = Math.floor(diffMs / 60_000);
-    if (mins < 1) return 'less than a minute';
-    if (mins < 60) return `${mins} minute${mins !== 1 ? 's' : ''}`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ${mins % 60}m`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ${hours % 24}h`;
+/**
+ * Calculate the edit war span: last_edit − start_time.
+ * Falls back to now − start_time if last_edit is unavailable.
+ */
+function warDuration(startIso: string, lastEditIso?: string): string {
+  try {
+    const start = new Date(startIso).getTime();
+    const end = lastEditIso ? new Date(lastEditIso).getTime() : Date.now();
+    return formatDuration(end - start);
   } catch {
     return 'unknown';
   }
@@ -150,33 +160,41 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
           <StatCell
             icon={<Clock className="h-3.5 w-3.5" />}
             label="Duration"
-            value={war.active ? `Active for ${durationSince(war.start_time)}` : durationSince(war.start_time)}
+            value={war.active ? `Active · ${warDuration(war.start_time, war.last_edit)}` : warDuration(war.start_time, war.last_edit)}
           />
         </div>
 
-        {/* ── Editor list (avatars / names) ────────── */}
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {war.editors.slice(0, 6).map((editor) => (
-            <a
-              key={editor}
-              href={buildWikiUrl(`User:${editor}`, war.server_url)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2 py-0.5 bg-monitor-card border border-monitor-border rounded-full text-xs transition-colors text-monitor-text"
-              title={editor}
-            >
-              <span className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-700 to-purple-700 flex items-center justify-center text-[9px] text-white font-bold flex-shrink-0">
-                {editor.charAt(0).toUpperCase()}
+        {/* ── Editor list: grouped by side or flat fallback ────────── */}
+        {war.analysis && war.analysis.sides && war.analysis.sides.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {war.analysis.sides.map((side: Side, sideIdx: number) => (
+              <SideGroup key={sideIdx} side={side} sideIdx={sideIdx} serverUrl={war.server_url} />
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {war.editors.slice(0, 6).map((editor) => (
+              <a
+                key={editor}
+                href={buildWikiUrl(`User:${editor}`, war.server_url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-monitor-card border border-monitor-border rounded-full text-xs transition-colors text-monitor-text"
+                title={editor}
+              >
+                <span className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-700 to-purple-700 flex items-center justify-center text-[9px] text-white font-bold flex-shrink-0">
+                  {editor.charAt(0).toUpperCase()}
+                </span>
+                <span className="truncate max-w-[100px]">{editor}</span>
+              </a>
+            ))}
+            {war.editors.length > 6 && (
+              <span className="text-xs text-monitor-text-dim">
+                +{war.editors.length - 6} more
               </span>
-              <span className="truncate max-w-[100px]">{editor}</span>
-            </a>
-          ))}
-          {war.editors.length > 6 && (
-            <span className="text-xs text-monitor-text-dim">
-              +{war.editors.length - 6} more
-            </span>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* ── Timeline indicator bar ──────────────── */}
         <TimelineBar war={war} />
@@ -246,26 +264,25 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
                 ? `${((war.revert_count / war.edit_count) * 100).toFixed(0)}%`
                 : 'N/A'}
             </p>
-
-            {/* Full editor list */}
-            <div>
-              <span className="font-medium" style={{ color: 'rgba(0,255,136,0.7)' }}>All editors:</span>
-              <ul className="mt-1 ml-4 list-disc space-y-0.5">
-                {war.editors.map((editor) => (
-                  <li key={editor}>
-                    <a
-                      href={buildWikiUrl(`User:${editor}`, war.server_url)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-monitor-text"
-                    >
-                      {editor}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
           </div>
+
+          {/* Inline Conflict Analysis (auto-loaded, no button) */}
+          {war.analysis ? (
+            <InlineAnalysis analysis={war.analysis} serverUrl={war.server_url} />
+          ) : (
+            <div
+              className="mt-4 flex items-center gap-2 px-3 py-2 text-xs rounded border"
+              style={{
+                background: 'rgba(139, 92, 246, 0.05)',
+                borderColor: 'rgba(139, 92, 246, 0.15)',
+                color: 'rgba(139, 92, 246, 0.5)',
+                fontFamily: 'monospace',
+              }}
+            >
+              <Brain className="h-3.5 w-3.5" />
+              <span>Analysis pending — will be available shortly after detection</span>
+            </div>
+          )}
 
           {/* Editor Conflict Graph */}
           <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(0,255,136,0.06)' }}>
@@ -327,6 +344,162 @@ function TimelineBar({ war }: { war: EditWar }) {
           className="h-full rounded-full transition-all duration-500"
           style={{ width: `${lastPct}%`, background: war.active ? 'linear-gradient(to right, #ffaa00, #ff4444)' : 'linear-gradient(to right, rgba(0,255,136,0.3), rgba(0,255,136,0.5))' }}
         />
+      </div>
+    </div>
+  );
+}
+
+/* ── Side colors for up to 4 sides ────────────────────── */
+const SIDE_COLORS = [
+  { accent: 'rgba(59, 130, 246, 0.5)', bg: 'rgba(59, 130, 246, 0.06)', border: 'rgba(59, 130, 246, 0.2)', gradient: 'from-blue-700 to-cyan-700' },
+  { accent: 'rgba(239, 68, 68, 0.5)', bg: 'rgba(239, 68, 68, 0.06)', border: 'rgba(239, 68, 68, 0.2)', gradient: 'from-red-700 to-orange-700' },
+  { accent: 'rgba(234, 179, 8, 0.5)', bg: 'rgba(234, 179, 8, 0.06)', border: 'rgba(234, 179, 8, 0.2)', gradient: 'from-yellow-700 to-amber-700' },
+  { accent: 'rgba(168, 85, 247, 0.5)', bg: 'rgba(168, 85, 247, 0.06)', border: 'rgba(168, 85, 247, 0.2)', gradient: 'from-purple-700 to-pink-700' },
+];
+
+/**
+ * Displays a group of editors belonging to one side of the conflict.
+ */
+function SideGroup({
+  side,
+  sideIdx,
+  serverUrl,
+}: {
+  side: Side;
+  sideIdx: number;
+  serverUrl?: string;
+}) {
+  const colors = SIDE_COLORS[sideIdx % SIDE_COLORS.length];
+  return (
+    <div
+      className="rounded px-2.5 py-2"
+      style={{
+        background: colors.bg,
+        borderLeft: `3px solid ${colors.accent}`,
+      }}
+    >
+      <div
+        className="text-[10px] font-semibold uppercase tracking-wide mb-1.5 flex items-center gap-1"
+        style={{ color: colors.accent, fontFamily: 'monospace' }}
+      >
+        <Swords className="h-3 w-3" />
+        {side.position}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {side.editors.map((editor) => (
+          <a
+            key={editor.user}
+            href={buildWikiUrl(`User:${editor.user}`, serverUrl)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-0.5 bg-monitor-card border border-monitor-border rounded-full text-xs transition-colors text-monitor-text"
+            title={`${editor.user} · ${editor.edit_count} edits · ${editor.role}`}
+          >
+            <span className={`w-4 h-4 rounded-full bg-gradient-to-br ${colors.gradient} flex items-center justify-center text-[9px] text-white font-bold flex-shrink-0`}>
+              {editor.user.charAt(0).toUpperCase()}
+            </span>
+            <span className="truncate max-w-[100px]">{editor.user}</span>
+            <span className="text-[9px] opacity-50">{editor.edit_count}e</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Inline analysis panel — rendered automatically when analysis data is present.
+ * No manual button needed.
+ */
+function InlineAnalysis({
+  analysis,
+  serverUrl,
+}: {
+  analysis: import('../../types').EditWarAnalysis;
+  serverUrl?: string;
+}) {
+  return (
+    <div className="mt-4 space-y-3" style={{ borderTop: '1px solid rgba(139,92,246,0.1)', paddingTop: '1rem' }}>
+      {/* Header */}
+      <div
+        className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide"
+        style={{ color: '#a78bfa', fontFamily: 'monospace' }}
+      >
+        <Brain className="h-3.5 w-3.5" />
+        <span>Conflict Analysis</span>
+        {analysis.content_area && analysis.content_area !== 'unknown' && (
+          <span
+            className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+            style={{
+              background: 'rgba(139, 92, 246, 0.1)',
+              color: '#c4b5fd',
+              border: '1px solid rgba(139, 92, 246, 0.2)',
+            }}
+          >
+            {analysis.content_area}
+          </span>
+        )}
+        <span
+          className="text-[10px] px-2 py-0.5 rounded-full"
+          style={{
+            background: 'rgba(0, 255, 136, 0.05)',
+            color: 'rgba(0, 255, 136, 0.4)',
+            border: '1px solid rgba(0, 255, 136, 0.1)',
+          }}
+        >
+          {analysis.edit_count} edits analyzed
+        </span>
+      </div>
+
+      {/* Summary */}
+      <p
+        className="text-xs leading-relaxed"
+        style={{ color: 'rgba(0, 255, 136, 0.7)', fontFamily: 'monospace' }}
+      >
+        {analysis.summary}
+      </p>
+
+      {/* Recommendation */}
+      {analysis.recommendation && (
+        <div
+          className="flex items-start gap-2 px-2.5 py-2 rounded text-[11px] leading-snug"
+          style={{
+            background: 'rgba(59, 130, 246, 0.06)',
+            border: '1px solid rgba(59, 130, 246, 0.15)',
+            color: 'rgba(147, 197, 253, 0.8)',
+            fontFamily: 'monospace',
+          }}
+        >
+          <Shield className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color: 'rgba(59, 130, 246, 0.6)' }} />
+          <span>{analysis.recommendation}</span>
+        </div>
+      )}
+
+      {/* Opposing sides (detailed) */}
+      {analysis.sides && analysis.sides.length > 0 && (
+        <div className="space-y-1.5">
+          <h5
+            className="text-[10px] font-semibold uppercase tracking-wide flex items-center gap-1"
+            style={{ color: 'rgba(139, 92, 246, 0.6)', fontFamily: 'monospace' }}
+          >
+            <Lightbulb className="h-3 w-3" />
+            Opposing Sides
+          </h5>
+          <div className="space-y-2">
+            {analysis.sides.map((side, idx) => (
+              <SideGroup key={idx} side={side} sideIdx={idx} serverUrl={serverUrl} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Generated time */}
+      <div
+        className="text-[9px] text-right"
+        style={{ color: 'rgba(0, 255, 136, 0.2)', fontFamily: 'monospace' }}
+      >
+        {analysis.cache_hit ? 'cached · ' : ''}
+        generated {new Date(analysis.generated_at).toLocaleTimeString()}
       </div>
     </div>
   );

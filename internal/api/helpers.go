@@ -74,22 +74,26 @@ type AlertEntry struct {
 
 // EditWarEntry is returned by GET /api/edit-wars.
 type EditWarEntry struct {
-	PageTitle   string   `json:"page_title"`
-	EditorCount int      `json:"editor_count"`
-	EditCount   int      `json:"edit_count"`
-	RevertCount int      `json:"revert_count"`
-	Severity    string   `json:"severity"`
-	StartTime   string   `json:"start_time,omitempty"`
-	LastEdit    string   `json:"last_edit,omitempty"`
-	Editors     []string `json:"editors"`
-	Active      bool     `json:"active"`
-	ServerURL   string   `json:"server_url,omitempty"`
+	PageTitle   string      `json:"page_title"`
+	EditorCount int         `json:"editor_count"`
+	EditCount   int         `json:"edit_count"`
+	RevertCount int         `json:"revert_count"`
+	Severity    string      `json:"severity"`
+	StartTime   string      `json:"start_time,omitempty"`
+	LastEdit    string      `json:"last_edit,omitempty"`
+	Editors     []string    `json:"editors"`
+	Active      bool        `json:"active"`
+	ServerURL   string      `json:"server_url,omitempty"`
+	Analysis    interface{} `json:"analysis,omitempty"`
 }
 
 // respondJSON writes a JSON payload with the given HTTP status.
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
+	// Only set no-store when the handler hasn't already set a Cache-Control header
+	if w.Header().Get("Cache-Control") == "" {
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	w.WriteHeader(status)
 	if data != nil {
 		_ = json.NewEncoder(w).Encode(data)

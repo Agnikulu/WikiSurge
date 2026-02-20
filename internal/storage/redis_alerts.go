@@ -326,7 +326,14 @@ func (r *RedisAlerts) parseAlertMessage(message redis.XMessage) (Alert, error) {
 	}
 
 	// Store all data fields
-	alert.Data = dataMap
+	// When publishAlert marshals the full Alert struct, the actual data
+	// fields end up nested under the "data" key. Extract that nested map
+	// so callers can access fields like "title", "spike_ratio" directly.
+	if nested, ok := dataMap["data"].(map[string]interface{}); ok {
+		alert.Data = nested
+	} else {
+		alert.Data = dataMap
+	}
 	alert.ID = message.ID
 
 	return alert, nil
@@ -520,6 +527,15 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				serverURL = u
 			}
 
+			// Derive last-edit time from the metadata hash instead of "now".
+			lastEdit := time.Now()
+			metaKey := fmt.Sprintf("hot:meta:%s", pageTitle)
+			if leStr, leErr := r.client.HGet(ctx, metaKey, "last_edit").Result(); leErr == nil && leStr != "" {
+				if ts, pErr := strconv.ParseInt(leStr, 10, 64); pErr == nil && ts > 0 {
+					lastEdit = time.Unix(ts, 0)
+				}
+			}
+
 			war := map[string]interface{}{
 				"page_title":   pageTitle,
 				"editor_count": max(len(editors), 2), // at least 2 editors triggered the war
@@ -529,7 +545,7 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				"editors":      editors,
 				"active":       true,
 				"start_time":   startTime.UTC().Format(time.RFC3339),
-				"last_edit":    time.Now().UTC().Format(time.RFC3339),
+				"last_edit":    lastEdit.UTC().Format(time.RFC3339),
 				"server_url":   serverURL,
 			}
 			activeWars = append(activeWars, war)

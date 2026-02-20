@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { TrendingPage, Edit, Alert, Stats, EditWar, SearchResult, SearchParams } from '../types';
+import type { TrendingPage, Edit, Alert, Stats, EditWar, SearchResult, SearchParams, EditWarAnalysis, RawTimelineEntry } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -74,6 +74,20 @@ export const getStats = async (): Promise<Stats> => {
 export const getEditWars = async (active = true): Promise<EditWar[]> => {
   const response = await api.get('/api/edit-wars', {
     params: { active },
+  });
+  return response.data;
+};
+
+export const getEditWarAnalysis = async (pageTitle: string): Promise<EditWarAnalysis> => {
+  const response = await api.get('/api/edit-wars/analysis', {
+    params: { page: pageTitle },
+  });
+  return response.data;
+};
+
+export const getEditWarTimeline = async (pageTitle: string): Promise<RawTimelineEntry[]> => {
+  const response = await api.get('/api/edit-wars/timeline', {
+    params: { page: pageTitle },
   });
   return response.data;
 };

@@ -10,7 +10,7 @@ const RANGE_CONFIG: Record<TimeRange, { label: string; minutes: number; bucketSe
   '24h': { label: '24H', minutes: 1440, bucketSec: 300 },
 };
 
-const PAD = { top: 18, right: 14, bottom: 26, left: 42 };
+const PAD = { top: 18, right: 20, bottom: 26, left: 44 };
 const MONITOR_GREEN = '#00ff88';
 const MONITOR_BG = '#0a0f1a';
 const GRID_COLOR = 'rgba(0,255,136,0.06)';
@@ -197,7 +197,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
   const lastVal = lastPoint?.value ?? 0;
 
   return (
-    <div className="space-y-0 rounded-xl overflow-hidden" style={{ background: MONITOR_BG }}>
+    <div className="card flex flex-col space-y-0 rounded-xl overflow-hidden !p-0">
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2.5"
         style={{ borderBottom: `1px solid rgba(0,255,136,0.1)` }}>
@@ -240,7 +240,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
       </div>
 
       {/* Chart area */}
-      <div ref={containerRef} className="h-60 relative" role="figure"
+      <div ref={containerRef} className="flex-1 min-h-[11rem] relative px-3 pb-3 pt-1" role="figure"
         aria-label="Edits per minute live monitor">
         {loading && chartData.length === 0 ? (
           <div className="h-full flex items-center justify-center text-sm font-mono"
@@ -257,7 +257,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
             ref={svgRef}
             width={dims.w}
             height={dims.h}
-            className="select-none"
+            className="select-none block"
           >
             <defs>
               {/* Glow effect for the main line */}
@@ -386,8 +386,9 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
 
             {/* X-axis labels */}
             {xLabels.map((l, i) => (
-              <text key={i} x={l.x} y={dims.h - 5}
-                textAnchor="middle" fill="rgba(0,255,136,0.25)"
+              <text key={i} x={l.x} y={dims.h - 6}
+                textAnchor={i === 0 ? 'start' : i === xLabels.length - 1 ? 'end' : 'middle'}
+                fill="rgba(0,255,136,0.25)"
                 fontSize={9} fontFamily="monospace">
                 {l.label}
               </text>

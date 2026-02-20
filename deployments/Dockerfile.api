@@ -53,4 +53,4 @@ EXPOSE 8081 2112
 
 # Run the binary
 ENTRYPOINT ["/app/api"]
-CMD ["-config", "/app/configs/config.ultra.yaml"]
+CMD ["-config", "/app/configs/config.prod.yaml"]

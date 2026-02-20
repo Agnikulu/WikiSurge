@@ -548,6 +548,23 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 			if su, ok := w["server_url"].(string); ok {
 				entry.ServerURL = su
 			}
+
+			// Embed cached analysis if available; backfill via LLM on cache miss
+			if entry.PageTitle != "" {
+				cacheKey := fmt.Sprintf("editwar:analysis:%s", entry.PageTitle)
+				if cached, cErr := s.redis.Get(ctx, cacheKey).Result(); cErr == nil && cached != "" {
+					var analysis interface{}
+					if json.Unmarshal([]byte(cached), &analysis) == nil {
+						entry.Analysis = analysis
+					}
+				} else if s.analysisService != nil {
+					// Analysis cache expired or missing — regenerate inline
+					if a, aErr := s.analysisService.Analyze(ctx, entry.PageTitle); aErr == nil {
+						entry.Analysis = a
+					}
+				}
+			}
+
 			results = append(results, entry)
 		}
 
@@ -622,6 +639,23 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 		if su, ok := w["server_url"].(string); ok {
 			entry.ServerURL = su
 		}
+
+		// Embed cached analysis if available; backfill via LLM on cache miss
+		if entry.PageTitle != "" {
+			cacheKey := fmt.Sprintf("editwar:analysis:%s", entry.PageTitle)
+			if cached, cErr := s.redis.Get(ctx, cacheKey).Result(); cErr == nil && cached != "" {
+				var analysis interface{}
+				if json.Unmarshal([]byte(cached), &analysis) == nil {
+					entry.Analysis = analysis
+				}
+			} else if s.analysisService != nil {
+				// Analysis cache expired or missing — regenerate inline
+				if a, aErr := s.analysisService.Analyze(ctx, entry.PageTitle); aErr == nil {
+					entry.Analysis = a
+				}
+			}
+		}
+
 		results = append(results, entry)
 		
 		// Stop if we've reached the requested limit
@@ -631,6 +665,78 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, results)
+}
+
+// ---------------------------------------------------------------------------
+// Edit War Analysis (LLM)
+// ---------------------------------------------------------------------------
+
+func (s *APIServer) handleGetEditWarAnalysis(w http.ResponseWriter, r *http.Request) {
+	pageTitle := r.URL.Query().Get("page")
+	if pageTitle == "" {
+		writeAPIError(w, r, http.StatusBadRequest,
+			"Missing required 'page' query parameter", ErrCodeInvalidParameter, "field: page")
+		return
+	}
+
+	if s.analysisService == nil {
+		writeAPIError(w, r, http.StatusServiceUnavailable,
+			"Edit war analysis service is not available", ErrCodeServiceUnavailable, "")
+		return
+	}
+
+	analysis, err := s.analysisService.Analyze(r.Context(), pageTitle)
+	if err != nil {
+		s.logger.Error().Err(err).Str("page", pageTitle).
+			Str("request_id", GetRequestID(r.Context())).
+			Msg("Failed to analyze edit war")
+		writeAPIError(w, r, http.StatusInternalServerError,
+			"Failed to analyze edit war", ErrCodeInternalError, "")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, analysis)
+}
+
+// handleGetEditWarTimeline returns the raw edit timeline stored in Redis
+// for a specific edit war page.
+func (s *APIServer) handleGetEditWarTimeline(w http.ResponseWriter, r *http.Request) {
+	pageTitle := r.URL.Query().Get("page")
+	if pageTitle == "" {
+		writeAPIError(w, r, http.StatusBadRequest,
+			"Missing required 'page' query parameter", ErrCodeInvalidParameter, "field: page")
+		return
+	}
+
+	ctx := r.Context()
+	timelineKey := fmt.Sprintf("editwar:timeline:%s", pageTitle)
+	raw, err := s.redis.LRange(ctx, timelineKey, 0, -1).Result()
+	if err != nil {
+		s.logger.Error().Err(err).Str("page", pageTitle).
+			Str("request_id", GetRequestID(ctx)).
+			Msg("Failed to get edit war timeline")
+		writeAPIError(w, r, http.StatusInternalServerError,
+			"Failed to retrieve edit war timeline", ErrCodeInternalError, "")
+		return
+	}
+
+	type TimelineEntry struct {
+		User       string `json:"user"`
+		Comment    string `json:"comment"`
+		ByteChange int    `json:"byte_change"`
+		Timestamp  int64  `json:"timestamp"`
+		RevisionID int64  `json:"revision_id,omitempty"`
+	}
+
+	entries := make([]TimelineEntry, 0, len(raw))
+	for _, r := range raw {
+		var e TimelineEntry
+		if err := json.Unmarshal([]byte(r), &e); err == nil {
+			entries = append(entries, e)
+		}
+	}
+
+	respondJSON(w, http.StatusOK, entries)
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,353 @@
+# =============================================================================
+# WikiSurge Development Deployment
+# =============================================================================
+# Same as production + Prometheus & Grafana for monitoring/debugging
+# 9 services: Kafka, Redis, ES, Ingestor, Processor, API, Frontend,
+#              Prometheus, Grafana
+#
+# Usage:
+#   docker-compose -f deployments/docker-compose.dev.yml up -d
+#
+# =============================================================================
+
+networks:
+  wikisurge:
+    driver: bridge
+
+volumes:
+  kafka-data:
+  redis-data:
+  elasticsearch-data:
+  prometheus-data:
+  grafana-data:
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "3m"
+    max-file: "1"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Kafka (Redpanda) - Message Broker
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: wikisurge-kafka
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://kafka:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://kafka:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr kafka:33145
+      - --advertise-rpc-addr kafka:33145
+      - --smp 1
+      - --reserve-memory 0M
+      - --memory 300M
+      - --overprovisioned
+      - --node-id 0
+      - --check=false
+      - --set redpanda.log_retention_ms=10800000
+      - --set redpanda.log_segment_size=16777216
+    volumes:
+      - kafka-data:/var/lib/redpanda/data
+    ports:
+      - "19092:19092"
+      - "18081:18081"
+      - "18082:18082"
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health --api-urls localhost:9644 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Redis - In-Memory Store
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: wikisurge-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+      --tcp-keepalive 60
+      --timeout 0
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+        reservations:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Elasticsearch - Search Engine
+  # ---------------------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    container_name: wikisurge-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -E 'green|yellow'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Ingestor - Wikipedia Event Stream Consumer (Pre-built)
+  # ---------------------------------------------------------------------------
+  ingestor:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.ingestor
+    image: wikisurge-ingestor:local
+    container_name: wikisurge-ingestor
+    restart: always
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - CONFIG_PATH=/app/configs/config.prod.yaml
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - GOGC=50
+      - GOMEMLIMIT=90MiB
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+        reservations:
+          memory: 50M
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Processor - Edit Processing Pipeline (Pre-built)
+  # ---------------------------------------------------------------------------
+  processor:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.processor
+    image: wikisurge-processor:local
+    container_name: wikisurge-processor
+    restart: always
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - CONFIG_PATH=/app/configs/config.prod.yaml
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - GOGC=50
+      - GOMEMLIMIT=140MiB
+      - LLM_ENABLED=${LLM_ENABLED:-false}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
+    env_file:
+      - ../.env
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+        reservations:
+          memory: 80M
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # API - REST/WebSocket Server (Built from source)
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.api
+    image: wikisurge-api:local
+    container_name: wikisurge-api
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      - CONFIG_PATH=/app/configs/config.prod.yaml
+      - API_PORT=8081
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - GOGC=50
+      - GOMEMLIMIT=90MiB
+      - LLM_ENABLED=${LLM_ENABLED:-false}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
+    ports:
+      - "8081:8081"
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+        reservations:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Frontend - React Dashboard (Pre-built)
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: ghcr.io/agnikulu/wikisurge-frontend:latest
+    container_name: wikisurge-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+        reservations:
+          memory: 20M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/nginx-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Prometheus - Metrics Collection
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: wikisurge-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Grafana - Monitoring Dashboards
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: wikisurge-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=wikisurge
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    networks:
+      - wikisurge
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging

@@ -68,3 +68,18 @@ api:
 logging:
   level: "info"
   format: "json"
+
+# LLM configuration for edit war conflict analysis.
+# Set LLM_API_KEY env var or configure api_key below.
+# Supported providers: openai, anthropic, ollama
+llm:
+  enabled: true            # LLM analysis for edit wars
+  provider: "openai"       # "openai" | "anthropic" | "ollama"
+  api_key: ""              # Override with LLM_API_KEY env var
+  model: "gpt-4o-mini"    # Cost-effective default; or "claude-3-haiku-20240307"
+  # base_url: ""           # Override for Ollama: "http://localhost:11434"
+  max_tokens: 512
+  temperature: 0.3
+  timeout: 30s
+  cache_ttl: 4h            # How long to cache LLM responses per page
+  reanalyze_every: 5       # Re-run LLM analysis every N edits on an active edit war

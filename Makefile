@@ -1,8 +1,8 @@
-.PHONY: setup kafka-setup start stop stop-all clean clean-data reset logs health test dev dev-backend dev-web help wait-for-es wait-for-kafka wait-for-redis
+.PHONY: setup kafka-setup start stop stop-all clean clean-data reset logs health test dev dev-backend dev-web prod help wait-for-es wait-for-kafka wait-for-redis
 
-# Configuration - Using budget mode by default
-COMPOSE_FILE := deployments/docker-compose.budget.yml
-CONFIG_FILE := configs/config.budget.yaml
+# Configuration - dev mode by default (includes Prometheus + Grafana)
+COMPOSE_FILE := deployments/docker-compose.dev.yml
+CONFIG_FILE := configs/config.prod.yaml
 
 # Show available commands
 help:
@@ -10,18 +10,19 @@ help:
 	@echo "==============================="
 	@echo ""
 	@echo "Quick Start:"
-	@echo "  make dev         - Build Go services, reuse Docker containers, clear data"
-	@echo "  make dev-web     - Start web app (run in separate terminal)"
-	@echo "  make reset       - Stop everything and full clean (rebuild containers)"
+	@echo "  make dev         - Start all services (includes Prometheus + Grafana)"
+	@echo "  make prod        - Start lean stack (no monitoring)"
+	@echo "  make dev-web     - Start local web app with hot reload (optional)"
+	@echo "  make reset       - Stop everything and full clean"
 	@echo ""
 	@echo "Service Control:"
 	@echo "  make start       - Start Docker services"
 	@echo "  make stop        - Stop Docker services"
-	@echo "  make stop-all    - Stop Docker + Go processes"
-	@echo "  make dev-backend - Restart backend services only"
+	@echo "  make stop-all    - Stop all Docker services"
+	@echo "  make dev-backend - Restart backend containers only"
 	@echo ""
 	@echo "Build & Test:"
-	@echo "  make build       - Build Go applications"
+	@echo "  make build       - Build Go applications locally"
 	@echo "  make test        - Run all tests"
 	@echo "  make deps        - Install Go and web dependencies"
 	@echo ""
@@ -35,7 +36,7 @@ help:
 	@echo "  make clean       - Remove containers, volumes, logs, binaries, and web artifacts"
 	@echo ""
 
-# Wait for Elasticsearch to be ready (longer timeout for budget ES startup)
+# Wait for Elasticsearch to be ready
 wait-for-es:
 	@echo "Waiting for Elasticsearch to be ready..."
 	@timeout=120; \
@@ -86,12 +87,9 @@ wait-for-redis:
 	echo "❌ Redis failed to start within $$timeout seconds"; \
 	exit 1
 
-# Stop all services including Go processes
+# Stop all services
 stop-all:
 	@echo "Stopping all services..."
-	-@pkill -f "./bin/api" 2>/dev/null || true
-	-@pkill -f "./bin/ingestor" 2>/dev/null || true
-	-@pkill -f "./bin/processor" 2>/dev/null || true
 	@docker-compose -f $(COMPOSE_FILE) down 2>/dev/null || true
 	@docker-compose down 2>/dev/null || true
 	@echo "✅ All services stopped!"
@@ -114,88 +112,77 @@ clean-data:
 	@docker-compose -f $(COMPOSE_FILE) exec -T kafka rpk topic create wikipedia.edits --partitions 3 --replicas 1 2>/dev/null || true
 	@echo "✅ Data cleared!"
 
-# Development mode - start everything with proper health checks (BUDGET MODE)
-# Uses existing containers if running, only rebuilds Go services
-dev: 
-	@echo "Starting development environment (BUDGET MODE)..."
+# Development mode - start all services including monitoring
+# All services + Prometheus + Grafana run in containers
+dev:
+	@echo "Starting development environment (DEV MODE)..."
 	@echo "Using: $(COMPOSE_FILE)"
 	@echo "Config: $(CONFIG_FILE)"
 	@echo ""
-	@# Stop any running Go processes
-	-@pkill -f "./bin/api" 2>/dev/null || true
-	-@pkill -f "./bin/ingestor" 2>/dev/null || true
-	-@pkill -f "./bin/processor" 2>/dev/null || true
-	@# Build Go binaries (fast if no changes)
-	@echo "🔨 Building Go services..."
-	@$(MAKE) build
 	@# Check if containers are already running, if not start them
-	@if docker-compose -f $(COMPOSE_FILE) ps 2>/dev/null | grep -q "Up"; then \
+	@if docker-compose -f $(COMPOSE_FILE) ps 2>/dev/null | grep -q "Up\|running"; then \
 		echo "📦 Docker containers already running, reusing..."; \
 	else \
 		echo "🚀 Starting Docker services..."; \
 		docker-compose -f $(COMPOSE_FILE) up -d; \
 	fi
 	@echo ""
+	@# Wait for infrastructure to be healthy
+	@$(MAKE) wait-for-redis
+	@echo ""
+	@$(MAKE) wait-for-kafka
+	@echo ""
+	@$(MAKE) wait-for-es
+	@echo ""
 	@# Clean old data (logs, Redis, ES, Kafka)
 	@$(MAKE) clean-data
 	@echo ""
-	@$(MAKE) wait-for-redis
+	@echo "✅ All services started!"
 	@echo ""
-	@$(MAKE) wait-for-kafka
-	@echo ""
-	@$(MAKE) wait-for-es
-	@echo ""
-	@echo "🔧 Starting backend services..."
-	@sleep 1
-	@echo "  - Starting processor..."
-	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/processor > processor.log 2>&1 &
-	@sleep 1
-	@echo "  - Starting ingestor..."
-	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/ingestor > ingestor.log 2>&1 &
-	@sleep 1
-	@echo "  - Starting API..."
-	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/api > api.log 2>&1 &
-	@sleep 2
-	@echo ""
-	@echo "✅ Backend services started!"
-	@echo ""
-	@echo "📊 Service Status (BUDGET MODE - ~$9/month):"
-	@echo "  API:        http://localhost:8080"
-	@echo "  Grafana:    http://localhost:3000 (admin/wikisurge123)"
+	@echo "📊 Service Status (DEV MODE):"
+	@echo "  Frontend:   http://localhost:3000"
+	@echo "  API:        http://localhost:8081"
+	@echo "  Grafana:    http://localhost:3001 (admin/wikisurge)"
 	@echo "  Prometheus: http://localhost:9090"
-	@echo "  ES:         http://localhost:9200 (6h retention)"
+	@echo "  ES:         http://localhost:9200"
+	@echo "  Redis:      localhost:6379"
+	@echo "  Kafka:      localhost:19092"
 	@echo ""
-	@echo "💡 Next steps:""
-	@echo "  • Start web app:  make dev-web"
-	@echo "  • View logs:      tail -f api.log processor.log ingestor.log"
+	@echo "💡 Next steps:"
+	@echo "  • View logs:      make logs"
 	@echo "  • Check health:   make health"
+	@echo "  • Local web dev:  make dev-web (optional, frontend already in Docker)"
 	@echo ""
 
-# Start only backend services (assumes Docker is running)
+# Production mode - lean stack without monitoring
+prod:
+	@echo "Starting production environment (PROD MODE)..."
+	@echo "Using: deployments/docker-compose.prod.yml"
+	@echo ""
+	@docker-compose -f deployments/docker-compose.prod.yml up -d
+	@echo ""
+	@echo "✅ Production services started!"
+	@echo "  Frontend: http://localhost:3000"
+	@echo "  API:      http://localhost:8081"
+
+# Restart backend containers (api, processor, ingestor)
 dev-backend:
-	@echo "Restarting backend services (BUDGET MODE)..."
+	@echo "Restarting backend containers..."
 	@echo ""
-	@echo "🛑 Stopping existing processes..."
-	-@pkill -f "./bin/api" 2>/dev/null || true
-	-@pkill -f "./bin/ingestor" 2>/dev/null || true
-	-@pkill -f "./bin/processor" 2>/dev/null || true
-	@sleep 1
+	@echo "🛑 Stopping backend containers..."
+	@docker-compose -f $(COMPOSE_FILE) stop api processor ingestor 2>/dev/null || true
+	@docker-compose -f $(COMPOSE_FILE) rm -f api processor ingestor 2>/dev/null || true
 	@echo ""
-	@echo "🔍 Checking dependencies..."
+	@echo "🚀 Starting backend containers..."
+	@docker-compose -f $(COMPOSE_FILE) up -d api processor ingestor
+	@echo ""
+	@echo "🔍 Waiting for dependencies..."
 	@$(MAKE) wait-for-redis
 	@$(MAKE) wait-for-kafka
 	@$(MAKE) wait-for-es
 	@echo ""
-	@echo "🔧 Starting backend services..."
-	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/processor > processor.log 2>&1 &
-	@sleep 1
-	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/ingestor > ingestor.log 2>&1 &
-	@sleep 1
-	@CONFIG_PATH=$(CONFIG_FILE) nohup ./bin/api > api.log 2>&1 &
-	@sleep 2
-	@echo ""
-	@echo "✅ Backend services restarted!"
-	@echo "📊 API available at: http://localhost:8080"
+	@echo "✅ Backend containers restarted!"
+	@echo "📊 API available at: http://localhost:8081"
 
 # Start web app
 dev-web:
@@ -218,7 +205,7 @@ kafka-setup:
 
 # Start all Docker services
 start:
-	@echo "Starting all services (BUDGET MODE)..."
+	@echo "Starting all services..."
 	@docker-compose -f $(COMPOSE_FILE) up -d
 	@echo ""
 	@echo "⏳ Services starting... Use 'make health' to check status"
@@ -248,7 +235,7 @@ logs:
 
 # Check health of all services
 health:
-	@echo "Checking service health (BUDGET MODE)..."
+	@echo "Checking service health..."
 	@echo ""
 	@echo "=== Docker Services Status ==="
 	@docker-compose -f $(COMPOSE_FILE) ps
@@ -262,11 +249,17 @@ health:
 	@echo "=== Elasticsearch Health ==="
 	@curl -s http://localhost:9200/_cluster/health?pretty || echo "❌ Elasticsearch not responding"
 	@echo ""
+	@echo "=== API Health ==="
+	@curl -s http://localhost:8081/health || echo "❌ API not responding"
+	@echo ""
+	@echo "=== Frontend Health ==="
+	@curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ | grep -q 200 && echo "✅ Frontend OK" || echo "❌ Frontend not responding"
+	@echo ""
 	@echo "=== Prometheus Health ==="
-	@curl -s http://localhost:9090/-/healthy || echo "❌ Prometheus not responding"
+	@curl -s -o /dev/null -w "%{http_code}" http://localhost:9090/-/healthy | grep -q 200 && echo "✅ Prometheus OK" || echo "❌ Prometheus not responding (only in dev mode)"
 	@echo ""
 	@echo "=== Grafana Health ==="
-	@curl -s http://localhost:3000/api/health || echo "❌ Grafana not responding"
+	@curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health | grep -q 200 && echo "✅ Grafana OK" || echo "❌ Grafana not responding (only in dev mode)"
 
 # Run all tests (placeholder)
 test:
@@ -355,9 +348,10 @@ deps:
 # Show service URLs
 urls:
 	@echo "=== Service URLs ==="
-	@echo "Grafana: http://localhost:3000 (admin/admin)"
-	@echo "Prometheus: http://localhost:9090"
+	@echo "Frontend:      http://localhost:3000"
+	@echo "API:           http://localhost:8081"
+	@echo "Grafana:       http://localhost:3001 (admin/wikisurge)"
+	@echo "Prometheus:    http://localhost:9090"
 	@echo "Elasticsearch: http://localhost:9200"
-	@echo "Kafka: localhost:9092"
-	@echo "Redis: localhost:6379"
-	@echo "API (when running): http://localhost:8080"
+	@echo "Kafka:         localhost:19092"
+	@echo "Redis:         localhost:6379"

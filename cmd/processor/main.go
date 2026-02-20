@@ -16,6 +16,7 @@ import (
 	"github.com/Agnikulu/WikiSurge/internal/api"
 	"github.com/Agnikulu/WikiSurge/internal/config"
 	"github.com/Agnikulu/WikiSurge/internal/kafka"
+	"github.com/Agnikulu/WikiSurge/internal/llm"
 	"github.com/Agnikulu/WikiSurge/internal/processor"
 	"github.com/Agnikulu/WikiSurge/internal/storage"
 	"github.com/prometheus/client_golang/prometheus"
@@ -240,6 +241,26 @@ func (o *processorOrchestrator) initProcessors() {
 	o.editWarDetector = processor.NewEditWarDetector(o.hotPageTracker, o.redisClient, o.cfg, o.logger)
 	o.logger.Info().Msg("Initialized EditWarDetector")
 	o.registerComponent("edit-war-detector")
+
+	// Attach LLM analysis service to edit war detector for auto-analysis on detection
+	{
+		llmClient := llm.NewClient(llm.Config{
+			Provider:    llm.Provider(o.cfg.LLM.Provider),
+			APIKey:      o.cfg.LLM.APIKey,
+			Model:       o.cfg.LLM.Model,
+			BaseURL:     o.cfg.LLM.BaseURL,
+			MaxTokens:   o.cfg.LLM.MaxTokens,
+			Temperature: o.cfg.LLM.Temperature,
+			Timeout:     o.cfg.LLM.Timeout,
+		}, o.logger)
+		analysisSvc := llm.NewAnalysisService(llmClient, o.redisClient, o.cfg.LLM.CacheTTL, o.logger)
+		o.editWarDetector.SetAnalysisService(analysisSvc)
+		if o.cfg.LLM.Enabled {
+			o.logger.Info().Str("provider", o.cfg.LLM.Provider).Str("model", o.cfg.LLM.Model).Msg("LLM auto-analysis enabled for edit wars")
+		} else {
+			o.logger.Info().Msg("LLM not configured — edit war auto-analysis will use heuristic fallback")
+		}
+	}
 
 	// Trending Aggregator
 	statsTracker := storage.NewStatsTracker(o.redisClient)

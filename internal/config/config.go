@@ -18,7 +18,22 @@ type Config struct {
 	Redis         Redis         `yaml:"redis"`
 	Kafka         Kafka         `yaml:"kafka"`
 	API           API           `yaml:"api"`
+	LLM           LLMConfig     `yaml:"llm"`
 	Logging       Logging       `yaml:"logging"`
+}
+
+// LLMConfig configures the LLM provider used for edit war analysis.
+type LLMConfig struct {
+	Enabled     bool          `yaml:"enabled"`
+	Provider    string        `yaml:"provider"`     // "openai", "anthropic", "ollama"
+	APIKey      string        `yaml:"api_key"`      // API key (OpenAI / Anthropic)
+	Model       string        `yaml:"model"`        // e.g. "gpt-4o-mini", "claude-3-haiku-20240307"
+	BaseURL     string        `yaml:"base_url"`     // Override for Ollama or proxies
+	MaxTokens      int           `yaml:"max_tokens"`
+	Temperature    float64       `yaml:"temperature"`
+	Timeout        time.Duration `yaml:"timeout"`
+	CacheTTL       time.Duration `yaml:"cache_ttl"`        // How long to cache LLM results
+	ReanalyzeEvery int           `yaml:"reanalyze_every"` // Re-run analysis every N edits (0=disabled)
 }
 
 // Features contains feature flags for each functionality
@@ -248,6 +263,26 @@ func setDefaults(config *Config) {
 		config.API.RateLimiting.KeyType = "ip"
 	}
 
+	// LLM defaults
+	if config.LLM.Provider == "" {
+		config.LLM.Provider = "openai"
+	}
+	if config.LLM.Model == "" {
+		config.LLM.Model = "gpt-4o-mini"
+	}
+	if config.LLM.MaxTokens == 0 {
+		config.LLM.MaxTokens = 512
+	}
+	if config.LLM.Temperature == 0 {
+		config.LLM.Temperature = 0.3
+	}
+	if config.LLM.Timeout == 0 {
+		config.LLM.Timeout = 30 * time.Second
+	}
+	if config.LLM.CacheTTL == 0 {
+		config.LLM.CacheTTL = 5 * time.Minute
+	}
+
 	// Logging defaults
 	if config.Logging.Level == "" {
 		config.Logging.Level = "info"
@@ -270,6 +305,23 @@ func overrideWithEnv(config *Config) {
 	}
 	if logLevel := os.Getenv("LOG_LEVEL"); logLevel != "" {
 		config.Logging.Level = logLevel
+	}
+	// LLM overrides
+	if llmProvider := os.Getenv("LLM_PROVIDER"); llmProvider != "" {
+		config.LLM.Provider = llmProvider
+	}
+	if llmKey := os.Getenv("LLM_API_KEY"); llmKey != "" {
+		config.LLM.APIKey = llmKey
+		config.LLM.Enabled = true
+	}
+	if llmModel := os.Getenv("LLM_MODEL"); llmModel != "" {
+		config.LLM.Model = llmModel
+	}
+	if llmURL := os.Getenv("LLM_BASE_URL"); llmURL != "" {
+		config.LLM.BaseURL = llmURL
+	}
+	if llmEnabled := os.Getenv("LLM_ENABLED"); llmEnabled == "true" || llmEnabled == "1" {
+		config.LLM.Enabled = true
 	}
 }
 

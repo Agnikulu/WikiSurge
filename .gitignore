@@ -1,4 +1,5 @@
 # Environment files (contain secrets)
+.env
 .env.prod
 .env.local
 

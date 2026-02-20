@@ -101,6 +101,7 @@ export interface EditWar {
   last_edit: string;
   active: boolean;
   server_url?: string;
+  analysis?: EditWarAnalysis;
 }
 
 /** Extended edit-war detail with per-editor breakdown and timeline entries */
@@ -135,6 +136,40 @@ export interface RevertEdge {
   from: string;
   to: string;
   count: number;
+}
+
+/** LLM-generated analysis of an edit war conflict */
+export interface KeyEditor {
+  user: string;
+  edit_count: number;
+  role: string;
+}
+
+/** A side in the edit war — groups editors who share a position */
+export interface Side {
+  position: string;
+  editors: KeyEditor[];
+}
+
+export interface EditWarAnalysis {
+  page_title: string;
+  summary: string;
+  sides: Side[];
+  content_area: string;
+  severity: string;
+  recommendation: string;
+  edit_count: number;
+  generated_at: string;
+  cache_hit: boolean;
+}
+
+/** Raw timeline entry from the backend (stored per-edit during edit wars) */
+export interface RawTimelineEntry {
+  user: string;
+  comment: string;
+  byte_change: number;
+  timestamp: number;
+  revision_id?: number;
 }
 
 export interface SearchResult {
