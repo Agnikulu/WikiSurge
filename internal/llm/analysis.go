@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -349,7 +350,8 @@ Respond in valid JSON with this exact schema:
 }
 
 // parseLLMResponse tries to extract structured JSON from the LLM output.
-// Falls back gracefully if the LLM doesn't return perfect JSON.
+// Falls back gracefully if the LLM doesn't return perfect JSON (e.g. truncated
+// by max_tokens).
 func (s *AnalysisService) parseLLMResponse(pageTitle, response string, editCount int) *Analysis {
 	analysis := &Analysis{
 		PageTitle:   pageTitle,
@@ -382,12 +384,37 @@ func (s *AnalysisService) parseLLMResponse(pageTitle, response string, editCount
 		analysis.Severity = parsed.Severity
 		analysis.Recommendation = parsed.Recommendation
 	} else {
-		// Fallback: use the raw response as summary
-		analysis.Summary = response
-		analysis.Sides = []Side{}
-		analysis.ContentArea = "unknown"
-		analysis.Severity = "unknown"
-		analysis.Recommendation = ""
+		// JSON parse failed (likely truncated by max_tokens).
+		// Try to extract individual fields from the partial JSON via regex.
+		s.logger.Warn().Str("page", pageTitle).Err(err).Msg("JSON parse failed; attempting field extraction from partial response")
+
+		analysis.Summary = extractJSONStringField(jsonStr, "summary")
+		analysis.ContentArea = extractJSONStringField(jsonStr, "content_area")
+		analysis.Severity = extractJSONStringField(jsonStr, "severity")
+		analysis.Recommendation = extractJSONStringField(jsonStr, "recommendation")
+
+		// Default empty fields
+		if analysis.ContentArea == "" {
+			analysis.ContentArea = "unknown"
+		}
+		if analysis.Severity == "" {
+			analysis.Severity = "unknown"
+		}
+
+		// Try to extract sides even from partial JSON
+		if sidesJSON := extractJSONArrayField(jsonStr, "sides"); sidesJSON != "" {
+			// Attempt to repair truncated array by closing it
+			repaired := repairJSONArray(sidesJSON)
+			var sides []Side
+			if json.Unmarshal([]byte(repaired), &sides) == nil {
+				analysis.Sides = sides
+			}
+		}
+
+		// If we still got nothing for summary, use raw response cleaned up
+		if analysis.Summary == "" {
+			analysis.Summary = cleanRawResponse(response)
+		}
 	}
 
 	if analysis.Sides == nil {
@@ -395,6 +422,155 @@ func (s *AnalysisService) parseLLMResponse(pageTitle, response string, editCount
 	}
 
 	return analysis
+}
+
+// extractJSONStringField extracts a string value for a given key from
+// potentially malformed JSON using regex. Handles escaped quotes.
+func extractJSONStringField(s, key string) string {
+	// Match "key": "value" — value may contain escaped quotes
+	pattern := fmt.Sprintf(`"%s"\s*:\s*"`, regexp.QuoteMeta(key))
+	re := regexp.MustCompile(pattern)
+	loc := re.FindStringIndex(s)
+	if loc == nil {
+		return ""
+	}
+	// Walk from end of match to find the closing unescaped quote
+	start := loc[1]
+	var result strings.Builder
+	for i := start; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			result.WriteByte(s[i+1])
+			i++ // skip escaped char
+			continue
+		}
+		if s[i] == '"' {
+			return result.String()
+		}
+		result.WriteByte(s[i])
+	}
+	// No closing quote found (truncated) — return what we have
+	return result.String()
+}
+
+// extractJSONArrayField extracts the raw JSON array string for a key.
+// Returns the content starting from [ up to the last ] or end of string.
+func extractJSONArrayField(s, key string) string {
+	pattern := fmt.Sprintf(`"%s"\s*:\s*\[`, regexp.QuoteMeta(key))
+	re := regexp.MustCompile(pattern)
+	loc := re.FindStringIndex(s)
+	if loc == nil {
+		return ""
+	}
+	// Find the start of the array
+	bracketStart := strings.Index(s[loc[0]:], "[")
+	if bracketStart < 0 {
+		return ""
+	}
+	arrayStart := loc[0] + bracketStart
+	// Find matching ] by counting brackets
+	depth := 0
+	for i := arrayStart; i < len(s); i++ {
+		switch s[i] {
+		case '[':
+			depth++
+		case ']':
+			depth--
+			if depth == 0 {
+				return s[arrayStart : i+1]
+			}
+		case '"':
+			// Skip past string contents (may contain [ or ])
+			for j := i + 1; j < len(s); j++ {
+				if s[j] == '\\' {
+					j++ // skip escaped char
+					continue
+				}
+				if s[j] == '"' {
+					i = j
+					break
+				}
+			}
+		}
+	}
+	// Truncated — return what we have from the array start
+	return s[arrayStart:]
+}
+
+// repairJSONArray attempts to fix a truncated JSON array by closing
+// open braces/brackets. This is best-effort for extracting partial sides.
+func repairJSONArray(s string) string {
+	// Count unmatched brackets
+	openBraces := 0
+	openBrackets := 0
+	inString := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && inString {
+			i++
+			continue
+		}
+		switch s[i] {
+		case '"':
+			inString = !inString
+		case '{':
+			if !inString {
+				openBraces++
+			}
+		case '}':
+			if !inString {
+				openBraces--
+			}
+		case '[':
+			if !inString {
+				openBrackets++
+			}
+		case ']':
+			if !inString {
+				openBrackets--
+			}
+		}
+	}
+	// Close any open strings, then braces, then brackets
+	result := s
+	if inString {
+		result += `"`
+	}
+	for openBraces > 0 {
+		result += "}"
+		openBraces--
+	}
+	for openBrackets > 0 {
+		result += "]"
+		openBrackets--
+	}
+	return result
+}
+
+// cleanRawResponse strips JSON syntax from a response that leaked through
+// unparsed, returning just the human-readable text.
+func cleanRawResponse(s string) string {
+	// Remove markdown code fences
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "```json")
+	s = strings.TrimPrefix(s, "```")
+	s = strings.TrimSuffix(s, "```")
+	s = strings.TrimSpace(s)
+
+	// If it looks like JSON, try to extract just the summary
+	if strings.HasPrefix(s, "{") {
+		if summary := extractJSONStringField(s, "summary"); summary != "" {
+			return summary
+		}
+	}
+
+	// Strip residual JSON syntax
+	s = strings.NewReplacer(
+		`{"summary":`, "",
+		`"summary":`, "",
+		`","sides"`, "",
+	).Replace(s)
+	s = strings.Trim(s, `{}" `)
+
+	return s
 }
 
 // heuristicAnalysis generates a pattern-based analysis without LLM.

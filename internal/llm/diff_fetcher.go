@@ -16,14 +16,15 @@ import (
 )
 
 // MaxDiffChars is the maximum number of characters to keep per diff after
-// stripping HTML.  2 000 chars ≈ 500 LLM tokens — enough to capture the full
-// substance of a typical edit-war revert while keeping total prompt size
-// manageable (20 edits × 2 000 = 40 000 chars ≈ 10 000 tokens).
-const MaxDiffChars = 2000
+// stripping HTML.  800 chars ≈ 200 LLM tokens — enough to capture the key
+// additions/removals in a typical revert while keeping total prompt size
+// lean (8 diffs × 800 = 6 400 chars ≈ 1 600 tokens).
+const MaxDiffChars = 800
 
 // MaxDiffsToFetch caps how many diffs we retrieve per analysis request so we
-// don't hammer the Wikipedia API.
-const MaxDiffsToFetch = 20
+// don't hammer the Wikipedia API.  8 diffs is enough to reveal the pattern
+// in a repetitive edit war.
+const MaxDiffsToFetch = 8
 
 // DiffResult holds the plain-text diff for a single revision.
 type DiffResult struct {
