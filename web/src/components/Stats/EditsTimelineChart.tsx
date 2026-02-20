@@ -12,7 +12,6 @@ const RANGE_CONFIG: Record<TimeRange, { label: string; minutes: number; bucketSe
 
 const PAD = { top: 18, right: 20, bottom: 26, left: 44 };
 const MONITOR_GREEN = '#00ff88';
-const MONITOR_BG = '#0a0f1a';
 const GRID_COLOR = 'rgba(0,255,136,0.06)';
 const GRID_COLOR_STRONG = 'rgba(0,255,136,0.12)';
 
