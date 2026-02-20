@@ -310,7 +310,7 @@ func TestAnalysisService_BuildPrompt(t *testing.T) {
 		{User: "Alice", Comment: "", ByteChange: 590, Timestamp: 1700000120}, // empty comment
 	}
 
-	system, user := svc.buildPrompt("Climate_Change", entries)
+	system, user := svc.buildPrompt("Climate_Change", entries, nil)
 
 	// System prompt should contain instructions
 	assert.Contains(t, system, "Wikipedia edit war analyst")
@@ -325,6 +325,30 @@ func TestAnalysisService_BuildPrompt(t *testing.T) {
 	assert.Contains(t, user, "(no edit summary)")  // empty comment placeholder
 	assert.Contains(t, user, "+600 bytes")
 	assert.Contains(t, user, "-580 bytes")
+	assert.Contains(t, user, "Diff content was not available") // no diffs passed
+}
+
+func TestAnalysisService_BuildPrompt_WithDiffs(t *testing.T) {
+	redisClient, _ := setupTestRedis(t)
+	defer redisClient.Close()
+
+	llmClient := NewClient(Config{}, zerolog.Nop())
+	svc := NewAnalysisService(llmClient, redisClient, 5*time.Minute, zerolog.Nop())
+
+	entries := []EditTimelineEntry{
+		{User: "Alice", Comment: "Added section", ByteChange: 200, Timestamp: 1700000000, RevisionID: 100},
+		{User: "Bob", Comment: "Reverted", ByteChange: -200, Timestamp: 1700000060, RevisionID: 101},
+	}
+	diffs := map[int64]string{
+		100: "+ ADDED: A new paragraph about climate policy.",
+		101: "- REMOVED: A new paragraph about climate policy.",
+	}
+
+	_, user := svc.buildPrompt("Climate_Change", entries, diffs)
+
+	assert.Contains(t, user, "A new paragraph about climate policy")
+	assert.Contains(t, user, "Diff:")
+	assert.Contains(t, user, "EXACT text that was added or removed")
 }
 
 // ─── Response parsing tests ─────────────────────────────────────────────────

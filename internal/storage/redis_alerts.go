@@ -468,16 +468,27 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				continue
 			}
 
-			// Derive approximate start time from the marker key's TTL.
-			// Prefer an explicit persisted start time if present.
+			// Derive start time from the first timeline entry's actual edit
+			// timestamp — this is the real time the first edit occurred.
 			startTime := time.Time{}
-			startKey := fmt.Sprintf("editwar:start:%s", pageTitle)
-			if s, err := r.client.Get(ctx, startKey).Result(); err == nil && s != "" {
-				if t, err := time.Parse(time.RFC3339, s); err == nil {
-					startTime = t
+			timelineKey := fmt.Sprintf("editwar:timeline:%s", pageTitle)
+			if firstRaw, tlErr := r.client.LIndex(ctx, timelineKey, 0).Result(); tlErr == nil && firstRaw != "" {
+				var firstEntry struct {
+					Timestamp int64 `json:"timestamp"`
+				}
+				if json.Unmarshal([]byte(firstRaw), &firstEntry) == nil && firstEntry.Timestamp > 0 {
+					startTime = time.Unix(firstEntry.Timestamp, 0)
 				}
 			}
-			// Fallback to TTL-derived approximation if no explicit start time.
+			// Fallback: check persisted start key, then TTL approximation.
+			if startTime.IsZero() {
+				startKey := fmt.Sprintf("editwar:start:%s", pageTitle)
+				if s, err := r.client.Get(ctx, startKey).Result(); err == nil && s != "" {
+					if t, err := time.Parse(time.RFC3339, s); err == nil {
+						startTime = t
+					}
+				}
+			}
 			if startTime.IsZero() {
 				now := time.Now()
 				startTime = now
@@ -527,12 +538,22 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				serverURL = u
 			}
 
-			// Derive last-edit time from the metadata hash instead of "now".
+			// Derive last-edit time from the last timeline entry, falling back
+			// to hot-page metadata, then "now".
 			lastEdit := time.Now()
-			metaKey := fmt.Sprintf("hot:meta:%s", pageTitle)
-			if leStr, leErr := r.client.HGet(ctx, metaKey, "last_edit").Result(); leErr == nil && leStr != "" {
-				if ts, pErr := strconv.ParseInt(leStr, 10, 64); pErr == nil && ts > 0 {
-					lastEdit = time.Unix(ts, 0)
+			if lastRaw, tlErr := r.client.LIndex(ctx, timelineKey, -1).Result(); tlErr == nil && lastRaw != "" {
+				var lastEntry struct {
+					Timestamp int64 `json:"timestamp"`
+				}
+				if json.Unmarshal([]byte(lastRaw), &lastEntry) == nil && lastEntry.Timestamp > 0 {
+					lastEdit = time.Unix(lastEntry.Timestamp, 0)
+				}
+			} else {
+				metaKey := fmt.Sprintf("hot:meta:%s", pageTitle)
+				if leStr, leErr := r.client.HGet(ctx, metaKey, "last_edit").Result(); leErr == nil && leStr != "" {
+					if ts, pErr := strconv.ParseInt(leStr, 10, 64); pErr == nil && ts > 0 {
+						lastEdit = time.Unix(ts, 0)
+					}
 				}
 			}
 

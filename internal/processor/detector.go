@@ -232,14 +232,15 @@ func (sd *SpikeDetector) detectSpike(pageTitle string, stats *storage.PageStats)
 	return alert
 }
 
-// calculateSeverity determines spike severity based on ratio
+// calculateSeverity determines spike severity based on ratio.
+// Thresholds: 5x=medium, 10x=high, 20x=critical.
 func (sd *SpikeDetector) calculateSeverity(ratio float64) string {
 	switch {
-	case ratio >= 50:
-		return "critical"
 	case ratio >= 20:
-		return "high"
+		return "critical"
 	case ratio >= 10:
+		return "high"
+	case ratio >= 5:
 		return "medium"
 	default:
 		return "low"

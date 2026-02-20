@@ -18,6 +18,7 @@ type EditTimelineEntry struct {
 	ByteChange int    `json:"byte_change"`
 	Timestamp  int64  `json:"timestamp"`
 	RevisionID int64  `json:"revision_id,omitempty"`
+	ServerURL  string `json:"server_url,omitempty"`
 }
 
 // KeyEditor describes a participant in the edit war.
@@ -51,6 +52,7 @@ type Analysis struct {
 type AnalysisService struct {
 	llm      *Client
 	redis    *redis.Client
+	diffs    *DiffFetcher
 	cacheTTL time.Duration
 	logger   zerolog.Logger
 }
@@ -63,6 +65,7 @@ func NewAnalysisService(llm *Client, redisClient *redis.Client, cacheTTL time.Du
 	return &AnalysisService{
 		llm:      llm,
 		redis:    redisClient,
+		diffs:    NewDiffFetcher(logger),
 		cacheTTL: cacheTTL,
 		logger:   logger.With().Str("component", "llm_analysis").Logger(),
 	}
@@ -76,6 +79,26 @@ func (s *AnalysisService) Reanalyze(ctx context.Context, pageTitle string) (*Ana
 	cacheKey := fmt.Sprintf("editwar:analysis:%s", pageTitle)
 	_ = s.redis.Del(ctx, cacheKey).Err()
 	return s.Analyze(ctx, pageTitle)
+}
+
+// FinalizeAnalysis runs a final analysis when an edit war becomes inactive.
+// The result is cached with a 7-day TTL (matching history retention) so that
+// the analysis survives well beyond the timeline data's 12h TTL.
+func (s *AnalysisService) FinalizeAnalysis(ctx context.Context, pageTitle string) (*Analysis, error) {
+	cacheKey := fmt.Sprintf("editwar:analysis:%s", pageTitle)
+	_ = s.redis.Del(ctx, cacheKey).Err()
+
+	analysis, err := s.Analyze(ctx, pageTitle)
+	if err != nil {
+		return nil, err
+	}
+
+	// Re-cache with a 7-day TTL so it remains accessible from historical views.
+	if data, mErr := json.Marshal(analysis); mErr == nil {
+		_ = s.redis.Set(ctx, cacheKey, string(data), 7*24*time.Hour).Err()
+	}
+
+	return analysis, nil
 }
 
 func (s *AnalysisService) Analyze(ctx context.Context, pageTitle string) (*Analysis, error) {
@@ -138,10 +161,14 @@ func (s *AnalysisService) Analyze(ctx context.Context, pageTitle string) (*Analy
 		return analysis, nil
 	}
 
-	// 4. Build prompt
-	systemPrompt, userPrompt := s.buildPrompt(pageTitle, entries)
+	// 4. Fetch diffs from Wikipedia API (lazy — nothing stored in Redis).
+	//    We only need a server URL from any entry to know which wiki to call.
+	diffMap := s.fetchDiffs(ctx, pageTitle, entries)
 
-	// 5. Call LLM
+	// 5. Build prompt
+	systemPrompt, userPrompt := s.buildPrompt(pageTitle, entries, diffMap)
+
+	// 6. Call LLM
 	response, err := s.llm.Complete(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("page", pageTitle).Msg("LLM call failed, falling back to heuristic")
@@ -149,10 +176,10 @@ func (s *AnalysisService) Analyze(ctx context.Context, pageTitle string) (*Analy
 		return analysis, nil
 	}
 
-	// 6. Parse LLM response
+	// 7. Parse LLM response
 	analysis := s.parseLLMResponse(pageTitle, response, len(entries))
 
-	// 7. Cache it
+	// 8. Cache it
 	if data, err := json.Marshal(analysis); err == nil {
 		_ = s.redis.Set(ctx, cacheKey, string(data), s.cacheTTL).Err()
 	}
@@ -160,23 +187,101 @@ func (s *AnalysisService) Analyze(ctx context.Context, pageTitle string) (*Analy
 	return analysis, nil
 }
 
+// fetchDiffs retrieves diffs from the Wikipedia API for timeline entries that
+// have a revision ID and server URL.  Returns a map of revisionID → plain-text
+// diff.  Best-effort: entries without diffs are simply omitted from the map.
+func (s *AnalysisService) fetchDiffs(ctx context.Context, pageTitle string, entries []EditTimelineEntry) map[int64]string {
+	diffMap := make(map[int64]string)
+
+	// Determine the wiki's server URL from the first entry that has one.
+	var serverURL string
+	for _, e := range entries {
+		if e.ServerURL != "" {
+			serverURL = e.ServerURL
+			break
+		}
+	}
+
+	// Fallback: look up the server URL from Redis (set by the edit war detector).
+	if serverURL == "" {
+		urlKey := fmt.Sprintf("editwar:serverurl:%s", pageTitle)
+		if val, err := s.redis.Get(ctx, urlKey).Result(); err == nil && val != "" {
+			serverURL = val
+			s.logger.Info().Str("server_url", serverURL).Msg("Using server_url from Redis fallback")
+		}
+	}
+
+	// Last resort: default to English Wikipedia.
+	if serverURL == "" {
+		serverURL = "https://en.wikipedia.org"
+		s.logger.Warn().Int("entries", len(entries)).Msg("No server_url found anywhere; defaulting to en.wikipedia.org")
+	}
+
+	// Collect revision IDs (only entries that have one).
+	var revIDs []int64
+	var missingRevCount int
+	for _, e := range entries {
+		if e.RevisionID > 0 {
+			revIDs = append(revIDs, e.RevisionID)
+		} else {
+			missingRevCount++
+		}
+	}
+
+	s.logger.Info().
+		Str("server_url", serverURL).
+		Int("entries", len(entries)).
+		Int("with_revision_id", len(revIDs)).
+		Int("missing_revision_id", missingRevCount).
+		Msg("Diff fetch: starting")
+
+	if len(revIDs) == 0 {
+		s.logger.Warn().Msg("No revision IDs available in timeline entries; no diffs to fetch")
+		return diffMap
+	}
+
+	results := s.diffs.FetchDiffs(ctx, serverURL, revIDs)
+	var errCount int
+	for _, r := range results {
+		if r.DiffText != "" {
+			diffMap[r.RevisionID] = r.DiffText
+		} else if r.Error != "" {
+			errCount++
+			s.logger.Info().Int64("rev", r.RevisionID).Str("err", r.Error).Msg("Diff fetch failed for revision")
+		}
+	}
+
+	s.logger.Info().
+		Int("requested", len(revIDs)).
+		Int("fetched", len(diffMap)).
+		Int("errors", errCount).
+		Msg("Diff fetch: complete")
+
+	return diffMap
+}
+
 // buildPrompt constructs the system + user prompts for the LLM.
-func (s *AnalysisService) buildPrompt(pageTitle string, entries []EditTimelineEntry) (string, string) {
+func (s *AnalysisService) buildPrompt(pageTitle string, entries []EditTimelineEntry, diffs map[int64]string) (string, string) {
 	systemPrompt := `You are a sharp, perceptive Wikipedia edit war analyst who uncovers the real story behind editing conflicts. Your job is to read between the lines and surface the most interesting dynamics at play — the human motivations, the tactical patterns, and the bigger picture of why people are fighting over this article right now.
+
+You are provided with two types of evidence:
+1. **Edit metadata**: who edited, when, byte changes, and edit summaries.
+2. **Actual diffs**: the text that was added or removed in each edit (when available). Diffs are the most important signal — they show you exactly what content is being fought over. The diff content may be in any language; analyze the substance regardless of language.
 
 When given a sequence of edits, provide:
 
-1. **Summary** (4-5 sentences): Tell the story of this conflict like a journalist would. Don't just list facts — explain what's actually happening and why it matters. Highlight the most striking or unusual aspect of the dispute (e.g. is one editor on a crusade? Are the reverts escalating in a pattern? Is there a real-world event driving the conflict? Are editors talking past each other about different things?).
+1. **Summary** (4-5 sentences): Tell the story of this conflict like a journalist would. Don't just list facts — explain what's actually happening and why it matters. Reference the SPECIFIC content being changed (quote key phrases from the diffs when possible). Highlight the most striking or unusual aspect of the dispute (e.g. is one editor on a crusade? Are the reverts escalating in a pattern? Is there a real-world event driving the conflict? Are editors talking past each other about different things?).
 
-2. **Opposing sides**: Group every editor into a side. For each side, describe not just what they want, but WHY they seem to want it based on their edit patterns and comments. What motivates each side? Give each editor a vivid, specific role — not generic labels like "contributor" but something that captures their actual behavior (e.g. "persistent content restorer", "cleanup vigilante", "sourcing enforcer").
+2. **Opposing sides**: Group every editor into a side. For each side, describe not just what they want, but WHY they seem to want it based on their edit patterns, comments, and the actual diff content. What motivates each side? Give each editor a vivid, specific role — not generic labels like "contributor" but something that captures their actual behavior (e.g. "persistent content restorer", "cleanup vigilante", "sourcing enforcer").
 
-3. **Content area**: What specific topic or section is being fought over? Be precise — not "content dispute" but the actual subject matter.
+3. **Content area**: What specific topic or section is being fought over? Be precise — use the actual text from the diffs to identify the exact subject matter, not vague labels like "content dispute".
 
 4. **Severity** (low / moderate / high / critical): Based on edit frequency, editor count, revert ratio, and escalation patterns.
 
 5. **Recommendation**: A clear, plain-language suggestion for what should happen next, written so anyone can understand it (e.g. "Both editors should stop editing the article and hash this out on the discussion page first", "An administrator should temporarily lock the page until tempers cool down").
 
 Dig into the data. Look for:
+- The ACTUAL CONTENT being added and removed (this is the most important signal)
 - Timing patterns (are edits happening within minutes of each other? that signals a live back-and-forth)
 - Byte-change patterns (are the same bytes being added and removed repeatedly?)
 - Edit comment tone (are editors getting more aggressive over time?)
@@ -187,16 +292,16 @@ Be specific, factual, and unbiased. Don't take sides — but don't be boring eit
 
 Respond in valid JSON with this exact schema:
 {
-  "summary": "4-5 sentence conflict narrative — make it compelling and insightful",
+  "summary": "4-5 sentence conflict narrative — make it compelling and insightful, referencing specific content from the diffs",
   "sides": [
     {
-      "position": "What this side wants and why they seem to want it",
+      "position": "What this side wants and why they seem to want it — reference the actual content they are adding or defending",
       "editors": [
         {"user": "username", "edit_count": N, "role": "vivid specific role description"}
       ]
     }
   ],
-  "content_area": "precise topic label",
+  "content_area": "precise topic label derived from actual diff content",
   "severity": "low | moderate | high | critical",
   "recommendation": "Plain-language actionable next step"
 }`
@@ -205,6 +310,7 @@ Respond in valid JSON with this exact schema:
 	sb.WriteString(fmt.Sprintf("Wikipedia page: \"%s\"\n\n", pageTitle))
 	sb.WriteString("Recent edit timeline (chronological order):\n\n")
 
+	hasDiffs := false
 	for i, e := range entries {
 		ts := time.Unix(e.Timestamp, 0).UTC().Format("2006-01-02 15:04:05 UTC")
 		sign := "+"
@@ -217,6 +323,24 @@ Respond in valid JSON with this exact schema:
 		}
 		sb.WriteString(fmt.Sprintf("%d. [%s] User \"%s\" (%s%d bytes): %s\n",
 			i+1, ts, e.User, sign, e.ByteChange, comment))
+
+		// Append the diff content for this revision if available.
+		if diff, ok := diffs[e.RevisionID]; ok && diff != "" {
+			hasDiffs = true
+			sb.WriteString("   Diff:\n")
+			for _, line := range strings.Split(diff, "\n") {
+				sb.WriteString("   ")
+				sb.WriteString(line)
+				sb.WriteString("\n")
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	if hasDiffs {
+		sb.WriteString("\nThe diffs above show the EXACT text that was added or removed in each edit. Use this content to determine what the fight is actually about.\n")
+	} else {
+		sb.WriteString("\nNote: Diff content was not available for these edits. Base your analysis on the metadata above.\n")
 	}
 
 	sb.WriteString("\nAnalyze this edit war. What's the real story here? What are the opposing sides fighting over, and what patterns do you see in how this conflict is playing out?")

@@ -120,7 +120,7 @@ func NewEditWarDetector(hotPages *storage.HotPageTracker, redisClient *redis.Cli
 		metrics:          sharedEditWarMetrics,
 		minEdits:         5,
 		minEditors:       2,
-		minReverts:       1,
+		minReverts:       2,
 		timeWindow:       10 * time.Minute,
 		logger:           logger.With().Str("component", "edit_war_detector").Logger(),
 		cooldowns:        make(map[string]time.Time),
@@ -177,6 +177,7 @@ func (ewd *EditWarDetector) ProcessEdit(ctx context.Context, edit *models.Wikipe
 		"byte_change": byteChange,
 		"timestamp":   edit.Timestamp,
 		"revision_id": edit.Revision.New,
+		"server_url":  edit.ServerURL,
 	})
 	pipe.RPush(ctx, timelineKey, string(timelineEntry))
 	pipe.LTrim(ctx, timelineKey, -100, -1) // Keep last 100 entries
@@ -305,22 +306,27 @@ func (ewd *EditWarDetector) detectEditWar(ctx context.Context, pageTitle string)
 	// All conditions met — calculate severity and create alert
 	severity := ewd.calculateEditWarSeverity(totalEdits, uniqueEditors, revertCount)
 
-	// Derive start time from the editwar:editors key's TTL to approximate
-	// when the first edit in this window occurred.
-	editorsKey2 := fmt.Sprintf("editwar:editors:%s", pageTitle)
+	// Derive start time from the first timeline entry's actual edit timestamp.
+	// This gives the real time the first edit occurred, not when we detected it.
 	startTime := time.Now().Add(-ewd.timeWindow) // fallback
-	ttl, ttlErr := ewd.redis.TTL(ctx, editorsKey2).Result()
-	if ttlErr == nil && ttl > 0 && ttl <= ewd.timeWindow {
-		// elapsed = window - remaining TTL
-		elapsed := ewd.timeWindow - ttl
-		startTime = time.Now().Add(-elapsed)
+	timelineKey := fmt.Sprintf("editwar:timeline:%s", pageTitle)
+	if firstRaw, tlErr := ewd.redis.LIndex(ctx, timelineKey, 0).Result(); tlErr == nil && firstRaw != "" {
+		var firstEntry struct {
+			Timestamp int64 `json:"timestamp"`
+		}
+		if json.Unmarshal([]byte(firstRaw), &firstEntry) == nil && firstEntry.Timestamp > 0 {
+			startTime = time.Unix(firstEntry.Timestamp, 0)
+		}
 	}
 
-	// Also check for a persisted first-seen timestamp
+	// Also check for a persisted first-seen timestamp (set on initial detection)
 	startKey := fmt.Sprintf("editwar:start:%s", pageTitle)
 	if s, sErr := ewd.redis.Get(ctx, startKey).Result(); sErr == nil && s != "" {
 		if t, pErr := time.Parse(time.RFC3339, s); pErr == nil {
-			startTime = t
+			// Use the earlier of the two — persisted vs timeline-derived
+			if t.Before(startTime) {
+				startTime = t
+			}
 		}
 	}
 
@@ -548,6 +554,108 @@ func (ewd *EditWarDetector) maybeReanalyze(ctx context.Context, pageTitle string
 	}(pageTitle)
 }
 
+// StartDeactivationSweeper launches a background goroutine that periodically
+// checks for edit wars that have become inactive (editor data expired) and
+// triggers a final LLM analysis before the timeline data also expires.
+// Call this once after wiring up the analysis service. The sweeper stops when
+// ctx is cancelled.
+func (ewd *EditWarDetector) StartDeactivationSweeper(ctx context.Context, interval time.Duration) {
+	if ewd.analysisService == nil {
+		ewd.logger.Info().Msg("No analysis service configured; skipping deactivation sweeper")
+		return
+	}
+	if interval <= 0 {
+		interval = 2 * time.Minute
+	}
+
+	// Redis set that tracks page titles of currently-active edit wars.
+	// The sweeper compares this set on each tick to discover newly-inactive wars.
+	const trackingKey = "editwar:active_set"
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		ewd.logger.Info().Dur("interval", interval).Msg("Edit war deactivation sweeper started")
+
+		for {
+			select {
+			case <-ctx.Done():
+				ewd.logger.Info().Msg("Edit war deactivation sweeper stopped")
+				return
+			case <-ticker.C:
+				ewd.sweepDeactivatedWars(ctx, trackingKey)
+			}
+		}
+	}()
+}
+
+// sweepDeactivatedWars discovers edit wars that were previously active but
+// whose editor data has now expired, runs a final analysis, and removes them
+// from the tracking set.
+func (ewd *EditWarDetector) sweepDeactivatedWars(ctx context.Context, trackingKey string) {
+	// 1. Collect all currently-active war page titles by scanning marker keys.
+	currentlyActive := make(map[string]bool)
+	var cursor uint64
+	for {
+		keys, next, err := ewd.redis.Scan(ctx, cursor, "editwar:editors:*", 200).Result()
+		if err != nil {
+			ewd.logger.Warn().Err(err).Msg("Sweeper: failed to scan editor keys")
+			return
+		}
+		for _, k := range keys {
+			page := strings.TrimPrefix(k, "editwar:editors:")
+			// Only consider pages that also have a marker key (actual wars).
+			mk := fmt.Sprintf("editwar:%s", page)
+			if ex, _ := ewd.redis.Exists(ctx, mk).Result(); ex > 0 {
+				currentlyActive[page] = true
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+
+	// 2. Add all currently-active wars to the tracking set (so we remember them).
+	for page := range currentlyActive {
+		_ = ewd.redis.SAdd(ctx, trackingKey, page).Err()
+	}
+	// Keep the tracking set alive as long as we have active wars.
+	if len(currentlyActive) > 0 {
+		_ = ewd.redis.Expire(ctx, trackingKey, 24*time.Hour).Err()
+	}
+
+	// 3. Read previously-tracked wars and find the ones no longer active.
+	previouslyActive, err := ewd.redis.SMembers(ctx, trackingKey).Result()
+	if err != nil {
+		ewd.logger.Warn().Err(err).Msg("Sweeper: failed to read tracking set")
+		return
+	}
+
+	for _, page := range previouslyActive {
+		if currentlyActive[page] {
+			continue // still active, nothing to do
+		}
+
+		// This war just became inactive — run a final analysis.
+		ewd.logger.Info().Str("page", page).Msg("Edit war deactivated, running final analysis")
+
+		go func(p string) {
+			fCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			if _, err := ewd.analysisService.FinalizeAnalysis(fCtx, p); err != nil {
+				ewd.logger.Warn().Err(err).Str("page", p).Msg("Final analysis failed for deactivated edit war")
+			} else {
+				ewd.logger.Info().Str("page", p).Msg("Final analysis completed for deactivated edit war")
+			}
+		}(page)
+
+		// Remove from tracking set so we don't re-trigger.
+		_ = ewd.redis.SRem(ctx, trackingKey, page).Err()
+	}
+}
+
 // GetActiveEditWars retrieves all currently active edit wars
 func (ewd *EditWarDetector) GetActiveEditWars(ctx context.Context) ([]*EditWarAlert, error) {
 	var cursor uint64
@@ -660,6 +768,7 @@ type TimelineEntry struct {
 	ByteChange int    `json:"byte_change"`
 	Timestamp  int64  `json:"timestamp"`
 	RevisionID int64  `json:"revision_id,omitempty"`
+	ServerURL  string `json:"server_url,omitempty"`
 }
 
 // GetTimeline retrieves the edit timeline for a page's edit war from Redis.

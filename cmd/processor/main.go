@@ -70,6 +70,9 @@ type processorOrchestrator struct {
 	components       []*componentHealth
 	healthCheckStop  chan struct{}
 
+	// Background goroutine lifecycle
+	sweeperCancel    context.CancelFunc
+
 	// Metrics server
 	metricsServer    *http.Server
 
@@ -260,6 +263,12 @@ func (o *processorOrchestrator) initProcessors() {
 		} else {
 			o.logger.Info().Msg("LLM not configured — edit war auto-analysis will use heuristic fallback")
 		}
+
+		// Start the deactivation sweeper: runs a final analysis when an edit war
+		// goes inactive, caching the result for 7 days so it persists in history.
+		sweeperCtx, sweeperCancel := context.WithCancel(context.Background())
+		o.sweeperCancel = sweeperCancel
+		o.editWarDetector.StartDeactivationSweeper(sweeperCtx, 2*time.Minute)
 	}
 
 	// Trending Aggregator
@@ -552,6 +561,12 @@ func (o *processorOrchestrator) gracefulShutdown() {
 	// 1. Stop health monitoring
 	close(o.healthCheckStop)
 	o.logger.Info().Msg("Health monitoring stopped")
+
+	// 1b. Stop deactivation sweeper
+	if o.sweeperCancel != nil {
+		o.sweeperCancel()
+		o.logger.Info().Msg("Edit war deactivation sweeper stopped")
+	}
 
 	// 2. Stop all consumers (stop accepting new messages)
 	o.logger.Info().Msg("Stopping Kafka consumers...")

@@ -180,6 +180,8 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
+    env_file:
+      - ../.env
     environment:
       - CONFIG_PATH=/app/configs/config.prod.yaml
       - LOG_LEVEL=error
@@ -217,10 +219,6 @@ services:
       - LOG_FORMAT=json
       - GOGC=50
       - GOMEMLIMIT=90MiB
-      - LLM_ENABLED=${LLM_ENABLED:-false}
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
     ports:
       - "8081:8081"
     networks:

@@ -259,14 +259,14 @@ func TestSeverityCalculation(t *testing.T) {
 		ratio    float64
 		expected string
 	}{
-		{4.9, "low"},     // Below threshold, but this shouldn't reach severity calc
-		{5.0, "low"},     // Exactly at threshold
-		{9.9, "low"},     // Just below medium
-		{10.0, "medium"}, // Exactly medium
-		{19.9, "medium"}, // Just below high
-		{20.0, "high"},   // Exactly high
-		{49.9, "high"},   // Just below critical
-		{50.0, "critical"}, // Exactly critical
+		{4.9, "low"},       // Below medium threshold
+		{5.0, "medium"},    // Exactly at medium threshold
+		{9.9, "medium"},    // Just below high
+		{10.0, "high"},     // Exactly high
+		{19.9, "high"},     // Just below critical
+		{20.0, "critical"}, // Exactly critical
+		{49.9, "critical"}, // Well above critical
+		{50.0, "critical"}, // Way above critical
 		{100.0, "critical"}, // Way above critical
 	}
 
