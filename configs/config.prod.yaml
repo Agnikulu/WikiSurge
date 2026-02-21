@@ -74,7 +74,7 @@ api:
       - "::1"
 
 logging:
-  level: "error"                 # Minimal logging to save disk/CPU
+  level: "info"                  # Info level for visibility; switch to "error" once stable
   format: "json"
 
 # --- Authentication ---

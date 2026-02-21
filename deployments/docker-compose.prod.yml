@@ -1,7 +1,7 @@
 # =============================================================================
 # WikiSurge Production Deployment
 # =============================================================================
-# Uses pre-built images from GitHub Container Registry
+# Builds all services from source using multi-stage Dockerfiles.
 # Lean stack: Kafka, Redis, ES, Ingestor, Processor, API, Frontend
 # No monitoring services (Prometheus/Grafana) — use docker-compose.dev.yml for that
 #
@@ -137,10 +137,13 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # Ingestor - Wikipedia Event Stream Consumer (Pre-built)
+  # Ingestor - Wikipedia Event Stream Consumer
   # ---------------------------------------------------------------------------
   ingestor:
-    image: ghcr.io/agnikulu/wikisurge-ingestor:latest
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.ingestor
+    image: wikisurge-ingestor:latest
     container_name: wikisurge-ingestor
     restart: always
     depends_on:
@@ -163,10 +166,13 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # Processor - Edit Processing Pipeline (Pre-built)
+  # Processor - Edit Processing Pipeline
   # ---------------------------------------------------------------------------
   processor:
-    image: ghcr.io/agnikulu/wikisurge-processor:latest
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.processor
+    image: wikisurge-processor:latest
     container_name: wikisurge-processor
     restart: always
     depends_on:
@@ -195,10 +201,13 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # API - REST/WebSocket Server (Built from source)
+  # API - REST/WebSocket Server
   # ---------------------------------------------------------------------------
   api:
-    image: ghcr.io/agnikulu/wikisurge-api:latest
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.api
+    image: wikisurge-api:latest
     container_name: wikisurge-api
     restart: always
     depends_on:
@@ -211,7 +220,7 @@ services:
     environment:
       - CONFIG_PATH=/app/configs/config.prod.yaml
       - API_PORT=8081
-      - LOG_LEVEL=error
+      - LOG_LEVEL=info
       - LOG_FORMAT=json
       - GOGC=50
       - GOMEMLIMIT=90MiB
@@ -246,10 +255,13 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
-  # Frontend - React Dashboard (Pre-built)
+  # Frontend - React Dashboard
   # ---------------------------------------------------------------------------
   frontend:
-    image: ghcr.io/agnikulu/wikisurge-frontend:latest
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.frontend
+    image: wikisurge-frontend:latest
     container_name: wikisurge-frontend
     restart: unless-stopped
     depends_on:
