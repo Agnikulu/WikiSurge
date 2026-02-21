@@ -40,6 +40,10 @@ const HistoricalEditWars = lazy(() =>
   }))
 );
 
+import { LoginForm } from './components/Auth/LoginForm';
+import { SettingsPanel } from './components/Settings/SettingsPanel';
+import { useAuthStore } from './store/authStore';
+
 function App() {
   const activeTab = useAppStore((s) => s.activeTab);
   const darkMode = useAppStore((s) => s.darkMode);
@@ -62,6 +66,7 @@ function App() {
             {activeTab === 'alerts' && <AlertsView />}
             {activeTab === 'search' && <SearchView />}
             {activeTab === 'edit-wars' && <EditWarsView />}
+            {activeTab === 'settings' && <SettingsView />}
           </ErrorBoundary>
         </div>
       </main>
@@ -187,6 +192,12 @@ function EditWarsView() {
       </ErrorBoundary>
     </div>
   );
+}
+
+/** Settings / Auth view */
+function SettingsView() {
+  const user = useAuthStore((s) => s.user);
+  return user ? <SettingsPanel /> : <LoginForm />;
 }
 
 export default App;

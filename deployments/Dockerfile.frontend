@@ -11,8 +11,9 @@ FROM node:18-alpine AS builder
 WORKDIR /build
 
 # Build arguments for Vite
-ARG VITE_API_URL=http://localhost:8081
-ARG VITE_WS_URL=ws://localhost:8081
+# Leave empty for production — nginx proxies /api/, WebSocket auto-detects host
+ARG VITE_API_URL=
+ARG VITE_WS_URL=
 
 # Set as environment variables for Vite build
 ENV VITE_API_URL=$VITE_API_URL

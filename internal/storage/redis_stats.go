@@ -41,7 +41,7 @@ func (st *StatsTracker) RecordEdit(ctx context.Context, language string, isBot b
 	dateStr := time.Now().UTC().Format("2006-01-02")
 	langKey := fmt.Sprintf("stats:languages:%s", dateStr)
 	pipe.HIncrBy(ctx, langKey, language, 1)
-	pipe.Expire(ctx, langKey, 25*time.Hour)
+	pipe.Expire(ctx, langKey, 192*time.Hour) // 8 days — supports weekly digests
 
 	// Increment total counter for today
 	pipe.HIncrBy(ctx, langKey, "__total__", 1)
@@ -53,20 +53,20 @@ func (st *StatsTracker) RecordEdit(ctx context.Context, language string, isBot b
 	} else {
 		pipe.HIncrBy(ctx, botKey, "human", 1)
 	}
-	pipe.Expire(ctx, botKey, 25*time.Hour)
+	pipe.Expire(ctx, botKey, 192*time.Hour) // 8 days
 
 	// Increment minute-bucket counter for timeline
 	minuteBucket := time.Now().Truncate(time.Minute).Unix()
 	timelineKey := fmt.Sprintf("stats:timeline:%d", minuteBucket)
 	pipe.Incr(ctx, timelineKey)
-	pipe.Expire(ctx, timelineKey, 25*time.Hour)
+	pipe.Expire(ctx, timelineKey, 192*time.Hour) // 8 days
 
 	// Track which minute buckets exist (for retrieval)
 	pipe.ZAdd(ctx, "stats:timeline:index", redis.Z{
 		Score:  float64(minuteBucket),
 		Member: strconv.FormatInt(minuteBucket, 10),
 	})
-	pipe.Expire(ctx, "stats:timeline:index", 25*time.Hour)
+	pipe.Expire(ctx, "stats:timeline:index", 192*time.Hour) // 8 days
 
 	_, err := pipe.Exec(ctx)
 	return err
@@ -125,6 +125,62 @@ func (st *StatsTracker) GetDailyEditCount(ctx context.Context) (int64, error) {
 	}
 	total, _ := strconv.ParseInt(totalStr, 10, 64)
 	return total, nil
+}
+
+// GetEditCountForPeriod sums edit counts across all dates in [since, now].
+func (st *StatsTracker) GetEditCountForPeriod(ctx context.Context, since time.Time) (int64, error) {
+	var total int64
+	start := since.UTC().Truncate(24 * time.Hour)
+	end := time.Now().UTC().Truncate(24 * time.Hour)
+	for d := start; !d.After(end); d = d.Add(24 * time.Hour) {
+		dateStr := d.Format("2006-01-02")
+		langKey := fmt.Sprintf("stats:languages:%s", dateStr)
+		totalStr, err := st.redis.HGet(ctx, langKey, "__total__").Result()
+		if err == redis.Nil {
+			continue
+		}
+		if err != nil {
+			continue
+		}
+		count, _ := strconv.ParseInt(totalStr, 10, 64)
+		total += count
+	}
+	return total, nil
+}
+
+// GetLanguageCountsForPeriod sums language counts across all dates in [since, now].
+func (st *StatsTracker) GetLanguageCountsForPeriod(ctx context.Context, since time.Time) ([]LanguageCount, int64, error) {
+	merged := make(map[string]int64)
+	var grandTotal int64
+
+	start := since.UTC().Truncate(24 * time.Hour)
+	end := time.Now().UTC().Truncate(24 * time.Hour)
+	for d := start; !d.After(end); d = d.Add(24 * time.Hour) {
+		dateStr := d.Format("2006-01-02")
+		langKey := fmt.Sprintf("stats:languages:%s", dateStr)
+		data, err := st.redis.HGetAll(ctx, langKey).Result()
+		if err != nil {
+			continue
+		}
+		for lang, countStr := range data {
+			count, _ := strconv.ParseInt(countStr, 10, 64)
+			if lang == "__total__" {
+				grandTotal += count
+			} else {
+				merged[lang] += count
+			}
+		}
+	}
+
+	counts := make([]LanguageCount, 0, len(merged))
+	for lang, count := range merged {
+		counts = append(counts, LanguageCount{Language: lang, Count: count})
+	}
+	sort.Slice(counts, func(i, j int) bool {
+		return counts[i].Count > counts[j].Count
+	})
+
+	return counts, grandTotal, nil
 }
 
 // GetTimeline returns edit counts per minute for the given duration.

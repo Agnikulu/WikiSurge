@@ -19,7 +19,39 @@ type Config struct {
 	Kafka         Kafka         `yaml:"kafka"`
 	API           API           `yaml:"api"`
 	LLM           LLMConfig     `yaml:"llm"`
+	Auth          AuthConfig    `yaml:"auth"`
+	Database      DatabaseConfig `yaml:"database"`
+	Email         EmailConfig   `yaml:"email"`
 	Logging       Logging       `yaml:"logging"`
+}
+
+// AuthConfig configures JWT authentication.
+type AuthConfig struct {
+	JWTSecret string        `yaml:"jwt_secret"`
+	JWTExpiry time.Duration `yaml:"jwt_expiry"`
+}
+
+// DatabaseConfig configures the SQLite user database.
+type DatabaseConfig struct {
+	Path string `yaml:"path"` // Path to SQLite database file
+}
+
+// EmailConfig configures the digest email sender.
+type EmailConfig struct {
+	Enabled            bool   `yaml:"enabled"`
+	Provider           string `yaml:"provider"`             // "resend", "smtp", "log"
+	APIKey             string `yaml:"api_key"`              // Resend API key
+	SMTPHost           string `yaml:"smtp_host"`            // SMTP server hostname
+	SMTPPort           int    `yaml:"smtp_port"`            // SMTP server port (587 for TLS)
+	SMTPUser           string `yaml:"smtp_user"`            // SMTP username
+	SMTPPass           string `yaml:"smtp_pass"`            // SMTP password
+	FromAddress        string `yaml:"from_address"`
+	FromName           string `yaml:"from_name"`
+	DashboardURL       string `yaml:"dashboard_url"`        // Link back to WikiSurge
+	DailySendHour      int    `yaml:"daily_send_hour"`      // UTC hour (0-23)
+	WeeklySendDay      int    `yaml:"weekly_send_day"`      // 0=Sunday, 1=Monday, ...
+	WeeklySendHour     int    `yaml:"weekly_send_hour"`     // UTC hour
+	MaxConcurrentSends int    `yaml:"max_concurrent_sends"`
 }
 
 // LLMConfig configures the LLM provider used for edit war analysis.
@@ -263,6 +295,42 @@ func setDefaults(config *Config) {
 		config.API.RateLimiting.KeyType = "ip"
 	}
 
+	// Auth defaults
+	if config.Auth.JWTSecret == "" {
+		config.Auth.JWTSecret = "wikisurge-dev-secret-change-in-production"
+	}
+	if config.Auth.JWTExpiry == 0 {
+		config.Auth.JWTExpiry = 24 * time.Hour
+	}
+
+	// Database defaults
+	if config.Database.Path == "" {
+		config.Database.Path = "data/wikisurge.db"
+	}
+
+	// Email defaults
+	if config.Email.FromAddress == "" {
+		config.Email.FromAddress = "digest@wikisurge.app"
+	}
+	if config.Email.FromName == "" {
+		config.Email.FromName = "WikiSurge"
+	}
+	if config.Email.DashboardURL == "" {
+		config.Email.DashboardURL = "http://localhost:5173"
+	}
+	if config.Email.DailySendHour == 0 {
+		config.Email.DailySendHour = 8
+	}
+	if config.Email.WeeklySendDay == 0 {
+		config.Email.WeeklySendDay = 1 // Monday
+	}
+	if config.Email.WeeklySendHour == 0 {
+		config.Email.WeeklySendHour = 8
+	}
+	if config.Email.MaxConcurrentSends == 0 {
+		config.Email.MaxConcurrentSends = 10
+	}
+
 	// LLM defaults
 	if config.LLM.Provider == "" {
 		config.LLM.Provider = "openai"
@@ -322,6 +390,48 @@ func overrideWithEnv(config *Config) {
 	}
 	if llmEnabled := os.Getenv("LLM_ENABLED"); llmEnabled == "true" || llmEnabled == "1" {
 		config.LLM.Enabled = true
+	}
+
+	// Auth overrides
+	if jwtSecret := os.Getenv("JWT_SECRET"); jwtSecret != "" {
+		config.Auth.JWTSecret = jwtSecret
+	}
+
+	// Database overrides
+	if dbPath := os.Getenv("DB_PATH"); dbPath != "" {
+		config.Database.Path = dbPath
+	}
+
+	// Email overrides
+	if emailKey := os.Getenv("EMAIL_API_KEY"); emailKey != "" {
+		config.Email.APIKey = emailKey
+		config.Email.Enabled = true
+		if config.Email.Provider == "" || config.Email.Provider == "log" {
+			config.Email.Provider = "resend" // auto-select resend when API key is set
+		}
+	}
+	if emailProvider := os.Getenv("EMAIL_PROVIDER"); emailProvider != "" {
+		config.Email.Provider = emailProvider
+	}
+	if smtpHost := os.Getenv("EMAIL_SMTP_HOST"); smtpHost != "" {
+		config.Email.SMTPHost = smtpHost
+	}
+	if smtpPort := os.Getenv("EMAIL_SMTP_PORT"); smtpPort != "" {
+		if p, err := strconv.Atoi(smtpPort); err == nil {
+			config.Email.SMTPPort = p
+		}
+	}
+	if smtpUser := os.Getenv("EMAIL_SMTP_USER"); smtpUser != "" {
+		config.Email.SMTPUser = smtpUser
+	}
+	if smtpPass := os.Getenv("EMAIL_SMTP_PASS"); smtpPass != "" {
+		config.Email.SMTPPass = smtpPass
+	}
+	if emailFrom := os.Getenv("EMAIL_FROM"); emailFrom != "" {
+		config.Email.FromAddress = emailFrom
+	}
+	if dashURL := os.Getenv("DASHBOARD_URL"); dashURL != "" {
+		config.Email.DashboardURL = dashURL
 	}
 }
 

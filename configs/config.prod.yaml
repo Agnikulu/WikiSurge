@@ -77,6 +77,34 @@ logging:
   level: "error"                 # Minimal logging to save disk/CPU
   format: "json"
 
+# --- Authentication ---
+auth:
+  jwt_secret: ""              # REQUIRED in production — set JWT_SECRET env var
+  jwt_expiry: 24h
+
+# --- User Database (SQLite) ---
+database:
+  path: "/data/wikisurge.db"   # Persistent volume in Docker
+
+# --- Digest Email ---
+# Set EMAIL_API_KEY env var to auto-enable with Resend.
+# Or configure SMTP for self-hosted sending.
+email:
+  enabled: true
+  provider: "resend"           # "resend" | "smtp" | "log"
+  api_key: ""                  # Override: EMAIL_API_KEY env var
+  from_address: "digest@wikisurge.net"
+  from_name: "WikiSurge"
+  dashboard_url: "https://wikisurge.net"   # Your actual domain
+  daily_send_hour: 8
+  weekly_send_day: 1
+  weekly_send_hour: 8
+  max_concurrent_sends: 10
+  # smtp_host: ""
+  # smtp_port: 587
+  # smtp_user: ""
+  # smtp_pass: ""
+
 # LLM configuration for edit war conflict analysis.
 # Override via LLM_ENABLED, LLM_API_KEY, etc. env vars.
 llm:

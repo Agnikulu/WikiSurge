@@ -7,19 +7,27 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Agnikulu/WikiSurge/internal/api"
+	"github.com/Agnikulu/WikiSurge/internal/auth"
 	"github.com/Agnikulu/WikiSurge/internal/config"
+	"github.com/Agnikulu/WikiSurge/internal/digest"
+	"github.com/Agnikulu/WikiSurge/internal/email"
 	"github.com/Agnikulu/WikiSurge/internal/metrics"
 	"github.com/Agnikulu/WikiSurge/internal/storage"
+	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 )
 
 func main() {
+	// ---- Load .env (if present) ----
+	_ = godotenv.Load() // silently ignore if .env doesn't exist
+
 	// ---- Flags ----
 	configPath := flag.String("config", "", "Path to configuration file")
 	portOverride := flag.Int("port", 0, "Override API port (default from config)")
@@ -106,10 +114,55 @@ func main() {
 	trendingScorer := storage.NewTrendingScorer(redisClient, &cfg.Redis.Trending)
 	alerts := storage.NewRedisAlerts(redisClient)
 
+	// ---- SQLite User Store ----
+	// Ensure the data directory exists
+	if err := os.MkdirAll(filepath.Dir(cfg.Database.Path), 0755); err != nil {
+		logger.Fatal().Err(err).Str("path", cfg.Database.Path).Msg("Failed to create database directory")
+	}
+	userStore, err := storage.NewUserStore(cfg.Database.Path)
+	if err != nil {
+		logger.Fatal().Err(err).Str("path", cfg.Database.Path).Msg("Failed to open user database")
+	}
+	logger.Info().Str("path", cfg.Database.Path).Msg("User database ready")
+
+	// ---- JWT Service ----
+	jwtSvc := auth.NewJWTService(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiry)
+	logger.Info().Dur("expiry", cfg.Auth.JWTExpiry).Msg("JWT auth service initialized")
+
 	// ---- API Server ----
-	apiServer := api.NewAPIServer(redisClient, esClient, trendingScorer, hotPageTracker, alerts, cfg, logger)
+	apiServer := api.NewAPIServer(redisClient, esClient, trendingScorer, hotPageTracker, alerts, userStore, jwtSvc, cfg, logger)
 	addr := fmt.Sprintf(":%d", cfg.API.Port)
 	httpServer := apiServer.ListenAndServe(addr)
+
+	// ---- Digest Scheduler ----
+	var digestScheduler *digest.Scheduler
+	if cfg.Email.Enabled {
+		statsTracker := storage.NewStatsTracker(redisClient)
+		collector := digest.NewCollector(trendingScorer, alerts, hotPageTracker, statsTracker, logger)
+
+		var emailSender digest.EmailSender
+		switch cfg.Email.Provider {
+		case "resend":
+			emailSender = email.NewResendSender(cfg.Email.APIKey, cfg.Email.FromAddress, cfg.Email.FromName, logger)
+		case "smtp":
+			emailSender = email.NewSMTPSender(cfg.Email.SMTPHost, fmt.Sprintf("%d", cfg.Email.SMTPPort), cfg.Email.SMTPUser, cfg.Email.SMTPPass, cfg.Email.FromAddress, cfg.Email.FromName, logger)
+		default:
+			emailSender = email.NewLogSender(logger)
+		}
+
+		digestScheduler = digest.NewScheduler(collector, emailSender, userStore, digest.SchedulerConfig{
+			DailySendHour:      cfg.Email.DailySendHour,
+			WeeklySendDay:      cfg.Email.WeeklySendDay,
+			WeeklySendHour:     cfg.Email.WeeklySendHour,
+			MaxConcurrentSends: cfg.Email.MaxConcurrentSends,
+			DashboardURL:       cfg.Email.DashboardURL,
+			Enabled:            true,
+		}, logger)
+		digestScheduler.Start()
+		logger.Info().Str("provider", cfg.Email.Provider).Msg("Digest email scheduler started")
+	} else {
+		logger.Info().Msg("Digest email scheduler disabled (email.enabled = false)")
+	}
 
 	// Start HTTP server
 	go func() {
@@ -137,6 +190,11 @@ func main() {
 		logger.Error().Err(err).Msg("HTTP server shutdown error")
 	}
 
+	// Stop digest scheduler
+	if digestScheduler != nil {
+		digestScheduler.Stop()
+	}
+
 	// Stop metrics server
 	if err := metricsServer.Stop(shutdownCtx); err != nil {
 		logger.Error().Err(err).Msg("Metrics server shutdown error")
@@ -149,6 +207,11 @@ func main() {
 	// Close Redis
 	if err := redisClient.Close(); err != nil {
 		logger.Error().Err(err).Msg("Redis close error")
+	}
+
+	// Close user database
+	if err := userStore.Close(); err != nil {
+		logger.Error().Err(err).Msg("User database close error")
 	}
 
 	// Close ES

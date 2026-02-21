@@ -55,7 +55,7 @@ func newTestServer(t *testing.T) (*APIServer, *miniredis.Miniredis) {
 	trending := storage.NewTrendingScorerForTest(redisClient, &cfg.Redis.Trending)
 	alerts := storage.NewRedisAlerts(redisClient)
 
-	srv := NewAPIServer(redisClient, nil, trending, hotPages, alerts, cfg, logger)
+	srv := NewAPIServer(redisClient, nil, trending, hotPages, alerts, nil, nil, cfg, logger)
 
 	t.Cleanup(func() {
 		hotPages.Shutdown()

@@ -92,6 +92,7 @@ func RequestValidationMiddleware(next http.Handler) http.Handler {
 	allowedMethods := map[string]bool{
 		http.MethodGet:     true,
 		http.MethodPost:    true,
+		http.MethodPut:     true,
 		http.MethodOptions: true,
 		http.MethodHead:    true,
 	}
@@ -104,8 +105,8 @@ func RequestValidationMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// 2. Content-Type for POST requests.
-		if r.Method == http.MethodPost {
+		// 2. Content-Type for POST/PUT requests.
+		if r.Method == http.MethodPost || r.Method == http.MethodPut {
 			ct := r.Header.Get("Content-Type")
 			if ct == "" || (!strings.Contains(ct, "application/json") && !strings.Contains(ct, "application/x-www-form-urlencoded")) {
 				respondError(w, http.StatusUnsupportedMediaType,

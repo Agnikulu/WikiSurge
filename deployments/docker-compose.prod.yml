@@ -18,6 +18,7 @@ volumes:
   kafka-data:
   redis-data:
   elasticsearch-data:
+  api-data:            # SQLite user database
 
 x-logging: &default-logging
   driver: json-file
@@ -53,10 +54,7 @@ services:
       - --set redpanda.log_segment_size=16777216
     volumes:
       - kafka-data:/var/lib/redpanda/data
-    ports:
-      - "19092:19092"
-      - "18081:18081"
-      - "18082:18082"
+    # No external ports — internal only in production
     networks:
       - wikisurge
     deploy:
@@ -90,8 +88,7 @@ services:
       --timeout 0
     volumes:
       - redis-data:/data
-    ports:
-      - "6379:6379"
+    # No external ports — internal only in production
     networks:
       - wikisurge
     deploy:
@@ -122,8 +119,7 @@ services:
       - cluster.routing.allocation.disk.threshold_enabled=false
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
-    ports:
-      - "9200:9200"
+    # No external ports — internal only in production
     networks:
       - wikisurge
     deploy:
@@ -219,6 +215,11 @@ services:
       - LOG_FORMAT=json
       - GOGC=50
       - GOMEMLIMIT=90MiB
+      - DB_PATH=/data/wikisurge.db
+      # Email: set EMAIL_API_KEY in .env to enable digest emails
+      # - JWT_SECRET=          # set in .env file
+    volumes:
+      - api-data:/data
     ports:
       - "8081:8081"
     networks:

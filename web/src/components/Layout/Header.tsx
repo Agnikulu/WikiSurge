@@ -1,5 +1,6 @@
-import { Activity, Wifi, WifiOff, Menu, X, Server, ServerOff } from 'lucide-react';
+import { Activity, Wifi, WifiOff, Menu, X, Server, ServerOff, User, LogIn } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
+import { useAuthStore } from '../../store/authStore';
 import { useState, useCallback } from 'react';
 
 export function Header() {
@@ -7,6 +8,7 @@ export function Header() {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const wsConnected = useAppStore((s) => s.wsConnected);
   const apiHealthy = useAppStore((s) => s.apiHealthy);
+  const user = useAuthStore((s) => s.user);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const tabs = [
@@ -82,6 +84,30 @@ export function Header() {
                 </span>
               </span>
             </div>
+
+            {/* User / Settings Button */}
+            <button
+              onClick={() => handleTabClick('settings')}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono transition-all"
+              style={{
+                background: activeTab === 'settings' ? 'rgba(0,255,136,0.15)' : 'rgba(0,255,136,0.05)',
+                border: `1px solid ${activeTab === 'settings' ? 'rgba(0,255,136,0.3)' : 'rgba(0,255,136,0.1)'}`,
+                color: activeTab === 'settings' ? '#00ff88' : 'rgba(0,255,136,0.5)',
+              }}
+              title={user ? `Settings (${user.email})` : 'Sign in'}
+            >
+              {user ? (
+                <>
+                  <User className="h-3.5 w-3.5" />
+                  <span className="hidden lg:inline max-w-[80px] truncate">{user.email.split('@')[0]}</span>
+                </>
+              ) : (
+                <>
+                  <LogIn className="h-3.5 w-3.5" />
+                  <span className="hidden lg:inline">SIGN IN</span>
+                </>
+              )}
+            </button>
 
             {/* Mobile Menu Button */}
             <button

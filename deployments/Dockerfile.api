@@ -8,7 +8,7 @@
 # --------------- Build Stage ---------------
 FROM golang:1.24-alpine AS builder
 
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
 
 WORKDIR /build
 
@@ -20,18 +20,18 @@ RUN go mod download
 COPY cmd/api/ cmd/api/
 COPY internal/ internal/
 
-# Build static binary (architecture auto-detected by buildx)
+# Build binary with CGO enabled (required by go-sqlite3)
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
-    -ldflags="-w -s -extldflags '-static'" \
+RUN CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+    -ldflags="-w -s" \
     -o /build/api \
     ./cmd/api
 
 # --------------- Runtime Stage ---------------
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS and wget for health checks
+# Install ca-certificates for HTTPS, wget for health checks, and libc for CGO
 RUN apk add --no-cache ca-certificates wget tzdata \
     && addgroup -S wikisurge \
     && adduser -S -G wikisurge wikisurge
@@ -42,8 +42,11 @@ WORKDIR /app
 COPY --from=builder /build/api /app/api
 COPY configs/ /app/configs/
 
+# Create data directory for SQLite database
+RUN mkdir -p /data
+
 # Set ownership
-RUN chown -R wikisurge:wikisurge /app
+RUN chown -R wikisurge:wikisurge /app /data
 
 # Switch to non-root user
 USER wikisurge

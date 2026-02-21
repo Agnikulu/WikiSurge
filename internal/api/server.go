@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Agnikulu/WikiSurge/internal/auth"
 	"github.com/Agnikulu/WikiSurge/internal/config"
 	"github.com/Agnikulu/WikiSurge/internal/llm"
 	"github.com/Agnikulu/WikiSurge/internal/models"
@@ -33,6 +34,8 @@ type APIServer struct {
 	wsHub          *WebSocketHub
 	alertHub       *AlertHub
 	analysisService *llm.AnalysisService
+	userStore       *storage.UserStore
+	jwtService      *auth.JWTService
 	version        string
 
 	// Stats cache
@@ -48,6 +51,8 @@ func NewAPIServer(
 	trending *storage.TrendingScorer,
 	hotPages *storage.HotPageTracker,
 	alerts *storage.RedisAlerts,
+	userStore *storage.UserStore,
+	jwtSvc *auth.JWTService,
 	cfg *config.Config,
 	logger zerolog.Logger,
 ) *APIServer {
@@ -63,6 +68,8 @@ func NewAPIServer(
 		logger:       logger.With().Str("component", "api").Logger(),
 		startTime:    time.Now(),
 		cache:        newResponseCache(),
+		userStore:    userStore,
+		jwtService:   jwtSvc,
 		version:      "1.0.0",
 	}
 
@@ -128,6 +135,24 @@ func (s *APIServer) setupRoutes() {
 	// WebSocket routes
 	s.router.HandleFunc("/ws/feed", s.WebSocketFeed)
 	s.router.HandleFunc("/ws/alerts", s.WebSocketAlerts)
+
+	// Auth + user routes (only if user store is configured)
+	if s.userStore != nil && s.jwtService != nil {
+		// Auth routes (public)
+		s.router.HandleFunc("POST /api/auth/register", s.handleRegister)
+		s.router.HandleFunc("POST /api/auth/login", s.handleLogin)
+
+		// Unsubscribe (public — token-based from email)
+		s.router.HandleFunc("GET /api/digest/unsubscribe", s.handleUnsubscribe)
+
+		// User routes (protected by JWT auth middleware)
+		authMw := auth.Middleware(s.jwtService)
+		s.router.Handle("GET /api/user/profile", authMw(http.HandlerFunc(s.handleGetProfile)))
+		s.router.Handle("GET /api/user/preferences", authMw(http.HandlerFunc(s.handleGetPreferences)))
+		s.router.Handle("PUT /api/user/preferences", authMw(http.HandlerFunc(s.handleUpdatePreferences)))
+		s.router.Handle("GET /api/user/watchlist", authMw(http.HandlerFunc(s.handleGetWatchlist)))
+		s.router.Handle("PUT /api/user/watchlist", authMw(http.HandlerFunc(s.handleUpdateWatchlist)))
+	}
 }
 
 // Handler returns the full middleware-wrapped HTTP handler.

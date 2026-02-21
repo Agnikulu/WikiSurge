@@ -69,6 +69,39 @@ logging:
   level: "info"
   format: "json"
 
+# --- Authentication ---
+auth:
+  jwt_secret: "dev-secret-change-me-in-production"  # Override: JWT_SECRET env var
+  jwt_expiry: 24h
+
+# --- User Database (SQLite) ---
+database:
+  path: "data/wikisurge.db"
+
+# --- Digest Email ---
+# For development: provider "log" prints emails to console (no real sending).
+# For production: use "resend" (free 3K/month) or "smtp".
+# Quick start:
+#   1. Sign up at https://resend.com → get API key
+#   2. Set EMAIL_API_KEY env var (auto-enables email + sets provider to resend)
+#   OR set email.enabled + email.provider + email.api_key below
+email:
+  enabled: false              # Set to true (or set EMAIL_API_KEY env var) to enable
+  provider: "log"             # "log" = console only | "resend" | "smtp"
+  api_key: ""                 # Override: EMAIL_API_KEY env var
+  from_address: "digest@wikisurge.net"
+  from_name: "WikiSurge"
+  dashboard_url: "http://localhost:5173"
+  daily_send_hour: 8          # UTC hour (0-23) to send daily digests
+  weekly_send_day: 1          # 0=Sunday, 1=Monday, ...
+  weekly_send_hour: 8
+  max_concurrent_sends: 10
+  # SMTP settings (only used when provider: "smtp")
+  # smtp_host: "smtp.gmail.com"
+  # smtp_port: 587
+  # smtp_user: ""
+  # smtp_pass: ""
+
 # LLM configuration for edit war conflict analysis.
 # Set LLM_API_KEY env var or configure api_key below.
 # Supported providers: openai, anthropic, ollama

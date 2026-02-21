@@ -310,7 +310,7 @@ func TestRequestValidation_MethodNotAllowed(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	for _, method := range []string{http.MethodDelete, http.MethodPut, http.MethodPatch} {
+	for _, method := range []string{http.MethodDelete, http.MethodPatch} {
 		req := httptest.NewRequest(method, "/api/stats", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -323,9 +323,9 @@ func TestRequestValidation_AllowedMethods(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodOptions, http.MethodHead} {
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodOptions, http.MethodHead} {
 		req := httptest.NewRequest(method, "/api/stats", nil)
-		if method == http.MethodPost {
+		if method == http.MethodPost || method == http.MethodPut {
 			req.Header.Set("Content-Type", "application/json")
 		}
 		rec := httptest.NewRecorder()
@@ -468,7 +468,7 @@ func TestFullMiddlewareStack_SecurityHeaders(t *testing.T) {
 	}
 
 	logger := zerolog.Nop()
-	srv := NewAPIServer(rc, nil, nil, nil, nil, cfg, logger)
+	srv := NewAPIServer(rc, nil, nil, nil, nil, nil, nil, cfg, logger)
 	h := srv.Handler()
 
 	// Fire a request through the full stack.
