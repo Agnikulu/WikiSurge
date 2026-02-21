@@ -1,9 +1,9 @@
 # =============================================================================
 # WikiSurge Production Deployment
 # =============================================================================
-# Builds all services from source using multi-stage Dockerfiles.
+# Pulls pre-built images from GitHub Container Registry (GHCR).
+# Images are built and pushed by GitHub Actions on every push to main.
 # Lean stack: Kafka, Redis, ES, Ingestor, Processor, API, Frontend
-# No monitoring services (Prometheus/Grafana) — use docker-compose.dev.yml for that
 #
 # Usage:
 #   docker-compose -f deployments/docker-compose.prod.yml up -d
@@ -140,10 +140,7 @@ services:
   # Ingestor - Wikipedia Event Stream Consumer
   # ---------------------------------------------------------------------------
   ingestor:
-    build:
-      context: ..
-      dockerfile: deployments/Dockerfile.ingestor
-    image: wikisurge-ingestor:latest
+    image: ghcr.io/agnikulu/wikisurge-ingestor:latest
     container_name: wikisurge-ingestor
     restart: always
     depends_on:
@@ -169,10 +166,7 @@ services:
   # Processor - Edit Processing Pipeline
   # ---------------------------------------------------------------------------
   processor:
-    build:
-      context: ..
-      dockerfile: deployments/Dockerfile.processor
-    image: wikisurge-processor:latest
+    image: ghcr.io/agnikulu/wikisurge-processor:latest
     container_name: wikisurge-processor
     restart: always
     depends_on:
@@ -204,10 +198,7 @@ services:
   # API - REST/WebSocket Server
   # ---------------------------------------------------------------------------
   api:
-    build:
-      context: ..
-      dockerfile: deployments/Dockerfile.api
-    image: wikisurge-api:latest
+    image: ghcr.io/agnikulu/wikisurge-api:latest
     container_name: wikisurge-api
     restart: always
     depends_on:
@@ -258,10 +249,7 @@ services:
   # Frontend - React Dashboard
   # ---------------------------------------------------------------------------
   frontend:
-    build:
-      context: ..
-      dockerfile: deployments/Dockerfile.frontend
-    image: wikisurge-frontend:latest
+    image: ghcr.io/agnikulu/wikisurge-frontend:latest
     container_name: wikisurge-frontend
     restart: unless-stopped
     depends_on:
