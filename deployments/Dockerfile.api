@@ -21,9 +21,8 @@ COPY cmd/api/ cmd/api/
 COPY internal/ internal/
 
 # Build binary with CGO enabled (required by go-sqlite3)
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
-RUN CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+# Note: only amd64 is supported due to CGO cross-compilation limitations
+RUN CGO_ENABLED=1 go build \
     -ldflags="-w -s" \
     -o /build/api \
     ./cmd/api
