@@ -871,10 +871,10 @@ func TestDeriveSeverity_Spike(t *testing.T) {
 func TestDeriveSeverity_EditWar(t *testing.T) {
 	alert := storage.Alert{
 		Type: storage.AlertTypeEditWar,
-		Data: map[string]interface{}{"num_editors": float64(5)},
+		Data: map[string]interface{}{"editor_count": float64(5)},
 	}
 	assert.Equal(t, "high", storage.DeriveSeverity(alert))
 
-	alert.Data["num_editors"] = float64(7)
+	alert.Data["editor_count"] = float64(7)
 	assert.Equal(t, "critical", storage.DeriveSeverity(alert))
 }

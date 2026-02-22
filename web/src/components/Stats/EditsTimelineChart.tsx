@@ -55,24 +55,47 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
   const config = RANGE_CONFIG[range];
   const maxPoints = Math.floor(config.minutes * 60 / config.bucketSec);
 
-  // Load historical timeline data on mount or when range changes
+  // Load historical timeline data then start live updates
+  // Combined into one effect to avoid race conditions where live-point
+  // effect would clear historical data before it finished loading.
   useEffect(() => {
-    const loadHistoricalData = async () => {
+    if (!statsReady) return;
+
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    // Clear old data when range/config changes
+    dataRef.current = [];
+    setChartData([]);
+
+    const addPoint = () => {
+      const now = Date.now();
+      const currentStats = statsRef.current;
+      const value = currentStats?.edits_per_second ? currentStats.edits_per_second * 60 : 0;
+
+      dataRef.current.push({ timestamp: now, value });
+      const cutoff = now - config.minutes * 60_000;
+      dataRef.current = dataRef.current.filter((p) => p.timestamp >= cutoff).slice(-maxPoints);
+      setChartData([...dataRef.current]);
+    };
+
+    const loadAndStart = async () => {
       try {
         const duration = `${config.minutes * 60}s`; // Convert to seconds
         const historicalPoints = await getTimeline(duration);
-        
+        if (cancelled) return;
+
         // Convert API response to TimeSeriesPoint format
         const points: TimeSeriesPoint[] = historicalPoints.map(p => ({
           timestamp: p.timestamp,
           value: p.value,
         }));
-        
+
         // Filter to current range and aggregate to correct bucket size
         const now = Date.now();
         const cutoff = now - config.minutes * 60_000;
         const filtered = points.filter(p => p.timestamp >= cutoff);
-        
+
         // Aggregate minute-level data into buckets
         const bucketMap = new Map<number, number>();
         for (const point of filtered) {
@@ -80,48 +103,33 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
           const current = bucketMap.get(bucketTime) || 0;
           bucketMap.set(bucketTime, current + point.value);
         }
-        
+
         // Convert back to array and sort
         const aggregated = Array.from(bucketMap.entries())
           .map(([timestamp, value]) => ({ timestamp, value }))
           .sort((a, b) => a.timestamp - b.timestamp);
-        
+
+        if (cancelled) return;
         dataRef.current = aggregated;
         setChartData([...dataRef.current]);
       } catch (error) {
         console.error('Failed to load timeline data:', error);
         // Continue with empty data - will populate with new points
       }
-    };
-    
-    loadHistoricalData();
-  }, [config.minutes, config.bucketSec]);
 
-  // Add new data points at regular intervals (every bucketSec seconds)
-  // This ensures the timeline keeps updating even if edit rate is constant
-  useEffect(() => {
-    if (!statsReady) return;
-    
-    // Clear old data when range/config changes
-    dataRef.current = [];
-    
-    const addPoint = () => {
-      const now = Date.now();
-      const currentStats = statsRef.current;
-      const value = currentStats?.edits_per_second ? currentStats.edits_per_second * 60 : 0;
-      
-      dataRef.current.push({ timestamp: now, value });
-      const cutoff = now - config.minutes * 60_000;
-      dataRef.current = dataRef.current.filter((p) => p.timestamp >= cutoff).slice(-maxPoints);
-      setChartData([...dataRef.current]);
+      if (cancelled) return;
+
+      // Add one live point immediately, then at regular intervals
+      addPoint();
+      interval = setInterval(addPoint, config.bucketSec * 1000);
     };
-    
-    // Add initial point immediately
-    addPoint();
-    
-    // Then add new points at regular intervals based on bucket size
-    const interval = setInterval(addPoint, config.bucketSec * 1000);
-    return () => clearInterval(interval);
+
+    loadAndStart();
+
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
   }, [statsReady, config.minutes, config.bucketSec, maxPoints]);
 
   const loading = !statsReady;

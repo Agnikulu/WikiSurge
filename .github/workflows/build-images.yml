@@ -85,6 +85,7 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-api:latest
+          no-cache: ${{ github.event.inputs.force_all == 'true' }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
@@ -111,6 +112,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-processor:latest
+          no-cache: ${{ github.event.inputs.force_all == 'true' }}
           cache-from: type=gha,scope=processor
           cache-to: type=gha,mode=max,scope=processor
 
@@ -137,6 +139,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-ingestor:latest
+          no-cache: ${{ github.event.inputs.force_all == 'true' }}
           cache-from: type=gha,scope=ingestor
           cache-to: type=gha,mode=max,scope=ingestor
 
@@ -163,6 +166,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:latest
+          no-cache: ${{ github.event.inputs.force_all == 'true' }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 

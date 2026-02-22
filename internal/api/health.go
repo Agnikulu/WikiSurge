@@ -240,11 +240,13 @@ func (s *APIServer) handleLiveness(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleReadiness — GET /health/ready — full dependency check.
+// Redis is required; ES failure degrades readiness but doesn't fail the probe,
+// preventing the container from being killed when ES is temporarily overloaded.
 func (s *APIServer) handleReadiness(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 
-	// Must have Redis.
+	// Must have Redis — hard requirement.
 	if err := s.redis.Ping(ctx).Err(); err != nil {
 		respondJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
 			"status": "not_ready",
@@ -253,19 +255,18 @@ func (s *APIServer) handleReadiness(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If ES is enabled, it must be reachable.
+	// ES failure is a soft dependency — report degraded but stay ready.
+	// This prevents Coolify/Docker from cycling the container when ES is
+	// temporarily overloaded but the API can still serve cached data.
+	status := "ready"
 	if s.config.Elasticsearch.Enabled && s.es != nil {
 		if _, err := s.getESClusterHealth(ctx); err != nil {
-			respondJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
-				"status": "not_ready",
-				"reason": "elasticsearch unavailable",
-			})
-			return
+			status = "degraded"
 		}
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{
-		"status": "ready",
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status": status,
 	})
 }
 

@@ -98,17 +98,15 @@ func (es *ElasticsearchClient) SetupILM() error {
 	ctx := context.Background()
 
 	// Create ILM policy
+	// NOTE: No rollover action — indices use date-based naming (wikipedia-edits-YYYY-MM-DD)
+	// and are created directly by the bulk indexer, not via rollover alias.
+	// Only the delete phase is needed for automatic retention cleanup.
 	policyName := "wikipedia-edits-policy"
 	policy := map[string]interface{}{
 		"policy": map[string]interface{}{
 			"phases": map[string]interface{}{
 				"hot": map[string]interface{}{
-					"actions": map[string]interface{}{
-						"rollover": map[string]interface{}{
-							"max_size": "50gb",
-							"max_age":  "1d",
-						},
-					},
+					"actions": map[string]interface{}{},
 				},
 				"delete": map[string]interface{}{
 					"min_age": fmt.Sprintf("%dd", es.config.RetentionDays),
@@ -146,7 +144,6 @@ func (es *ElasticsearchClient) SetupILM() error {
 				"refresh_interval":   "5s",
 				"max_result_window":  10000,
 				"index.lifecycle.name": policyName,
-				"index.lifecycle.rollover_alias": "wikipedia-edits",
 			},
 			"mappings": map[string]interface{}{
 				"properties": map[string]interface{}{

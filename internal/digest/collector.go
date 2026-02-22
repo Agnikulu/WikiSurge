@@ -186,7 +186,7 @@ func (c *Collector) collectHighlights(ctx context.Context, since time.Time) ([]G
 		} else {
 			seen[title] = &GlobalHighlight{
 				Title:     title,
-				EditCount: intFromData(a.Data, "change_volume"),
+				EditCount: intFromData(a.Data, "edit_count"),
 				EventType: "edit_war",
 				Summary:   "Edit war detected",
 				ServerURL: stringFromData(a.Data, "server_url"),
@@ -280,14 +280,21 @@ func (c *Collector) collectFunStats(ctx context.Context, since time.Time) (FunSt
 		stats.TopLanguages = stats.TopLanguages[:5]
 	}
 
-	// Count edit wars from alert streams
-	alertStats, err := c.alerts.GetAlertStats(ctx, []string{"editwars"})
+	// Count edit wars from alert stream within the digest period
+	editWars, err := c.alerts.GetAlertsSince(ctx, "editwars", since, "", 1000)
 	if err != nil {
-		c.logger.Warn().Err(err).Msg("could not get alert stats")
+		c.logger.Warn().Err(err).Msg("could not get edit war alerts for stats")
 	} else {
-		if s, ok := alertStats["editwars"]; ok {
-			stats.EditWars = int(s.Length)
+		// Deduplicate by title to count unique edit wars
+		ewSeen := make(map[string]bool)
+		for _, a := range editWars {
+			title := stringFromData(a.Data, "title")
+			if title == "" {
+				title = stringFromData(a.Data, "page_title")
+			}
+			ewSeen[title] = true
 		}
+		stats.EditWars = len(ewSeen)
 	}
 
 	return stats, nil

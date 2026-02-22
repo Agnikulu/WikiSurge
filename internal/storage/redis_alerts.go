@@ -430,7 +430,7 @@ func (r *RedisAlerts) GetEditWarAlertsSince(ctx context.Context, since time.Time
 
 // GetActiveEditWars scans Redis for marker keys that flag active edit wars,
 // then enriches each entry with editor / change data when still available.
-// Marker keys ("editwar:<page>") have a 1-hour TTL set by the processor,
+// Marker keys ("editwar:<page>") have a 12-hour TTL set by the processor,
 // while the editor hashes ("editwar:editors:<page>") have a shorter 10-min TTL
 // and may already have expired.
 func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[string]interface{}, error) {
@@ -495,7 +495,8 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				markerKey := key
 				ttl, ttlErr := r.client.TTL(ctx, markerKey).Result()
 				if ttlErr == nil && ttl > 0 {
-					elapsed := 3600*time.Second - ttl
+					// Marker TTL is 12 hours; elapsed = maxTTL - remaining
+					elapsed := 12*time.Hour - ttl
 					if elapsed > 0 {
 						startTime = now.Add(-elapsed)
 					}
@@ -586,6 +587,11 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 
 // DeriveSeverity extracts or computes severity from an Alert.
 func DeriveSeverity(alert Alert) string {
+	// If the alert already has an explicit severity from the processor, use it.
+	if s, ok := alert.Data["severity"].(string); ok && s != "" {
+		return s
+	}
+
 	switch alert.Type {
 	case AlertTypeSpike:
 		ratio, _ := alert.Data["spike_ratio"].(float64)
@@ -600,7 +606,7 @@ func DeriveSeverity(alert Alert) string {
 			return "low"
 		}
 	case AlertTypeEditWar:
-		numEditors, _ := alert.Data["num_editors"].(float64)
+		numEditors, _ := alert.Data["editor_count"].(float64)
 		switch {
 		case numEditors >= 6:
 			return "critical"
@@ -627,6 +633,7 @@ func DeriveSeverity(alert Alert) string {
 }
 
 // countRevertPatterns counts sign-reversal patterns in a list of byte change strings.
+// Uses magnitude-tolerance matching (30%) consistent with the processor's countReverts.
 func countRevertPatterns(changes []string) int {
 	if len(changes) < 2 {
 		return 0
@@ -636,8 +643,34 @@ func countRevertPatterns(changes []string) int {
 		var prev, curr int
 		fmt.Sscanf(changes[i-1], "%d", &prev)
 		fmt.Sscanf(changes[i], "%d", &curr)
-		// A revert is when changes go in opposite directions
-		if (prev > 0 && curr < 0) || (prev < 0 && curr > 0) {
+		// Two consecutive zero-byte edits often indicate reverts
+		if prev == 0 && curr == 0 {
+			reverts++
+			continue
+		}
+		// Must be opposite signs
+		if !((prev > 0 && curr < 0) || (prev < 0 && curr > 0)) {
+			continue
+		}
+		// Small edits (< 10 bytes) are always considered reverts
+		absPrev := prev
+		if absPrev < 0 {
+			absPrev = -absPrev
+		}
+		absCurr := curr
+		if absCurr < 0 {
+			absCurr = -absCurr
+		}
+		if absPrev < 10 || absCurr < 10 {
+			reverts++
+			continue
+		}
+		// Magnitude-tolerance check: ratio >= 0.6 means within 30% of each other
+		smaller, larger := float64(absPrev), float64(absCurr)
+		if smaller > larger {
+			smaller, larger = larger, smaller
+		}
+		if larger > 0 && smaller/larger >= 0.6 {
 			reverts++
 		}
 	}
@@ -645,13 +678,14 @@ func countRevertPatterns(changes []string) int {
 }
 
 // classifyEditWarSeverity returns a severity level based on edit war metrics.
+// Matches the processor's calculateEditWarSeverity thresholds.
 func classifyEditWarSeverity(editorCount, editCount, revertCount int) string {
 	switch {
-	case editorCount >= 5 || revertCount >= 8:
+	case editorCount > 5 || revertCount > 10:
 		return "critical"
-	case editorCount >= 3 || revertCount >= 4:
+	case editorCount > 3 || revertCount > 5:
 		return "high"
-	case editorCount >= 2 || revertCount >= 2:
+	case editorCount > 2 || revertCount > 3:
 		return "medium"
 	default:
 		return "low"
