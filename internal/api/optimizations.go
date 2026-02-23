@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 )
 
 // =============================================================================
@@ -83,6 +84,8 @@ func respondJSONPooled(w interface{ Write([]byte) (int, error) }, status int, he
 // languageCache caches extracted language codes from page titles.
 // Since page titles don't change for a given entry, this is safe.
 var languageCache sync.Map
+var languageCacheLen int64 // approximate count, updated atomically
+const languageCacheMaxSize = 100_000
 
 // cachedExtractLanguage extracts and caches the language from a page title.
 func cachedExtractLanguage(pageTitle string) string {
@@ -90,6 +93,11 @@ func cachedExtractLanguage(pageTitle string) string {
 		return lang.(string)
 	}
 	lang := extractLanguage(pageTitle)
+	// Evict entire cache if it grows too large (language values are cheap to recompute)
+	if atomic.AddInt64(&languageCacheLen, 1) > languageCacheMaxSize {
+		languageCache = sync.Map{}
+		atomic.StoreInt64(&languageCacheLen, 0)
+	}
 	languageCache.Store(pageTitle, lang)
 	return lang
 }

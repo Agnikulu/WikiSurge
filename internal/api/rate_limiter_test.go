@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -310,7 +311,7 @@ func TestRequestValidation_MethodNotAllowed(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	for _, method := range []string{http.MethodDelete, http.MethodPatch} {
+	for _, method := range []string{http.MethodPatch} {
 		req := httptest.NewRequest(method, "/api/stats", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -323,7 +324,7 @@ func TestRequestValidation_AllowedMethods(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodOptions, http.MethodHead} {
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodHead} {
 		req := httptest.NewRequest(method, "/api/stats", nil)
 		if method == http.MethodPost || method == http.MethodPut {
 			req.Header.Set("Content-Type", "application/json")
@@ -486,6 +487,85 @@ func TestFullMiddlewareStack_SecurityHeaders(t *testing.T) {
 // ---------------------------------------------------------------------------
 // isValidIP
 // ---------------------------------------------------------------------------
+
+func TestMiddlewareOrdering_LoggerSeesRequestID(t *testing.T) {
+	// Simulate the production middleware chain ordering:
+	// RequestIDMiddleware (outermost) -> LoggerMiddleware -> handler
+	// The logger should be able to read the request_id that RequestIDMiddleware injected.
+	var capturedID string
+	logger := zerolog.Nop()
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Within the handler, context must contain request ID.
+		capturedID = GetRequestID(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Wrap in the same order as server.go Handler():
+	h := LoggerMiddleware(logger, inner)
+	h = RequestIDMiddleware(logger, h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/trending", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	assert.NotEmpty(t, capturedID, "handler should see request_id set by RequestIDMiddleware")
+	assert.NotEmpty(t, rec.Header().Get("X-Request-ID"))
+	assert.Equal(t, capturedID, rec.Header().Get("X-Request-ID"))
+}
+
+func TestLoggerMiddleware_ClientErrorLogsWarn(t *testing.T) {
+	// 4xx responses should be logged at WARN, not ERROR.
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf)
+
+	handler := LoggerMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized) // 401
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, `"level":"warn"`, "401 should be logged at warn level")
+	assert.NotContains(t, logOutput, `"level":"error"`, "401 should NOT be logged at error level")
+}
+
+func TestLoggerMiddleware_ServerErrorLogsError(t *testing.T) {
+	// 5xx responses should still be logged at ERROR.
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf)
+
+	handler := LoggerMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError) // 500
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/trending", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, `"level":"error"`, "500 should be logged at error level")
+}
+
+func TestLoggerMiddleware_NotFoundLogsWarn(t *testing.T) {
+	// 404 is a client error — should be warn, not error.
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf)
+
+	handler := LoggerMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound) // 404
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/nonexistent", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, `"level":"warn"`)
+	assert.NotContains(t, logOutput, `"level":"error"`)
+}
 
 func TestIsValidIP(t *testing.T) {
 	assert.True(t, isValidIP("192.168.1.1"))

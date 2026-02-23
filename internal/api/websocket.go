@@ -51,9 +51,26 @@ const (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	// CheckOrigin allows connections from any origin (configure for prod).
+	// CheckOrigin validates the Origin header to prevent cross-origin WebSocket hijacking.
+	// Allows: wikisurge.net (prod), localhost dev servers, and same-origin (empty Origin).
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true // Same-origin or non-browser clients
+		}
+		allowed := []string{
+			"https://wikisurge.net",
+			"http://wikisurge.net",
+			"http://localhost:5173",  // Vite dev server
+			"http://localhost:3000",  // Frontend container
+			"http://localhost:8081",  // API dev
+		}
+		for _, a := range allowed {
+			if origin == a {
+				return true
+			}
+		}
+		return false
 	},
 }
 
@@ -94,17 +111,8 @@ func (f *EditFilter) Matches(edit *models.WikipediaEdit) bool {
 	}
 
 	// Page title pattern filter
-	if f.PagePattern != "" {
-		if f.compiledPattern == nil {
-			// Compile lazily; swallow bad patterns (match everything).
-			p, err := regexp.Compile(f.PagePattern)
-			if err == nil {
-				f.compiledPattern = p
-			}
-		}
-		if f.compiledPattern != nil && !f.compiledPattern.MatchString(edit.Title) {
-			return false
-		}
+	if f.compiledPattern != nil && !f.compiledPattern.MatchString(edit.Title) {
+		return false
 	}
 
 	// Minimum byte change filter
@@ -358,13 +366,20 @@ func (h *WebSocketHub) Run() {
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
+			var slowClients []*Client
 			for client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
-					// Send buffer full — disconnect slow client.
-					h.mu.RUnlock()
-					h.mu.Lock()
+					slowClients = append(slowClients, client)
+				}
+			}
+			h.mu.RUnlock()
+
+			// Disconnect slow clients outside the read-lock iteration
+			if len(slowClients) > 0 {
+				h.mu.Lock()
+				for _, client := range slowClients {
 					if _, ok := h.clients[client]; ok {
 						delete(h.clients, client)
 						close(client.send)
@@ -374,11 +389,9 @@ func (h *WebSocketHub) Run() {
 							Str("client", client.id).
 							Msg("Slow client disconnected (send buffer full)")
 					}
-					h.mu.Unlock()
-					h.mu.RLock()
 				}
+				h.mu.Unlock()
 			}
-			h.mu.RUnlock()
 
 		case <-staleTicker.C:
 			h.cleanupStaleConnections()
@@ -542,6 +555,10 @@ func parseEditFilter(r *http.Request) *EditFilter {
 
 	if pattern := q.Get("page_pattern"); pattern != "" {
 		f.PagePattern = pattern
+		// Compile eagerly to avoid data race on lazy init from concurrent Matches() calls
+		if p, err := regexp.Compile(pattern); err == nil {
+			f.compiledPattern = p
+		}
 	}
 
 	if raw := q.Get("min_byte_change"); raw != "" {

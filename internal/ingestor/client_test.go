@@ -117,9 +117,10 @@ func TestWikiStreamClient_shouldProcess_BotFilter(t *testing.T) {
 			client := NewWikiStreamClient(cfg, logger, mockProd)
 			
 			edit := &models.WikipediaEdit{
-				Bot:  tt.editBot,
-				Type: "edit", // Valid type
-				Wiki: "enwiki",
+				Bot:       tt.editBot,
+				Type:      "edit", // Valid type
+				Wiki:      "enwiki",
+				ServerURL: "https://en.wikipedia.org",
 			}
 			
 			result := client.shouldProcess(edit)
@@ -177,9 +178,10 @@ func TestWikiStreamClient_shouldProcess_LanguageFilter(t *testing.T) {
 			client := NewWikiStreamClient(cfg, logger, mockProd)
 			
 			edit := &models.WikipediaEdit{
-				Wiki: tt.editWiki,
-				Type: "edit", // Valid type
-				Bot:  false,  // Not a bot
+				Wiki:      tt.editWiki,
+				Type:      "edit", // Valid type
+				Bot:       false,  // Not a bot
+				ServerURL: "https://en.wikipedia.org",
 			}
 			
 			result := client.shouldProcess(edit)
@@ -233,9 +235,10 @@ func TestWikiStreamClient_shouldProcess_TypeFilter(t *testing.T) {
 			client := NewWikiStreamClient(cfg, logger, mockProd)
 			
 			edit := &models.WikipediaEdit{
-				Type: tt.editType,
-				Bot:  false,
-				Wiki: "enwiki",
+				Type:      tt.editType,
+				Bot:       false,
+				Wiki:      "enwiki",
+				ServerURL: "https://en.wikipedia.org",
 			}
 			
 			result := client.shouldProcess(edit)
@@ -268,45 +271,50 @@ func TestWikiStreamClient_shouldProcess_Combined(t *testing.T) {
 		{
 			name: "passes all filters",
 			edit: &models.WikipediaEdit{
-				Type: "edit",
-				Bot:  false,
-				Wiki: "enwiki",
+				Type:      "edit",
+				Bot:       false,
+				Wiki:      "enwiki",
+				ServerURL: "https://en.wikipedia.org",
 			},
 			expected: true,
 		},
 		{
 			name: "fails bot filter",
 			edit: &models.WikipediaEdit{
-				Type: "edit",
-				Bot:  true,
-				Wiki: "enwiki",
+				Type:      "edit",
+				Bot:       true,
+				Wiki:      "enwiki",
+				ServerURL: "https://en.wikipedia.org",
 			},
 			expected: false,
 		},
 		{
 			name: "fails language filter",
 			edit: &models.WikipediaEdit{
-				Type: "edit",
-				Bot:  false,
-				Wiki: "frwiki",
+				Type:      "edit",
+				Bot:       false,
+				Wiki:      "frwiki",
+				ServerURL: "https://fr.wikipedia.org",
 			},
 			expected: false,
 		},
 		{
 			name: "fails type filter",
 			edit: &models.WikipediaEdit{
-				Type: "log",
-				Bot:  false,
-				Wiki: "enwiki",
+				Type:      "log",
+				Bot:       false,
+				Wiki:      "enwiki",
+				ServerURL: "https://en.wikipedia.org",
 			},
 			expected: false,
 		},
 		{
 			name: "fails multiple filters",
 			edit: &models.WikipediaEdit{
-				Type: "log",
-				Bot:  true,
-				Wiki: "frwiki",
+				Type:      "log",
+				Bot:       true,
+				Wiki:      "frwiki",
+				ServerURL: "https://fr.wikipedia.org",
 			},
 			expected: false,
 		},
@@ -386,6 +394,7 @@ func TestWikiStreamClient_shouldProcess_NamespaceFilter(t *testing.T) {
 				Type:      "edit",
 				Bot:       false,
 				Wiki:      "enwiki",
+				ServerURL: "https://en.wikipedia.org",
 			}
 			
 			result := client.shouldProcess(edit)
@@ -485,6 +494,7 @@ func TestWikiStreamClient_shouldProcess_TitlePrefixFilter(t *testing.T) {
 				Type:      "edit",
 				Bot:       false,
 				Wiki:      "enwiki",
+				ServerURL: "https://en.wikipedia.org",
 			}
 			
 			result := client.shouldProcess(edit)

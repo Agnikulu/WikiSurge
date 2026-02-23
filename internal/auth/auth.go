@@ -21,8 +21,9 @@ var (
 
 // Claims are the JWT claims embedded in each token.
 type Claims struct {
-	UserID string `json:"uid"`
-	Email  string `json:"email"`
+	UserID  string `json:"uid"`
+	Email   string `json:"email"`
+	IsAdmin bool   `json:"adm,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -54,13 +55,14 @@ func NewJWTService(secret string, expiry time.Duration) *JWTService {
 }
 
 // GenerateToken creates a signed JWT for the given user.
-func (s *JWTService) GenerateToken(userID, email string) (*TokenPair, error) {
+func (s *JWTService) GenerateToken(userID, email string, isAdmin bool) (*TokenPair, error) {
 	now := time.Now()
 	expiresAt := now.Add(s.expiry)
 
 	claims := Claims{
-		UserID: userID,
-		Email:  email,
+		UserID:  userID,
+		Email:   email,
+		IsAdmin: isAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
 			Subject:   userID,

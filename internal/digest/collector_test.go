@@ -88,10 +88,10 @@ func seedEditWarAlert(t *testing.T, rc *redis.Client, title string, changeVolume
 		Type:      "edit_war",
 		Timestamp: time.Now().UTC(),
 		Data: map[string]interface{}{
-			"title":         title,
-			"page_title":    title,
-			"change_volume": changeVolume,
-			"server_url":    "https://en.wikipedia.org",
+			"title":      title,
+			"page_title": title,
+			"edit_count": changeVolume,
+			"server_url": "https://en.wikipedia.org",
 		},
 	}
 	alertJSON, _ := json.Marshal(alert)
@@ -117,6 +117,19 @@ func seedStats(t *testing.T, rc *redis.Client) {
 	rc.HSet(ctx, langKey, "es", 8000)
 	rc.HSet(ctx, langKey, "ja", 6000)
 	rc.HSet(ctx, langKey, "__total__", 64000)
+}
+
+// seedPageEdits populates per-page daily counters for the given page across days.
+func seedPageEdits(t *testing.T, rc *redis.Client, title string, editsPerDay []int) {
+	t.Helper()
+	ctx := context.Background()
+
+	for i, edits := range editsPerDay {
+		d := time.Now().UTC().Add(-time.Duration(i) * 24 * time.Hour)
+		dateStr := d.Format("2006-01-02")
+		key := "stats:page:" + title + ":" + dateStr
+		rc.HSet(ctx, key, "edits", edits)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -389,5 +402,198 @@ func TestWeeklyPeriod(t *testing.T) {
 	// Allow 1 second tolerance
 	if actualDuration < expectedDuration-time.Second || actualDuration > expectedDuration+time.Second {
 		t.Errorf("weekly period duration = %v, want ~%v", actualDuration, expectedDuration)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Watchlist per-page daily counter tests
+// ---------------------------------------------------------------------------
+
+func TestWatchlist_PageCountersActive(t *testing.T) {
+	collector, rc, _ := setupTestCollector(t)
+	ctx := context.Background()
+
+	// Seed page edits: 25 edits today → should be "active" (> 10)
+	seedPageEdits(t, rc, "Bitcoin", []int{25})
+
+	global, _ := collector.CollectGlobal(ctx, "daily")
+
+	user := &models.User{
+		ID:            "user-1",
+		Watchlist:     []string{"Bitcoin"},
+		DigestContent: models.DigestContentAll,
+	}
+
+	personalized := collector.PersonalizeForUser(ctx, global, user)
+	if len(personalized.WatchlistEvents) != 1 {
+		t.Fatalf("expected 1 watchlist event, got %d", len(personalized.WatchlistEvents))
+	}
+
+	ev := personalized.WatchlistEvents[0]
+	if ev.Title != "Bitcoin" {
+		t.Errorf("title = %q, want Bitcoin", ev.Title)
+	}
+	if ev.EditCount != 25 {
+		t.Errorf("edit_count = %d, want 25", ev.EditCount)
+	}
+	if !ev.IsNotable {
+		t.Error("should be notable (25 edits > 10)")
+	}
+	if ev.EventType != "active" {
+		t.Errorf("event_type = %q, want active", ev.EventType)
+	}
+}
+
+func TestWatchlist_PageCountersQuiet(t *testing.T) {
+	collector, rc, _ := setupTestCollector(t)
+	ctx := context.Background()
+
+	// Seed 3 edits today — should be "quiet" (< 10)
+	seedPageEdits(t, rc, "Knitting", []int{3})
+
+	global, _ := collector.CollectGlobal(ctx, "daily")
+
+	user := &models.User{
+		ID:            "user-1",
+		Watchlist:     []string{"Knitting"},
+		DigestContent: models.DigestContentAll,
+	}
+
+	personalized := collector.PersonalizeForUser(ctx, global, user)
+	if len(personalized.WatchlistEvents) != 1 {
+		t.Fatalf("expected 1 watchlist event, got %d", len(personalized.WatchlistEvents))
+	}
+
+	ev := personalized.WatchlistEvents[0]
+	if ev.IsNotable {
+		t.Error("should NOT be notable (3 edits)")
+	}
+	if ev.EventType != "quiet" {
+		t.Errorf("event_type = %q, want quiet", ev.EventType)
+	}
+	if ev.EditCount != 3 {
+		t.Errorf("edit_count = %d, want 3", ev.EditCount)
+	}
+}
+
+func TestWatchlist_PageCountersNoActivity(t *testing.T) {
+	collector, _, _ := setupTestCollector(t)
+	ctx := context.Background()
+
+	// No data seeded for "Obscure_Article"
+	global, _ := collector.CollectGlobal(ctx, "daily")
+
+	user := &models.User{
+		ID:            "user-1",
+		Watchlist:     []string{"Obscure_Article"},
+		DigestContent: models.DigestContentAll,
+	}
+
+	personalized := collector.PersonalizeForUser(ctx, global, user)
+	if len(personalized.WatchlistEvents) != 1 {
+		t.Fatalf("expected 1 watchlist event, got %d", len(personalized.WatchlistEvents))
+	}
+
+	ev := personalized.WatchlistEvents[0]
+	if ev.EditCount != 0 {
+		t.Errorf("edit_count = %d, want 0", ev.EditCount)
+	}
+	if ev.Summary != "No recent activity" {
+		t.Errorf("summary = %q, want 'No recent activity'", ev.Summary)
+	}
+}
+
+func TestWatchlist_WeeklyAggregatesMultipleDays(t *testing.T) {
+	collector, rc, _ := setupTestCollector(t)
+	ctx := context.Background()
+
+	// Seed 7 days of edits: [10, 20, 15, 5, 30, 10, 5] from today backward
+	seedPageEdits(t, rc, "Climate_change", []int{10, 20, 15, 5, 30, 10, 5})
+
+	global, _ := collector.CollectGlobal(ctx, "weekly")
+
+	user := &models.User{
+		ID:            "user-1",
+		Watchlist:     []string{"Climate_change"},
+		DigestContent: models.DigestContentAll,
+	}
+
+	personalized := collector.PersonalizeForUser(ctx, global, user)
+	if len(personalized.WatchlistEvents) != 1 {
+		t.Fatalf("expected 1 watchlist event, got %d", len(personalized.WatchlistEvents))
+	}
+
+	ev := personalized.WatchlistEvents[0]
+	// Total = 10+20+15+5+30+10+5 = 95
+	if ev.EditCount != 95 {
+		t.Errorf("edit_count = %d, want 95 (sum of 7 days)", ev.EditCount)
+	}
+	if !ev.IsNotable {
+		t.Error("should be notable (95 edits > 10)")
+	}
+}
+
+func TestWatchlist_GlobalHighlightTakesPrecedence(t *testing.T) {
+	collector, rc, _ := setupTestCollector(t)
+	ctx := context.Background()
+
+	// Bitcoin appears as edit war AND has page counters
+	seedEditWarAlert(t, rc, "Bitcoin", 200)
+	seedPageEdits(t, rc, "Bitcoin", []int{50})
+
+	global, _ := collector.CollectGlobal(ctx, "daily")
+
+	user := &models.User{
+		ID:            "user-1",
+		Watchlist:     []string{"Bitcoin"},
+		DigestContent: models.DigestContentAll,
+	}
+
+	personalized := collector.PersonalizeForUser(ctx, global, user)
+	if len(personalized.WatchlistEvents) != 1 {
+		t.Fatalf("expected 1 watchlist event, got %d", len(personalized.WatchlistEvents))
+	}
+
+	ev := personalized.WatchlistEvents[0]
+	// Should use the global highlight data, NOT the page counter
+	if ev.EventType != "edit_war" {
+		t.Errorf("event_type = %q, want edit_war (from global highlight)", ev.EventType)
+	}
+	if ev.EditCount != 200 {
+		t.Errorf("edit_count = %d, want 200 (from global highlight, not page counter)", ev.EditCount)
+	}
+}
+
+func TestWatchlist_MixedPagesSort(t *testing.T) {
+	collector, rc, _ := setupTestCollector(t)
+	ctx := context.Background()
+
+	// One page is edit war (notable from global), one is active, one is quiet
+	seedEditWarAlert(t, rc, "Bitcoin", 200)
+	seedPageEdits(t, rc, "Ethereum", []int{50})
+	seedPageEdits(t, rc, "Knitting", []int{2})
+
+	global, _ := collector.CollectGlobal(ctx, "daily")
+
+	user := &models.User{
+		ID:            "user-1",
+		Watchlist:     []string{"Knitting", "Bitcoin", "Ethereum"},
+		DigestContent: models.DigestContentAll,
+	}
+
+	personalized := collector.PersonalizeForUser(ctx, global, user)
+	if len(personalized.WatchlistEvents) != 3 {
+		t.Fatalf("expected 3 watchlist events, got %d", len(personalized.WatchlistEvents))
+	}
+
+	// Notable pages first (Bitcoin edit_war=200, Ethereum active=50), then quiet (Knitting=2)
+	if personalized.WatchlistEvents[0].Title != "Bitcoin" {
+		t.Errorf("first event = %q, want Bitcoin (notable, highest)", personalized.WatchlistEvents[0].Title)
+	}
+	if personalized.WatchlistEvents[1].Title != "Ethereum" {
+		t.Errorf("second event = %q, want Ethereum (notable, active)", personalized.WatchlistEvents[1].Title)
+	}
+	if personalized.WatchlistEvents[2].Title != "Knitting" {
+		t.Errorf("third event = %q, want Knitting (quiet)", personalized.WatchlistEvents[2].Title)
 	}
 }

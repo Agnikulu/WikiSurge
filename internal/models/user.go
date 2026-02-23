@@ -34,6 +34,7 @@ type User struct {
 	SpikeThreshold float64         `json:"spike_threshold"` // Nx multiplier — only email if activity exceeds this
 	UnsubToken     string          `json:"-"`                // one-click unsubscribe token
 	Verified       bool            `json:"verified"`
+	IsAdmin        bool            `json:"is_admin"`
 	CreatedAt      time.Time       `json:"created_at"`
 	LastDigestAt   time.Time       `json:"last_digest_at"`
 }

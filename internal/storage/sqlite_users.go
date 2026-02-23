@@ -50,6 +50,7 @@ func (s *UserStore) migrate() error {
 		spike_threshold REAL NOT NULL DEFAULT 2.0,
 		unsub_token    TEXT UNIQUE NOT NULL,
 		verified       INTEGER NOT NULL DEFAULT 0,
+		is_admin       INTEGER NOT NULL DEFAULT 0,
 		created_at     TEXT NOT NULL,
 		last_digest_at TEXT NOT NULL
 	);
@@ -60,7 +61,14 @@ func (s *UserStore) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_users_verified ON users(verified);
 	`
 	_, err := s.db.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Migration: add is_admin column if it doesn't exist (for existing databases)
+	_, _ = s.db.Exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`)
+
+	return nil
 }
 
 // Close closes the database connection.
@@ -80,6 +88,7 @@ func (s *UserStore) CreateUser(email, passwordHash string) (*models.User, error)
 		SpikeThreshold: 2.0,
 		UnsubToken:     uuid.New().String(),
 		Verified:       false,
+		IsAdmin:        false,
 		CreatedAt:      time.Now().UTC(),
 		LastDigestAt:   time.Time{}, // zero value = never sent
 	}
@@ -88,11 +97,12 @@ func (s *UserStore) CreateUser(email, passwordHash string) (*models.User, error)
 
 	_, err := s.db.Exec(`
 		INSERT INTO users (id, email, password_hash, watchlist, digest_freq, digest_content,
-		                    spike_threshold, unsub_token, verified, created_at, last_digest_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                    spike_threshold, unsub_token, verified, is_admin, created_at, last_digest_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		user.ID, user.Email, user.PasswordHash, string(watchlistJSON),
 		string(user.DigestFreq), string(user.DigestContent),
 		user.SpikeThreshold, user.UnsubToken, boolToInt(user.Verified),
+		boolToInt(user.IsAdmin),
 		user.CreatedAt.Format(time.RFC3339), user.LastDigestAt.Format(time.RFC3339),
 	)
 	if err != nil {
@@ -213,13 +223,13 @@ func (s *UserStore) scanUser(row *sql.Row) (*models.User, error) {
 	u := &models.User{}
 	var watchlistJSON string
 	var digestFreq, digestContent string
-	var verified int
+	var verified, isAdmin int
 	var createdAt, lastDigestAt string
 
 	err := row.Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &watchlistJSON,
 		&digestFreq, &digestContent, &u.SpikeThreshold,
-		&u.UnsubToken, &verified, &createdAt, &lastDigestAt,
+		&u.UnsubToken, &verified, &isAdmin, &createdAt, &lastDigestAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -232,6 +242,7 @@ func (s *UserStore) scanUser(row *sql.Row) (*models.User, error) {
 	u.DigestFreq = models.DigestFrequency(digestFreq)
 	u.DigestContent = models.DigestContent(digestContent)
 	u.Verified = verified == 1
+	u.IsAdmin = isAdmin == 1
 	u.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	u.LastDigestAt, _ = time.Parse(time.RFC3339, lastDigestAt)
 
@@ -242,13 +253,13 @@ func (s *UserStore) scanUserFromRows(rows *sql.Rows) (*models.User, error) {
 	u := &models.User{}
 	var watchlistJSON string
 	var digestFreq, digestContent string
-	var verified int
+	var verified, isAdmin int
 	var createdAt, lastDigestAt string
 
 	err := rows.Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &watchlistJSON,
 		&digestFreq, &digestContent, &u.SpikeThreshold,
-		&u.UnsubToken, &verified, &createdAt, &lastDigestAt,
+		&u.UnsubToken, &verified, &isAdmin, &createdAt, &lastDigestAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan user row: %w", err)
@@ -258,10 +269,39 @@ func (s *UserStore) scanUserFromRows(rows *sql.Rows) (*models.User, error) {
 	u.DigestFreq = models.DigestFrequency(digestFreq)
 	u.DigestContent = models.DigestContent(digestContent)
 	u.Verified = verified == 1
+	u.IsAdmin = isAdmin == 1
 	u.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	u.LastDigestAt, _ = time.Parse(time.RFC3339, lastDigestAt)
 
 	return u, nil
+}
+
+// ListAllUsers returns every user in the database (for admin use).
+func (s *UserStore) ListAllUsers() ([]*models.User, error) {
+	rows, err := s.db.Query(`SELECT * FROM users ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		u, err := s.scanUserFromRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+// SetAdmin promotes or demotes a user's admin status.
+func (s *UserStore) SetAdmin(userID string, isAdmin bool) error {
+	result, err := s.db.Exec(`UPDATE users SET is_admin = ? WHERE id = ?`, boolToInt(isAdmin), userID)
+	if err != nil {
+		return fmt.Errorf("set admin: %w", err)
+	}
+	return checkRowsAffected(result, "user not found")
 }
 
 func boolToInt(b bool) int {

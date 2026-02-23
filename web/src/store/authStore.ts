@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User, DigestPreferences } from '../types/user';
+import type { User, DigestPreferences, AdminUserListResponse } from '../types/user';
 import api from '../utils/api';
 
 interface AuthState {
@@ -8,6 +8,8 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   error: string | null;
+  adminUsers: User[] | null;
+  adminUsersLoading: boolean;
 
   // Actions
   login: (email: string, password: string) => Promise<void>;
@@ -16,6 +18,8 @@ interface AuthState {
   fetchProfile: () => Promise<void>;
   updatePreferences: (prefs: DigestPreferences) => Promise<void>;
   updateWatchlist: (watchlist: string[]) => Promise<void>;
+  fetchAdminUsers: () => Promise<void>;
+  deleteAdminUser: (userId: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -26,6 +30,8 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isLoading: false,
       error: null,
+      adminUsers: null,
+      adminUsersLoading: false,
 
       login: async (email, password) => {
         set({ isLoading: true, error: null });
@@ -54,7 +60,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        set({ token: null, user: null, error: null });
+        set({ token: null, user: null, error: null, adminUsers: null });
       },
 
       fetchProfile: async () => {
@@ -113,6 +119,39 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clearError: () => set({ error: null }),
+
+      fetchAdminUsers: async () => {
+        const { token, user } = get();
+        if (!token || !user?.is_admin) return;
+        set({ adminUsersLoading: true });
+        try {
+          const res = await api.get<AdminUserListResponse>('/api/admin/users', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          set({ adminUsers: res.data.users, adminUsersLoading: false });
+        } catch (err: unknown) {
+          const message = extractError(err);
+          set({ adminUsersLoading: false, error: message });
+        }
+      },
+
+      deleteAdminUser: async (userId: string) => {
+        const { token, user, adminUsers } = get();
+        if (!token || !user?.is_admin) return;
+        try {
+          await api.delete(`/api/admin/users/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          // Remove from local state immediately
+          if (adminUsers) {
+            set({ adminUsers: adminUsers.filter((u) => u.id !== userId) });
+          }
+        } catch (err: unknown) {
+          const message = extractError(err);
+          set({ error: message });
+          throw new Error(message);
+        }
+      },
     }),
     {
       name: 'wikisurge-auth',

@@ -60,6 +60,15 @@ func NewIndexingStrategy(cfg *config.SelectiveCriteria, redisClient *redis.Clien
 	// Initialize watchlist from Redis if it exists
 	strategy.loadWatchlist(context.Background())
 
+	// Periodic eviction of stale context cache entries to prevent unbounded growth
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			strategy.evictStaleContextCache()
+		}
+	}()
+
 	return strategy
 }
 
@@ -377,4 +386,17 @@ type IndexingStats struct {
 	SpikingIndex   int64   `json:"spiking_index"`
 	EditWarIndex   int64   `json:"editwar_index"`
 	HotPageIndex   int64   `json:"hotpage_index"`
+}
+
+// evictStaleContextCache removes entries older than the cache TTL.
+// This prevents the map from growing without bound as new pages are seen.
+func (s *IndexingStrategy) evictStaleContextCache() {
+	s.contextCacheMu.Lock()
+	defer s.contextCacheMu.Unlock()
+	now := time.Now()
+	for key, ctx := range s.contextCache {
+		if now.Sub(ctx.LastUpdated) >= s.contextCacheTTL {
+			delete(s.contextCache, key)
+		}
+	}
 }

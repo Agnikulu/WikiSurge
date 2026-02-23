@@ -4,10 +4,16 @@ export interface User {
   id: string;
   email: string;
   verified: boolean;
+  is_admin: boolean;
   digest_frequency: DigestFrequency;
   digest_content: DigestContent;
   spike_threshold: number;
   watchlist: string[];
+}
+
+export interface AdminUserListResponse {
+  users: User[];
+  total: number;
 }
 
 export type DigestFrequency = 'none' | 'daily' | 'weekly' | 'both';

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -57,7 +58,8 @@ func TestEditFilter_Languages(t *testing.T) {
 }
 
 func TestEditFilter_PagePattern(t *testing.T) {
-	f := &EditFilter{PagePattern: "^Go.*language"}
+	pattern := regexp.MustCompile("^Go.*language")
+	f := &EditFilter{PagePattern: "^Go.*language", compiledPattern: pattern}
 
 	match := &models.WikipediaEdit{ID: 1, Title: "Go (programming language)", Wiki: "enwiki"}
 	assert.True(t, f.Matches(match))
@@ -572,6 +574,35 @@ func TestExtractIP(t *testing.T) {
 				req.Header.Set(k, v)
 			}
 			assert.Equal(t, tc.expected, extractIP(req))
+		})
+	}
+}
+
+func TestUpgrader_CheckOrigin(t *testing.T) {
+	tests := []struct {
+		name    string
+		origin  string
+		allowed bool
+	}{
+		{"empty origin (same-origin)", "", true},
+		{"production HTTPS", "https://wikisurge.net", true},
+		{"production HTTP", "http://wikisurge.net", true},
+		{"vite dev server", "http://localhost:5173", true},
+		{"frontend container", "http://localhost:3000", true},
+		{"API dev", "http://localhost:8081", true},
+		{"unknown origin rejected", "https://evil.com", false},
+		{"subdomain rejected", "https://sub.wikisurge.net", false},
+		{"trailing slash rejected", "https://wikisurge.net/", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/ws/feed", nil)
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			result := upgrader.CheckOrigin(req)
+			assert.Equal(t, tc.allowed, result, "origin=%q", tc.origin)
 		})
 	}
 }

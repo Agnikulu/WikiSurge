@@ -11,9 +11,11 @@ import {
   X,
   Plus,
   Trash2,
+  Shield,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import type { DigestFrequency, DigestContent, DigestPreferences } from '../../types/user';
+import { AdminPanel } from './AdminPanel';
 
 export function SettingsPanel() {
   const { user, updatePreferences, updateWatchlist, logout, isLoading, error, clearError } =
@@ -106,6 +108,19 @@ export function SettingsPanel() {
               <p className="text-[10px] font-mono" style={{ color: 'rgba(0,255,136,0.4)' }}>
                 ID: {user.id.slice(0, 8)}...
               </p>
+              {user.is_admin && (
+                <span
+                  className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold"
+                  style={{
+                    background: 'rgba(255,170,0,0.15)',
+                    border: '1px solid rgba(255,170,0,0.3)',
+                    color: '#ffaa00',
+                  }}
+                >
+                  <Shield className="h-2.5 w-2.5" />
+                  ADMIN
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -122,6 +137,9 @@ export function SettingsPanel() {
           </button>
         </div>
       </div>
+
+      {/* Admin Panel — only visible to admins */}
+      {user.is_admin && <AdminPanel />}
 
       {/* Error */}
       {error && (

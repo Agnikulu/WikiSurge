@@ -179,7 +179,7 @@ func (sd *SpikeDetector) ProcessEdit(ctx context.Context, edit *models.Wikipedia
 		}
 
 		// Mark page as spiking for ES indexing strategy
-		if err := sd.markPageSpiking(ctx, edit.Title); err != nil {
+		if err := sd.markPageSpiking(ctx, edit.Title, edit.Wiki); err != nil {
 			sd.logger.Warn().Err(err).Str("page", edit.Title).Msg("Failed to mark page as spiking")
 			// Don't fail the entire operation for this
 		}
@@ -277,8 +277,8 @@ func (sd *SpikeDetector) publishAlert(ctx context.Context, alert *SpikeAlert) er
 }
 
 // markPageSpiking marks a page as currently spiking for indexing strategy
-func (sd *SpikeDetector) markPageSpiking(ctx context.Context, pageTitle string) error {
-	spikeKey := fmt.Sprintf("spike:%s", pageTitle)
+func (sd *SpikeDetector) markPageSpiking(ctx context.Context, pageTitle string, wiki string) error {
+	spikeKey := fmt.Sprintf("spike:%s:%s", wiki, pageTitle)
 	return sd.redis.Set(ctx, spikeKey, 1, time.Hour).Err() // 1 hour TTL
 }
 

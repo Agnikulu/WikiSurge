@@ -145,6 +145,16 @@ check_resources() {
     if [ -x "$RESOURCE_CHECK" ]; then
         "$RESOURCE_CHECK" || log_warn "Resource check script reported warnings"
     fi
+
+    # Redis needs vm.overcommit_memory=1 to avoid fork failures under memory pressure.
+    local overcommit
+    overcommit=$(cat /proc/sys/vm/overcommit_memory 2>/dev/null || echo "unknown")
+    if [ "$overcommit" = "0" ]; then
+        log_warn "vm.overcommit_memory=0 — Redis may fail background saves under memory pressure"
+        log_warn "Fix: sudo sysctl vm.overcommit_memory=1 && echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf"
+    elif [ "$overcommit" = "1" ]; then
+        log_info "vm.overcommit_memory=1 (good for Redis)"
+    fi
 }
 
 # ---------- Tag Previous Version ----------

@@ -50,8 +50,6 @@ services:
       - --overprovisioned
       - --node-id 0
       - --check=false
-      - --set redpanda.log_retention_ms=10800000
-      - --set redpanda.log_segment_size=16777216
     volumes:
       - kafka-data:/var/lib/redpanda/data
     # No external ports — internal only in production
@@ -86,6 +84,8 @@ services:
       --appendonly no
       --tcp-keepalive 60
       --timeout 0
+      --stop-writes-on-bgsave-error no
+      --loglevel warning
     volumes:
       - redis-data:/data
     # No external ports — internal only in production

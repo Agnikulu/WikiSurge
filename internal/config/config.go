@@ -27,8 +27,9 @@ type Config struct {
 
 // AuthConfig configures JWT authentication.
 type AuthConfig struct {
-	JWTSecret string        `yaml:"jwt_secret"`
-	JWTExpiry time.Duration `yaml:"jwt_expiry"`
+	JWTSecret  string        `yaml:"jwt_secret"`
+	JWTExpiry  time.Duration `yaml:"jwt_expiry"`
+	AdminEmail string        `yaml:"admin_email"` // Email auto-promoted to admin on registration
 }
 
 // DatabaseConfig configures the SQLite user database.
@@ -395,6 +396,9 @@ func overrideWithEnv(config *Config) {
 	// Auth overrides
 	if jwtSecret := os.Getenv("JWT_SECRET"); jwtSecret != "" {
 		config.Auth.JWTSecret = jwtSecret
+	}
+	if adminEmail := os.Getenv("ADMIN_EMAIL"); adminEmail != "" {
+		config.Auth.AdminEmail = adminEmail
 	}
 
 	// Database overrides

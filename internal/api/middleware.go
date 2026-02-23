@@ -83,8 +83,21 @@ func LoggerMiddleware(logger zerolog.Logger, next http.Handler) http.Handler {
 		reqID := GetRequestID(r.Context())
 
 		// Always log errors; sample successful requests.
-		if rec.statusCode >= 400 {
+		if rec.statusCode >= 500 {
+			// Server errors — always log at error level.
 			logger.Error().
+				Str("method", r.Method).
+				Str("path", r.URL.Path).
+				Str("ip", ip).
+				Int("status", rec.statusCode).
+				Dur("duration", duration).
+				Int("response_bytes", rec.bytesWritten).
+				Str("request_id", reqID).
+				Str("user_agent", r.UserAgent()).
+				Msg("request")
+		} else if rec.statusCode >= 400 {
+			// Client errors — always log but at warn level (not server's fault).
+			logger.Warn().
 				Str("method", r.Method).
 				Str("path", r.URL.Path).
 				Str("ip", ip).

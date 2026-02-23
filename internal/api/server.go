@@ -38,6 +38,9 @@ type APIServer struct {
 	jwtService      *auth.JWTService
 	version        string
 
+	// Edit relay cancellation
+	editRelayCancel context.CancelFunc
+
 	// Stats cache
 	statsMu        sync.RWMutex
 	statsCache     *StatsResponse
@@ -152,6 +155,11 @@ func (s *APIServer) setupRoutes() {
 		s.router.Handle("PUT /api/user/preferences", authMw(http.HandlerFunc(s.handleUpdatePreferences)))
 		s.router.Handle("GET /api/user/watchlist", authMw(http.HandlerFunc(s.handleGetWatchlist)))
 		s.router.Handle("PUT /api/user/watchlist", authMw(http.HandlerFunc(s.handleUpdateWatchlist)))
+
+		// Admin routes (protected by admin middleware — requires is_admin claim)
+		adminMw := auth.AdminMiddleware(s.jwtService)
+		s.router.Handle("GET /api/admin/users", adminMw(http.HandlerFunc(s.handleAdminListUsers)))
+		s.router.Handle("DELETE /api/admin/users/{id}", adminMw(http.HandlerFunc(s.handleAdminDeleteUser)))
 	}
 }
 
@@ -175,8 +183,8 @@ func (s *APIServer) Handler() http.Handler {
 	h = ETagMiddleware(h)
 	h = GzipMiddleware(h)
 	h = RecoveryMiddleware(s.logger, h)
-	h = RequestIDMiddleware(s.logger, h)
 	h = LoggerMiddleware(s.logger, h)
+	h = RequestIDMiddleware(s.logger, h)
 
 	return h
 }
@@ -207,9 +215,11 @@ func (s *APIServer) Hub() *WebSocketHub {
 // publishes live edits, and feeds them into the API's WebSocket hub so that
 // connected dashboard clients receive real-time updates.
 func (s *APIServer) StartEditRelay(redisClient *redis.Client) {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.editRelayCancel = cancel
 	go func() {
-		ctx := context.Background()
 		sub := redisClient.Subscribe(ctx, "wikisurge:edits:live")
+		defer sub.Close()
 		ch := sub.Channel()
 		s.logger.Info().Msg("Edit relay started — subscribing to Redis pub/sub for live edits")
 
@@ -227,8 +237,17 @@ func (s *APIServer) StartEditRelay(redisClient *redis.Client) {
 // Shutdown performs graceful shutdown of API-specific resources.
 func (s *APIServer) Shutdown(ctx context.Context) error {
 	s.logger.Info().Msg("API server shutting down")
+	if s.editRelayCancel != nil {
+		s.editRelayCancel()
+	}
 	if s.wsHub != nil {
 		s.wsHub.Stop()
+	}
+	if s.alertHub != nil {
+		s.alertHub.Stop()
+	}
+	if s.cache != nil {
+		s.cache.Stop()
 	}
 	return nil
 }

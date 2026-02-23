@@ -416,3 +416,29 @@ func TestTrendingScorer_LazyDecayOptimization(t *testing.T) {
 	require.NoError(t, err)
 	assert.InDelta(t, 51.0, rawScoreFloat, 0.1)
 }
+
+func TestTrendingScorer_PageKeyTTL_8Days(t *testing.T) {
+	scorer, mr := setupTestTrendingScorer(t)
+	defer mr.Close()
+	defer scorer.Stop()
+
+	// Increment to create the page key
+	err := scorer.IncrementScore("LongLived Page", 5.0)
+	require.NoError(t, err)
+
+	// Verify key exists
+	ctx := context.Background()
+	exists, err := scorer.redis.Exists(ctx, "trending:LongLived Page").Result()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), exists, "page key should exist")
+
+	// Fast-forward 7 days — key should still exist (TTL is 8 days)
+	mr.FastForward(7 * 24 * time.Hour)
+	exists, _ = scorer.redis.Exists(ctx, "trending:LongLived Page").Result()
+	assert.Equal(t, int64(1), exists, "page key should survive 7 days (TTL is 8)")
+
+	// Fast-forward past 8 days total (1 more day + buffer)
+	mr.FastForward(2 * 24 * time.Hour)
+	exists, _ = scorer.redis.Exists(ctx, "trending:LongLived Page").Result()
+	assert.Equal(t, int64(0), exists, "page key should expire after 8+ days")
+}

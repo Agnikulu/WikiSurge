@@ -115,6 +115,10 @@ func (t *TrendingAggregator) ProcessEdit(ctx context.Context, edit *models.Wikip
 		if err := t.statsTracker.RecordEdit(ctx, lang, edit.Bot); err != nil {
 			t.logger.Warn().Err(err).Msg("Failed to record edit stats")
 		}
+		// Record per-page daily counter for digest watchlist
+		if err := t.statsTracker.RecordPageEdit(ctx, edit.Title); err != nil {
+			t.logger.Warn().Err(err).Str("title", edit.Title).Msg("Failed to record page edit stats")
+		}
 	}
 
 	t.logger.Debug().

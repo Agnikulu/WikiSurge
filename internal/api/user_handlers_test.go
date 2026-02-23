@@ -430,3 +430,265 @@ func TestUnsubscribe_MissingToken(t *testing.T) {
 		t.Errorf("status = %d, want 400 for missing token", rec.Code)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Admin: List Users
+// ---------------------------------------------------------------------------
+
+// setupAdminTestServer creates an APIServer with admin_email configured.
+func setupAdminTestServer(t *testing.T, adminEmail string) (*APIServer, *storage.UserStore) {
+	t.Helper()
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis: %v", err)
+	}
+	t.Cleanup(mr.Close)
+
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { rc.Close() })
+
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test_users.db")
+	userStore, err := storage.NewUserStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewUserStore: %v", err)
+	}
+	t.Cleanup(func() { userStore.Close() })
+
+	jwtSvc := auth.NewJWTService("test-secret-key-for-admin-handlers", 1*time.Hour)
+
+	cfg := &config.Config{
+		Redis: config.Redis{
+			URL: "redis://" + mr.Addr(),
+			HotPages: config.HotPages{
+				MaxTracked: 100, PromotionThreshold: 3, WindowDuration: 15 * time.Minute,
+				MaxMembersPerPage: 50, HotThreshold: 2, CleanupInterval: 5 * time.Minute,
+			},
+			Trending: config.TrendingConfig{
+				Enabled: true, MaxPages: 100, HalfLifeMinutes: 30, PruneInterval: 5 * time.Minute,
+			},
+		},
+		API:     config.API{Port: 8080, RateLimit: 10000},
+		Logging: config.Logging{Level: "error", Format: "json"},
+		Email:   config.EmailConfig{DashboardURL: "http://localhost:5173"},
+		Auth:    config.AuthConfig{JWTSecret: "test-secret", JWTExpiry: 1 * time.Hour, AdminEmail: adminEmail},
+	}
+
+	logger := zerolog.New(os.Stderr).Level(zerolog.Disabled)
+	srv := NewAPIServer(rc, nil, nil, nil, nil, userStore, jwtSvc, cfg, logger)
+
+	return srv, userStore
+}
+
+func TestAdminListUsers_Success(t *testing.T) {
+	srv, _ := setupAdminTestServer(t, "admin@example.com")
+
+	// Register admin user (email matches AdminEmail)
+	rec := doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "admin@example.com", Password: "admin-pass-123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register admin status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	adminResp := decodeJSON(t, rec)
+	adminToken := adminResp["token"].(string)
+
+	// Register a couple of regular users
+	doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "user1@example.com", Password: "pass1-abcdef",
+	}, "")
+	doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "user2@example.com", Password: "pass2-abcdef",
+	}, "")
+
+	// Admin lists users
+	rec = doJSON(srv, "GET", "/api/admin/users", nil, adminToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin list users status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	result := decodeJSON(t, rec)
+	total := int(result["total"].(float64))
+	if total != 3 {
+		t.Errorf("total = %d, want 3", total)
+	}
+
+	users := result["users"].([]interface{})
+	if len(users) != 3 {
+		t.Errorf("users count = %d, want 3", len(users))
+	}
+
+	// Verify admin user is marked as admin in the response
+	foundAdmin := false
+	for _, u := range users {
+		um := u.(map[string]interface{})
+		if um["email"] == "admin@example.com" {
+			if isAdmin, ok := um["is_admin"].(bool); ok && isAdmin {
+				foundAdmin = true
+			}
+		}
+	}
+	if !foundAdmin {
+		t.Error("admin user should have is_admin=true in response")
+	}
+}
+
+func TestAdminListUsers_NonAdminForbidden(t *testing.T) {
+	srv, _ := setupAdminTestServer(t, "admin@example.com")
+
+	// Register a regular user (non-admin)
+	rec := doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "regular@example.com", Password: "regular-pass-123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register status = %d", rec.Code)
+	}
+	resp := decodeJSON(t, rec)
+	token := resp["token"].(string)
+
+	// Attempt admin endpoint as regular user
+	rec = doJSON(srv, "GET", "/api/admin/users", nil, token)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("non-admin status = %d, want 403. Body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAdminListUsers_NoToken(t *testing.T) {
+	srv, _ := setupAdminTestServer(t, "admin@example.com")
+
+	rec := doJSON(srv, "GET", "/api/admin/users", nil, "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("no-token status = %d, want 401", rec.Code)
+	}
+}
+
+func TestRegister_AdminAutoPromote(t *testing.T) {
+	srv, userStore := setupAdminTestServer(t, "admin@example.com")
+
+	rec := doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "admin@example.com", Password: "admin-pass-123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register admin status = %d", rec.Code)
+	}
+
+	resp := decodeJSON(t, rec)
+	userMap := resp["user"].(map[string]interface{})
+	if !userMap["is_admin"].(bool) {
+		t.Error("admin user should have is_admin=true in register response")
+	}
+
+	// Verify in database
+	u, err := userStore.GetUserByEmail("admin@example.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail: %v", err)
+	}
+	if !u.IsAdmin {
+		t.Error("admin user should have IsAdmin=true in database")
+	}
+}
+
+func TestLogin_AdminGetsAdminToken(t *testing.T) {
+	srv, _ := setupAdminTestServer(t, "admin@example.com")
+
+	// Register admin
+	doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "admin@example.com", Password: "admin-pass-123",
+	}, "")
+
+	// Login admin
+	rec := doJSON(srv, "POST", "/api/auth/login", loginRequest{
+		Email: "admin@example.com", Password: "admin-pass-123",
+	}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login status = %d", rec.Code)
+	}
+	resp := decodeJSON(t, rec)
+	adminToken := resp["token"].(string)
+
+	// Admin token should grant access to admin endpoint
+	rec = doJSON(srv, "GET", "/api/admin/users", nil, adminToken)
+	if rec.Code != http.StatusOK {
+		t.Errorf("admin endpoint with login token: status = %d, want 200", rec.Code)
+	}
+}
+
+func TestAdminDeleteUser_Success(t *testing.T) {
+	srv, userStore := setupAdminTestServer(t, "admin@example.com")
+
+	// Register admin
+	rec := doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "admin@example.com", Password: "admin-pass-123",
+	}, "")
+	adminToken := decodeJSON(t, rec)["token"].(string)
+
+	// Register a user to delete
+	doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "victim@example.com", Password: "victim-pass-123",
+	}, "")
+
+	victim, _ := userStore.GetUserByEmail("victim@example.com")
+
+	// Delete the user
+	rec = doJSON(srv, "DELETE", "/api/admin/users/"+victim.ID, nil, adminToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete user status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify user is gone
+	gone, _ := userStore.GetUserByID(victim.ID)
+	if gone != nil {
+		t.Error("user should be deleted from database")
+	}
+}
+
+func TestAdminDeleteUser_CannotDeleteSelf(t *testing.T) {
+	srv, userStore := setupAdminTestServer(t, "admin@example.com")
+
+	doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "admin@example.com", Password: "admin-pass-123",
+	}, "")
+	admin, _ := userStore.GetUserByEmail("admin@example.com")
+
+	// Login to get fresh token
+	rec := doJSON(srv, "POST", "/api/auth/login", loginRequest{
+		Email: "admin@example.com", Password: "admin-pass-123",
+	}, "")
+	adminToken := decodeJSON(t, rec)["token"].(string)
+
+	// Try to delete self
+	rec = doJSON(srv, "DELETE", "/api/admin/users/"+admin.ID, nil, adminToken)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("self-delete status = %d, want 400", rec.Code)
+	}
+}
+
+func TestAdminDeleteUser_NonAdminForbidden(t *testing.T) {
+	srv, _ := setupAdminTestServer(t, "admin@example.com")
+
+	// Register a regular user
+	rec := doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "regular@example.com", Password: "regular-pass-123",
+	}, "")
+	token := decodeJSON(t, rec)["token"].(string)
+
+	rec = doJSON(srv, "DELETE", "/api/admin/users/some-id", nil, token)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("non-admin delete status = %d, want 403", rec.Code)
+	}
+}
+
+func TestAdminDeleteUser_NotFound(t *testing.T) {
+	srv, _ := setupAdminTestServer(t, "admin@example.com")
+
+	rec := doJSON(srv, "POST", "/api/auth/register", registerRequest{
+		Email: "admin@example.com", Password: "admin-pass-123",
+	}, "")
+	adminToken := decodeJSON(t, rec)["token"].(string)
+
+	rec = doJSON(srv, "DELETE", "/api/admin/users/nonexistent-id", nil, adminToken)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("delete nonexistent status = %d, want 404", rec.Code)
+	}
+}

@@ -73,6 +73,7 @@ logging:
 auth:
   jwt_secret: "dev-secret-change-me-in-production"  # Override: JWT_SECRET env var
   jwt_expiry: 24h
+  admin_email: ""             # Set ADMIN_EMAIL env var — this email gets admin on registration
 
 # --- User Database (SQLite) ---
 database:

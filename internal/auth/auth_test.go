@@ -12,7 +12,7 @@ import (
 func TestGenerateAndValidateToken(t *testing.T) {
 	svc := NewJWTService("test-secret-key-that-is-long-enough", 1*time.Hour)
 
-	pair, err := svc.GenerateToken("user-123", "alice@example.com")
+	pair, err := svc.GenerateToken("user-123", "alice@example.com", false)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestValidateToken_WrongSecret(t *testing.T) {
 	svc1 := NewJWTService("secret-one-aaaaa", 1*time.Hour)
 	svc2 := NewJWTService("secret-two-bbbbb", 1*time.Hour)
 
-	pair, _ := svc1.GenerateToken("user-1", "a@b.com")
+	pair, _ := svc1.GenerateToken("user-1", "a@b.com", false)
 	_, err := svc2.ValidateToken(pair.AccessToken)
 	if err == nil {
 		t.Error("expected error when validating with wrong secret")
@@ -62,7 +62,7 @@ func TestValidateToken_WrongSecret(t *testing.T) {
 func TestValidateToken_Expired(t *testing.T) {
 	svc := NewJWTService("secret-key-abcdef", 1*time.Millisecond)
 
-	pair, _ := svc.GenerateToken("user-1", "a@b.com")
+	pair, _ := svc.GenerateToken("user-1", "a@b.com", false)
 	time.Sleep(10 * time.Millisecond)
 
 	_, err := svc.ValidateToken(pair.AccessToken)
@@ -140,7 +140,7 @@ func TestExtractTokenFromRequest(t *testing.T) {
 
 func TestMiddleware_ValidToken(t *testing.T) {
 	svc := NewJWTService("test-middleware-secret-key-long", 1*time.Hour)
-	pair, _ := svc.GenerateToken("user-42", "test@example.com")
+	pair, _ := svc.GenerateToken("user-42", "test@example.com", false)
 
 	called := false
 	handler := Middleware(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -187,7 +187,7 @@ func TestMiddleware_MissingToken(t *testing.T) {
 
 func TestMiddleware_ExpiredToken(t *testing.T) {
 	svc := NewJWTService("test-middleware-secret-key-long", 1*time.Millisecond)
-	pair, _ := svc.GenerateToken("user-1", "a@b.com")
+	pair, _ := svc.GenerateToken("user-1", "a@b.com", false)
 	time.Sleep(10 * time.Millisecond)
 
 	handler := Middleware(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -213,5 +213,89 @@ func TestContextHelpers_NoAuth(t *testing.T) {
 	}
 	if email := EmailFromContext(req.Context()); email != "" {
 		t.Errorf("expected empty Email, got %q", email)
+	}
+	if isAdmin := IsAdminFromContext(req.Context()); isAdmin {
+		t.Error("expected IsAdmin=false from empty context")
+	}
+}
+
+func TestAdminMiddleware_AdminAllowed(t *testing.T) {
+	svc := NewJWTService("test-admin-middleware-secret-key", 1*time.Hour)
+	pair, _ := svc.GenerateToken("admin-1", "admin@test.com", true)
+
+	called := false
+	handler := AdminMiddleware(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if !IsAdminFromContext(r.Context()) {
+			t.Error("expected IsAdmin=true in admin middleware")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/admin", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if !called {
+		t.Error("admin handler was not called")
+	}
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestAdminMiddleware_NonAdminForbidden(t *testing.T) {
+	svc := NewJWTService("test-admin-middleware-secret-key", 1*time.Hour)
+	pair, _ := svc.GenerateToken("user-1", "user@test.com", false)
+
+	handler := AdminMiddleware(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler should not be called for non-admin")
+	}))
+
+	req := httptest.NewRequest("GET", "/admin", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestAdminMiddleware_NoToken(t *testing.T) {
+	svc := NewJWTService("test-admin-middleware-secret-key", 1*time.Hour)
+
+	handler := AdminMiddleware(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler should not be called without token")
+	}))
+
+	req := httptest.NewRequest("GET", "/admin", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", w.Code)
+	}
+}
+
+func TestIsAdminClaim_InToken(t *testing.T) {
+	svc := NewJWTService("test-admin-claim-secret-key-long", 1*time.Hour)
+
+	// Admin token
+	pair, _ := svc.GenerateToken("admin-1", "admin@test.com", true)
+	claims, err := svc.ValidateToken(pair.AccessToken)
+	if err != nil {
+		t.Fatalf("ValidateToken: %v", err)
+	}
+	if !claims.IsAdmin {
+		t.Error("expected IsAdmin=true in claims")
+	}
+
+	// Non-admin token
+	pair2, _ := svc.GenerateToken("user-1", "user@test.com", false)
+	claims2, _ := svc.ValidateToken(pair2.AccessToken)
+	if claims2.IsAdmin {
+		t.Error("expected IsAdmin=false in claims")
 	}
 }

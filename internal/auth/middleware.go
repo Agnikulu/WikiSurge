@@ -9,8 +9,9 @@ import (
 type contextKey string
 
 const (
-	userIDKey contextKey = "auth_user_id"
-	emailKey  contextKey = "auth_email"
+	userIDKey  contextKey = "auth_user_id"
+	emailKey   contextKey = "auth_email"
+	isAdminKey contextKey = "auth_is_admin"
 )
 
 // Middleware returns an HTTP middleware that validates JWT tokens
@@ -39,6 +40,7 @@ func Middleware(jwtSvc *JWTService) func(http.Handler) http.Handler {
 			// Inject user info into context
 			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
 			ctx = context.WithValue(ctx, emailKey, claims.Email)
+			ctx = context.WithValue(ctx, isAdminKey, claims.IsAdmin)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -59,4 +61,27 @@ func EmailFromContext(ctx context.Context) string {
 		return v
 	}
 	return ""
+}
+
+// IsAdminFromContext returns true if the authenticated user is an admin.
+func IsAdminFromContext(ctx context.Context) bool {
+	if v, ok := ctx.Value(isAdminKey).(bool); ok {
+		return v
+	}
+	return false
+}
+
+// AdminMiddleware returns an HTTP middleware that validates JWT tokens
+// and ensures the user is an admin. Non-admin users receive 403 Forbidden.
+func AdminMiddleware(jwtSvc *JWTService) func(http.Handler) http.Handler {
+	inner := Middleware(jwtSvc)
+	return func(next http.Handler) http.Handler {
+		return inner(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !IsAdminFromContext(r.Context()) {
+				http.Error(w, `{"error":"forbidden","message":"admin access required"}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		}))
+	}
 }

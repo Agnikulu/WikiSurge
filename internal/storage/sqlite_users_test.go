@@ -277,3 +277,69 @@ func TestNewUserStoreCreatesFile(t *testing.T) {
 		t.Fatalf("CreateUser after fresh init: %v", err)
 	}
 }
+
+func TestListAllUsers(t *testing.T) {
+	store := newTestUserStore(t)
+
+	// Empty at first
+	users, err := store.ListAllUsers()
+	if err != nil {
+		t.Fatalf("ListAllUsers (empty): %v", err)
+	}
+	if len(users) != 0 {
+		t.Errorf("expected 0 users, got %d", len(users))
+	}
+
+	// Create 3 users
+	store.CreateUser("a@test.com", "pw1")
+	store.CreateUser("b@test.com", "pw2")
+	store.CreateUser("c@test.com", "pw3")
+
+	users, err = store.ListAllUsers()
+	if err != nil {
+		t.Fatalf("ListAllUsers: %v", err)
+	}
+	if len(users) != 3 {
+		t.Errorf("expected 3 users, got %d", len(users))
+	}
+}
+
+func TestSetAdmin(t *testing.T) {
+	store := newTestUserStore(t)
+
+	user, err := store.CreateUser("admin@test.com", "pw")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if user.IsAdmin {
+		t.Error("new user should not be admin")
+	}
+
+	// Promote
+	if err := store.SetAdmin(user.ID, true); err != nil {
+		t.Fatalf("SetAdmin(true): %v", err)
+	}
+
+	got, _ := store.GetUserByID(user.ID)
+	if !got.IsAdmin {
+		t.Error("expected IsAdmin=true after promotion")
+	}
+
+	// Demote
+	if err := store.SetAdmin(user.ID, false); err != nil {
+		t.Fatalf("SetAdmin(false): %v", err)
+	}
+	got, _ = store.GetUserByID(user.ID)
+	if got.IsAdmin {
+		t.Error("expected IsAdmin=false after demotion")
+	}
+}
+
+func TestSetAdmin_NonExistentUser(t *testing.T) {
+	store := newTestUserStore(t)
+
+	err := store.SetAdmin("nonexistent-id", true)
+	if err == nil {
+		t.Error("expected error for non-existent user")
+	}
+}

@@ -183,10 +183,50 @@ func (st *StatsTracker) GetLanguageCountsForPeriod(ctx context.Context, since ti
 	return counts, grandTotal, nil
 }
 
+// RecordPageEdit increments a per-page daily edit counter.
+// Key pattern: stats:page:{title}:{YYYY-MM-DD}, field: "edits", TTL: 8 days.
+// This data survives long enough for weekly digests to report watchlist activity.
+func (st *StatsTracker) RecordPageEdit(ctx context.Context, pageTitle string) error {
+	dateStr := time.Now().UTC().Format("2006-01-02")
+	key := fmt.Sprintf("stats:page:%s:%s", pageTitle, dateStr)
+
+	pipe := st.redis.Pipeline()
+	pipe.HIncrBy(ctx, key, "edits", 1)
+	pipe.Expire(ctx, key, 192*time.Hour) // 8 days
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+// GetPageEditCount returns the total edit count for a page across all dates in [since, now].
+func (st *StatsTracker) GetPageEditCount(ctx context.Context, pageTitle string, since time.Time) (int64, error) {
+	var total int64
+	start := since.UTC().Truncate(24 * time.Hour)
+	end := time.Now().UTC().Truncate(24 * time.Hour)
+	for d := start; !d.After(end); d = d.Add(24 * time.Hour) {
+		dateStr := d.Format("2006-01-02")
+		key := fmt.Sprintf("stats:page:%s:%s", pageTitle, dateStr)
+		countStr, err := st.redis.HGet(ctx, key, "edits").Result()
+		if err == redis.Nil {
+			continue
+		}
+		if err != nil {
+			continue
+		}
+		count, _ := strconv.ParseInt(countStr, 10, 64)
+		total += count
+	}
+	return total, nil
+}
+
 // GetTimeline returns edit counts per minute for the given duration.
 func (st *StatsTracker) GetTimeline(ctx context.Context, duration time.Duration) ([]TimelinePoint, error) {
 	now := time.Now().Truncate(time.Minute).Unix()
 	from := time.Now().Add(-duration).Truncate(time.Minute).Unix()
+
+	// Prune stale members older than 8 days to prevent unbounded growth.
+	// This is cheap (O(log N + M)) and runs on every read, keeping the set tidy.
+	pruneThreshold := time.Now().Add(-192 * time.Hour).Truncate(time.Minute).Unix()
+	st.redis.ZRemRangeByScore(ctx, "stats:timeline:index", "-inf", strconv.FormatInt(pruneThreshold, 10))
 
 	// Get minute buckets in range
 	members, err := st.redis.ZRangeByScore(ctx, "stats:timeline:index", &redis.ZRangeBy{

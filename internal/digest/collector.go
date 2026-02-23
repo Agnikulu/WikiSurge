@@ -330,18 +330,18 @@ func (c *Collector) collectWatchlistEvents(ctx context.Context, user *models.Use
 			continue
 		}
 
-		// Otherwise check hot page stats
-		if c.hotPages != nil {
-			stats, err := c.hotPages.GetPageStats(ctx, pageTitle)
-			if err == nil && stats != nil {
-				ev.EditCount = int(stats.EditsLastHour)
-				// Consider "notable" if > 10 edits/hour (simple heuristic)
-				if stats.EditsLastHour > 10 {
+		// Otherwise query per-page daily edit counters (persistent, 8-day TTL)
+		if c.stats != nil {
+			editCount, err := c.stats.GetPageEditCount(ctx, pageTitle, global.PeriodStart)
+			if err == nil && editCount > 0 {
+				ev.EditCount = int(editCount)
+				// Consider "notable" if > 10 edits in the period
+				if editCount > 10 {
 					ev.IsNotable = true
 					ev.EventType = "active"
-					ev.Summary = fmt.Sprintf("%d edits in the last hour", stats.EditsLastHour)
+					ev.Summary = fmt.Sprintf("%d edits in the period", editCount)
 				} else {
-					ev.Summary = fmt.Sprintf("%d edits (quiet)", stats.EditsLastHour)
+					ev.Summary = fmt.Sprintf("%d edits (quiet)", editCount)
 				}
 			} else {
 				ev.Summary = "No recent activity"

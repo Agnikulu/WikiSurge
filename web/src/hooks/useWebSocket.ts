@@ -46,6 +46,7 @@ export function useWebSocket<T>({
   const rateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bufferRef = useRef<T[]>([]);
   const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closingRef = useRef(false); // Prevents reconnect after intentional close
 
   filterRef.current = filter;
   isPausedRef.current = isPaused;
@@ -70,6 +71,7 @@ export function useWebSocket<T>({
   }, [flushBuffer]);
 
   const connect = useCallback(() => {
+    closingRef.current = false;
     setConnectionState('connecting');
 
     // Build URL with query params
@@ -112,6 +114,11 @@ export function useWebSocket<T>({
       console.log('WebSocket disconnected');
       setConnectionState('disconnected');
 
+      // Don't reconnect if we're intentionally closing (component unmount / URL change).
+      if (closingRef.current) {
+        return;
+      }
+
       retriesRef.current++;
       setReconnectCount(retriesRef.current);
 
@@ -152,6 +159,7 @@ export function useWebSocket<T>({
     connect();
 
     return () => {
+      closingRef.current = true; // Prevent onclose from triggering reconnect
       if (reconnectTimeout.current) {
         clearTimeout(reconnectTimeout.current);
       }

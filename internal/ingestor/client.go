@@ -424,7 +424,9 @@ func (w *WikiStreamClient) Stop() {
 	
 	// Close SSE client
 	if w.sseClient != nil {
-		w.sseClient.Connection.Transport.(*http.Transport).CloseIdleConnections()
+		if transport, ok := w.sseClient.Connection.Transport.(*http.Transport); ok {
+			transport.CloseIdleConnections()
+		}
 	}
 	
 	// Wait for goroutine to complete

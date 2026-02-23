@@ -81,6 +81,7 @@ logging:
 auth:
   jwt_secret: ""              # REQUIRED in production — set JWT_SECRET env var
   jwt_expiry: 24h
+  admin_email: ""             # Set ADMIN_EMAIL env var — this email is auto-promoted to admin on registration
 
 # --- User Database (SQLite) ---
 database:

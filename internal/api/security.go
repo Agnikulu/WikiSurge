@@ -93,6 +93,7 @@ func RequestValidationMiddleware(next http.Handler) http.Handler {
 		http.MethodGet:     true,
 		http.MethodPost:    true,
 		http.MethodPut:     true,
+		http.MethodDelete:  true,
 		http.MethodOptions: true,
 		http.MethodHead:    true,
 	}

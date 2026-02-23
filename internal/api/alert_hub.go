@@ -17,6 +17,8 @@ type AlertHub struct {
 	logger      zerolog.Logger
 	alerts      *storage.RedisAlerts
 	cancel      context.CancelFunc
+	cancelMu    sync.Mutex
+	stopOnce    sync.Once
 }
 
 // NewAlertHub creates an AlertHub.  Call Run() to start the shared
@@ -33,7 +35,9 @@ func NewAlertHub(alerts *storage.RedisAlerts, logger zerolog.Logger) *AlertHub {
 // as a goroutine: go hub.Run()
 func (h *AlertHub) Run() {
 	ctx, cancel := context.WithCancel(context.Background())
+	h.cancelMu.Lock()
 	h.cancel = cancel
+	h.cancelMu.Unlock()
 
 	if h.alerts == nil {
 		h.logger.Warn().Msg("Alerts storage not configured; alert hub will idle")
@@ -59,9 +63,14 @@ func (h *AlertHub) Run() {
 
 // Stop terminates the subscription loop.
 func (h *AlertHub) Stop() {
-	if h.cancel != nil {
-		h.cancel()
-	}
+	h.stopOnce.Do(func() {
+		h.cancelMu.Lock()
+		cancel := h.cancel
+		h.cancelMu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+	})
 }
 
 // Subscribe returns a channel that receives alerts.  The caller MUST call

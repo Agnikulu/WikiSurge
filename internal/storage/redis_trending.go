@@ -206,7 +206,7 @@ func (t *TrendingScorer) IncrementScore(pageTitle string, scoreIncrement float64
 	pipe2 := t.redis.Pipeline()
 	pipe2.HSet(ctx, pageKey, "raw_score", rawScore)
 	pipe2.HSet(ctx, pageKey, "last_updated", now)
-	pipe2.Expire(ctx, pageKey, 24*time.Hour)
+	pipe2.Expire(ctx, pageKey, 192*time.Hour) // 8 days — supports weekly digests
 	pipe2.ZAdd(ctx, globalKey, redis.Z{Score: rawScore, Member: pageTitle})
 	
 	_, err = pipe2.Exec(ctx)

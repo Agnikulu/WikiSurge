@@ -107,7 +107,7 @@ func BenchmarkTrendingAggregator_ProcessMessage(b *testing.B) {
 	defer scorer.Stop()
 	
 	logger := zerolog.New(zerolog.NewTestWriter(b))
-	aggregator := processor.NewTrendingAggregator(scorer, cfg, logger)
+	aggregator := processor.NewTrendingAggregatorForTest(scorer, cfg, logger)
 	
 	// Pre-create messages
 	messages := make([][]byte, 100)
@@ -162,7 +162,7 @@ func BenchmarkTrendingPipeline_FullPipeline(b *testing.B) {
 	defer scorer.Stop()
 	
 	logger := zerolog.Nop() // No-op logger for performance
-	aggregator := processor.NewTrendingAggregator(scorer, cfg, logger)
+	aggregator := processor.NewTrendingAggregatorForTest(scorer, cfg, logger)
 	
 	b.ResetTimer()
 	

@@ -112,6 +112,19 @@ update_topic_config() {
     fi
 }
 
+# Apply cluster-level Redpanda config (replaces deprecated --set redpanda.* flags).
+apply_cluster_config() {
+    log_info "Applying cluster-level Redpanda configuration..."
+
+    rpk cluster config set log_retention_ms 10800000 2>/dev/null \
+        && log_info "log_retention_ms = 10800000 (3 hours)" \
+        || log_warn "Failed to set log_retention_ms (may not be supported on this version)"
+
+    rpk cluster config set log_segment_size 16777216 2>/dev/null \
+        && log_info "log_segment_size = 16777216 (16 MB)" \
+        || log_warn "Failed to set log_segment_size (may not be supported on this version)"
+}
+
 # Main function
 main() {
     log_info "Setting up Kafka topic for WikiSurge"
@@ -153,6 +166,10 @@ main() {
     # Show final configuration
     echo ""
     show_topic_config
+
+    # Apply cluster-level Redpanda config (log retention, segment size).
+    echo ""
+    apply_cluster_config
     
     log_info "Kafka topic setup complete!"
     log_info ""

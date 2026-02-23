@@ -34,6 +34,7 @@ type userResponse struct {
 	ID             string   `json:"id"`
 	Email          string   `json:"email"`
 	Verified       bool     `json:"verified"`
+	IsAdmin        bool     `json:"is_admin"`
 	DigestFreq     string   `json:"digest_frequency"`
 	DigestContent  string   `json:"digest_content"`
 	SpikeThreshold float64  `json:"spike_threshold"`
@@ -99,8 +100,14 @@ func (s *APIServer) handleRegister(w http.ResponseWriter, r *http.Request) {
 	_ = s.userStore.SetVerified(user.ID)
 	user.Verified = true
 
+	// Auto-promote to admin if email matches configured admin email
+	if s.config.Auth.AdminEmail != "" && strings.EqualFold(user.Email, s.config.Auth.AdminEmail) {
+		_ = s.userStore.SetAdmin(user.ID, true)
+		user.IsAdmin = true
+	}
+
 	// Generate token
-	tokenPair, err := s.jwtService.GenerateToken(user.ID, user.Email)
+	tokenPair, err := s.jwtService.GenerateToken(user.ID, user.Email, user.IsAdmin)
 	if err != nil {
 		s.logger.Error().Err(err).Msg("register: failed to generate token")
 		writeAPIError(w, r, http.StatusInternalServerError, "Registration failed", ErrCodeInternalError, "")
@@ -146,7 +153,7 @@ func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenPair, err := s.jwtService.GenerateToken(user.ID, user.Email)
+	tokenPair, err := s.jwtService.GenerateToken(user.ID, user.Email, user.IsAdmin)
 	if err != nil {
 		s.logger.Error().Err(err).Msg("login: failed to generate token")
 		writeAPIError(w, r, http.StatusInternalServerError, "Login failed", ErrCodeInternalError, "")
@@ -306,11 +313,61 @@ func toUserResponse(u *models.User) userResponse {
 		ID:             u.ID,
 		Email:          u.Email,
 		Verified:       u.Verified,
+		IsAdmin:        u.IsAdmin,
 		DigestFreq:     string(u.DigestFreq),
 		DigestContent:  string(u.DigestContent),
 		SpikeThreshold: u.SpikeThreshold,
 		Watchlist:      wl,
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Admin Handlers
+// ---------------------------------------------------------------------------
+
+// handleAdminListUsers returns all registered users (admin only).
+func (s *APIServer) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := s.userStore.ListAllUsers()
+	if err != nil {
+		s.logger.Error().Err(err).Msg("admin: failed to list users")
+		writeAPIError(w, r, http.StatusInternalServerError, "Failed to list users", ErrCodeInternalError, "")
+		return
+	}
+
+	results := make([]userResponse, 0, len(users))
+	for _, u := range users {
+		results = append(results, toUserResponse(u))
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"users": results,
+		"total": len(results),
+	})
+}
+
+// handleAdminDeleteUser deletes a user by ID (admin only). Admins cannot delete themselves.
+func (s *APIServer) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {
+	targetID := r.PathValue("id")
+	if targetID == "" {
+		writeAPIError(w, r, http.StatusBadRequest, "Missing user ID", ErrCodeInvalidParameter, "")
+		return
+	}
+
+	// Prevent self-deletion
+	callerID := auth.UserIDFromContext(r.Context())
+	if callerID == targetID {
+		writeAPIError(w, r, http.StatusBadRequest, "Cannot delete your own account", ErrCodeInvalidParameter, "")
+		return
+	}
+
+	if err := s.userStore.DeleteUser(targetID); err != nil {
+		s.logger.Error().Err(err).Str("target_id", targetID).Msg("admin: failed to delete user")
+		writeAPIError(w, r, http.StatusNotFound, "User not found", "USER_NOT_FOUND", "")
+		return
+	}
+
+	s.logger.Info().Str("admin_id", callerID).Str("deleted_id", targetID).Msg("Admin deleted user")
+	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 // userStoreInterface defines the methods used by user handlers.
@@ -323,9 +380,12 @@ type userStoreInterface interface {
 	UpdatePreferences(userID string, prefs models.DigestPreferences) error
 	UpdateWatchlist(userID string, watchlist []string) error
 	SetVerified(userID string) error
+	SetAdmin(userID string, isAdmin bool) error
 	Unsubscribe(token string) error
 	GetUsersForDigest(freq models.DigestFrequency) ([]*models.User, error)
 	MarkDigestSent(userID string, t interface{}) error
+	ListAllUsers() ([]*models.User, error)
+	DeleteUser(userID string) error
 }
 
 // Ensure *storage.UserStore satisfies the interface at compile time.
@@ -336,5 +396,8 @@ var _ interface {
 	UpdatePreferences(userID string, prefs models.DigestPreferences) error
 	UpdateWatchlist(userID string, watchlist []string) error
 	SetVerified(userID string) error
+	SetAdmin(userID string, isAdmin bool) error
 	Unsubscribe(token string) error
+	ListAllUsers() ([]*models.User, error)
+	DeleteUser(userID string) error
 } = (*storage.UserStore)(nil)
