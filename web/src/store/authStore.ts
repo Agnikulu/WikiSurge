@@ -175,13 +175,20 @@ export const useAuthStore = create<AuthState>()(
 );
 
 function extractError(err: unknown): string {
-  if (
-    err &&
-    typeof err === 'object' &&
-    'response' in err &&
-    (err as { response?: { data?: { error?: string } } }).response?.data?.error
-  ) {
-    return (err as { response: { data: { error: string } } }).response.data.error;
+  if (err && typeof err === 'object' && 'response' in err) {
+    const res = (err as { response?: { data?: unknown } }).response;
+    const data = res?.data;
+    if (data && typeof data === 'object') {
+      const d = data as Record<string, unknown>;
+      // Backend returns { error: { message, code, request_id } }
+      if (d.error && typeof d.error === 'object' && 'message' in (d.error as object)) {
+        return String((d.error as Record<string, unknown>).message);
+      }
+      // Fallback: { error: "string" }
+      if (typeof d.error === 'string') return d.error;
+      // Fallback: { message: "string" }
+      if (typeof d.message === 'string') return d.message;
+    }
   }
   if (err instanceof Error) return err.message;
   return 'An unexpected error occurred';

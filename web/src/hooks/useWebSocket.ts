@@ -92,21 +92,29 @@ export function useWebSocket<T>({
     };
 
     ws.current.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        messageCountRef.current++;
+      // Backend may batch multiple JSON objects in one frame separated by \n
+      const parts = (event.data as string).split('\n');
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        try {
+          const message = JSON.parse(trimmed);
+          messageCountRef.current++;
 
-        if (onMessage) {
-          onMessage(message);
-        }
+          if (onMessage) {
+            onMessage(message);
+          }
 
-        if (!isPausedRef.current) {
-          const editData = message.data as T;
-          bufferRef.current.push(editData);
-          scheduleFlush();
+          if (!isPausedRef.current) {
+            const editData = message.data as T;
+            bufferRef.current.push(editData);
+          }
+        } catch (err) {
+          console.error('Failed to parse WebSocket message:', err);
         }
-      } catch (err) {
-        console.error('Failed to parse WebSocket message:', err);
+      }
+      if (!isPausedRef.current && bufferRef.current.length > 0) {
+        scheduleFlush();
       }
     };
 
