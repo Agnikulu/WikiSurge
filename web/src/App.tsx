@@ -47,11 +47,20 @@ import { useAuthStore } from './store/authStore';
 function App() {
   const activeTab = useAppStore((s) => s.activeTab);
   const darkMode = useAppStore((s) => s.darkMode);
+  const fetchProfile = useAuthStore((s) => s.fetchProfile);
+  const token = useAuthStore((s) => s.token);
 
   // Apply dark mode class on mount & changes
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
+
+  // On mount: refresh user profile from backend to overwrite stale localStorage
+  useEffect(() => {
+    if (token) {
+      fetchProfile();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0f1a] transition-colors duration-200">

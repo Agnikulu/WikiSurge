@@ -155,10 +155,21 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'wikisurge-auth',
+      version: 2, // Bump when User shape changes — auto-clears stale data
       partialize: (state) => ({
         token: state.token,
         user: state.user,
       }),
+      migrate: (persistedState: unknown, version: number) => {
+        // Version < 2: user object was missing is_admin and other fields
+        // Keep token so user stays logged in, but null out stale user so
+        // fetchProfile refreshes it from the backend on next load
+        if (version < 2) {
+          const state = persistedState as { token?: string | null; user?: unknown };
+          return { token: state?.token ?? null, user: null };
+        }
+        return persistedState as { token: string | null; user: null };
+      },
     }
   )
 );
