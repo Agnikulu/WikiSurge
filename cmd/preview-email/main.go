@@ -49,7 +49,7 @@ func main() {
 		Watchlist:     []string{"Bitcoin", "Ethereum", "Solana", "Cardano"},
 	}
 
-	_, html, err := digest.RenderDigestEmail(data, user, "https://wikisurge.app", "demo-unsub-token")
+	_, html, err := digest.RenderDigestEmail(data, user, "https://wikisurge.net", "demo-unsub-token")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "render error: %v\n", err)
 		os.Exit(1)

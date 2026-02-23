@@ -39,7 +39,7 @@ func TestRenderDigestEmail_Basic(t *testing.T) {
 		UnsubToken:     "test-unsub-token-123",
 	}
 
-	subject, html, err := RenderDigestEmail(data, user, "https://wikisurge.app", user.UnsubToken)
+	subject, html, err := RenderDigestEmail(data, user, "https://wikisurge.net", user.UnsubToken)
 	if err != nil {
 		t.Fatalf("RenderDigestEmail: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestRenderDigestEmail_Basic(t *testing.T) {
 		{"stats - language", "EN"},
 		{"CTA button", "See Live Dashboard"},
 		{"unsubscribe link", "test-unsub-token-123"},
-		{"dashboard link", "https://wikisurge.app"},
+		{"dashboard link", "https://wikisurge.net"},
 	}
 
 	for _, c := range checks {

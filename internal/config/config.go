@@ -311,7 +311,7 @@ func setDefaults(config *Config) {
 
 	// Email defaults
 	if config.Email.FromAddress == "" {
-		config.Email.FromAddress = "digest@wikisurge.app"
+		config.Email.FromAddress = "digest@wikisurge.net"
 	}
 	if config.Email.FromName == "" {
 		config.Email.FromName = "WikiSurge"

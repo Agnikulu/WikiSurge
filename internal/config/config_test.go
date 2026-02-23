@@ -107,7 +107,7 @@ func TestSetDefaults_AllZeroValues(t *testing.T) {
 	assert.Equal(t, "data/wikisurge.db", cfg.Database.Path)
 
 	// Email
-	assert.Equal(t, "digest@wikisurge.app", cfg.Email.FromAddress)
+	assert.Equal(t, "digest@wikisurge.net", cfg.Email.FromAddress)
 	assert.Equal(t, "WikiSurge", cfg.Email.FromName)
 	assert.Equal(t, 10, cfg.Email.MaxConcurrentSends)
 
