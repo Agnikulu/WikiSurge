@@ -217,6 +217,9 @@ func (o *processorOrchestrator) initInfrastructure() error {
 			if esErr == nil {
 				o.esClient = esClient
 				o.esClient.StartBulkProcessor()
+				o.esClient.StartPeriodicCleanup()
+				// One-time fix: clear stuck ILM error states from old indices
+				go o.esClient.CleanupStuckILMIndices()
 				o.logger.Info().Msg("Connected to Elasticsearch")
 				o.registerComponent("elasticsearch")
 				break

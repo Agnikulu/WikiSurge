@@ -100,14 +100,14 @@ func (es *ElasticsearchClient) SetupILM() error {
 	// Create ILM policy
 	// NOTE: No rollover action — indices use date-based naming (wikipedia-edits-YYYY-MM-DD)
 	// and are created directly by the bulk indexer, not via rollover alias.
+	// The hot phase must NOT be included (even empty) because ES 8.x auto-injects
+	// a rollover action into it, which fails without a rollover alias and causes
+	// every old index to enter an infinite error/retry loop.
 	// Only the delete phase is needed for automatic retention cleanup.
 	policyName := "wikipedia-edits-policy"
 	policy := map[string]interface{}{
 		"policy": map[string]interface{}{
 			"phases": map[string]interface{}{
-				"hot": map[string]interface{}{
-					"actions": map[string]interface{}{},
-				},
 				"delete": map[string]interface{}{
 					"min_age": fmt.Sprintf("%dd", es.config.RetentionDays),
 					"actions": map[string]interface{}{
@@ -394,6 +394,90 @@ func (es *ElasticsearchClient) Search(query map[string]interface{}, indexPattern
 	metrics.ElasticsearchQueryDuration.WithLabelValues("search").Observe(duration.Seconds())
 
 	return result, nil
+}
+
+// CleanupStuckILMIndices removes ILM policy from old indices stuck in error state
+// due to the rollover alias misconfiguration. This is a one-time fix for indices
+// created before the hot phase was removed from the ILM policy.
+func (es *ElasticsearchClient) CleanupStuckILMIndices() {
+	ctx := context.Background()
+
+	// Get all wikipedia-edits-* indices
+	res, err := es.client.Cat.Indices(
+		es.client.Cat.Indices.WithContext(ctx),
+		es.client.Cat.Indices.WithIndex("wikipedia-edits-*"),
+		es.client.Cat.Indices.WithFormat("json"),
+	)
+	if err != nil {
+		log.Printf("ILM cleanup: failed to list indices: %v", err)
+		return
+	}
+	defer res.Body.Close()
+
+	var indices []map[string]interface{}
+	if err := json.NewDecoder(res.Body).Decode(&indices); err != nil {
+		log.Printf("ILM cleanup: failed to decode indices: %v", err)
+		return
+	}
+
+	cutoffDate := time.Now().AddDate(0, 0, -es.config.RetentionDays)
+	cutoffStr := cutoffDate.Format("2006-01-02")
+	todayStr := time.Now().Format("2006-01-02")
+
+	for _, index := range indices {
+		indexName, ok := index["index"].(string)
+		if !ok || !strings.HasPrefix(indexName, "wikipedia-edits-") {
+			continue
+		}
+		datePart := strings.TrimPrefix(indexName, "wikipedia-edits-")
+
+		if datePart < cutoffStr {
+			// Old index past retention — delete it directly
+			log.Printf("ILM cleanup: deleting expired index %s", indexName)
+			delRes, err := es.client.Indices.Delete([]string{indexName})
+			if err != nil {
+				log.Printf("ILM cleanup: failed to delete %s: %v", indexName, err)
+				continue
+			}
+			delRes.Body.Close()
+		} else if datePart != todayStr {
+			// Not-yet-expired old index — remove ILM policy to stop error loop
+			settingsJSON := []byte(`{"index.lifecycle.name": null, "index.lifecycle.rollover_alias": null}`)
+			settingsReq := esapi.IndicesPutSettingsRequest{
+				Index: []string{indexName},
+				Body:  bytes.NewReader(settingsJSON),
+			}
+			settingsRes, err := settingsReq.Do(ctx, es.client)
+			if err != nil {
+				log.Printf("ILM cleanup: failed to remove ILM from %s: %v", indexName, err)
+				continue
+			}
+			settingsRes.Body.Close()
+			log.Printf("ILM cleanup: removed ILM policy from %s", indexName)
+		}
+	}
+}
+
+// StartPeriodicCleanup runs DeleteOldIndices periodically as a safety net
+// in case ILM doesn't delete indices (e.g., after policy changes)
+func (es *ElasticsearchClient) StartPeriodicCleanup() {
+	es.wg.Add(1)
+	go func() {
+		defer es.wg.Done()
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := es.DeleteOldIndices(); err != nil {
+					log.Printf("Periodic index cleanup failed: %v", err)
+				}
+			case <-es.stopCh:
+				return
+			}
+		}
+	}()
 }
 
 // DeleteOldIndices manually deletes indices older than retention period
