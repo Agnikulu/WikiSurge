@@ -113,24 +113,23 @@ func (s *UserStore) CreateUser(email, passwordHash string) (*models.User, error)
 
 // GetUserByEmail fetches a user by email address. Returns nil, nil if not found.
 func (s *UserStore) GetUserByEmail(email string) (*models.User, error) {
-	return s.scanUser(s.db.QueryRow(`SELECT * FROM users WHERE email = ?`, email))
+	return s.scanUser(s.db.QueryRow(`SELECT `+userColumns+` FROM users WHERE email = ?`, email))
 }
 
 // GetUserByID fetches a user by ID. Returns nil, nil if not found.
 func (s *UserStore) GetUserByID(id string) (*models.User, error) {
-	return s.scanUser(s.db.QueryRow(`SELECT * FROM users WHERE id = ?`, id))
+	return s.scanUser(s.db.QueryRow(`SELECT `+userColumns+` FROM users WHERE id = ?`, id))
 }
 
 // GetUserByUnsubToken fetches a user by their unsubscribe token.
 func (s *UserStore) GetUserByUnsubToken(token string) (*models.User, error) {
-	return s.scanUser(s.db.QueryRow(`SELECT * FROM users WHERE unsub_token = ?`, token))
+	return s.scanUser(s.db.QueryRow(`SELECT `+userColumns+` FROM users WHERE unsub_token = ?`, token))
 }
 
 // GetUsersForDigest returns all verified users who should receive a digest of the given frequency.
 func (s *UserStore) GetUsersForDigest(freq models.DigestFrequency) ([]*models.User, error) {
 	// "both" users get both daily AND weekly digests
-	rows, err := s.db.Query(`
-		SELECT * FROM users
+	rows, err := s.db.Query(`SELECT `+userColumns+` FROM users
 		WHERE verified = 1 AND (digest_freq = ? OR digest_freq = 'both')`,
 		string(freq),
 	)
@@ -217,6 +216,12 @@ func (s *UserStore) UserCount() (int, error) {
 	return count, err
 }
 
+// userColumns lists every column in the exact order that scanUser /
+// scanUserFromRows expects.  Using explicit columns instead of SELECT *
+// avoids breakage when ALTER TABLE appends columns in a different position.
+const userColumns = `id, email, password_hash, watchlist, digest_freq, digest_content,
+	spike_threshold, unsub_token, verified, is_admin, created_at, last_digest_at`
+
 // --- internal helpers ---
 
 func (s *UserStore) scanUser(row *sql.Row) (*models.User, error) {
@@ -278,7 +283,7 @@ func (s *UserStore) scanUserFromRows(rows *sql.Rows) (*models.User, error) {
 
 // ListAllUsers returns every user in the database (for admin use).
 func (s *UserStore) ListAllUsers() ([]*models.User, error) {
-	rows, err := s.db.Query(`SELECT * FROM users ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT ` + userColumns + ` FROM users ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
