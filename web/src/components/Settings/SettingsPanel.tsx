@@ -32,9 +32,9 @@ export function SettingsPanel() {
   // Sync from store if user changes
   useEffect(() => {
     if (user) {
-      setFrequency(user.digest_frequency);
-      setContent(user.digest_content);
-      setThreshold(user.spike_threshold);
+      setFrequency(user.digest_frequency ?? 'none');
+      setContent(user.digest_content ?? 'both');
+      setThreshold(user.spike_threshold ?? 3.0);
       setWatchlist(user.watchlist ?? []);
     }
   }, [user]);
@@ -99,7 +99,7 @@ export function SettingsPanel() {
               className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold font-mono"
               style={{ background: 'rgba(0,255,136,0.15)', color: '#00ff88' }}
             >
-              {user.email[0].toUpperCase()}
+              {(user.email?.[0] ?? '?').toUpperCase()}
             </div>
             <div>
               <p className="text-sm font-mono font-semibold" style={{ color: '#e2e8f0' }}>

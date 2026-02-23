@@ -78,7 +78,7 @@ export function AdminPanel() {
         <StatCard
           label="DIGEST ACTIVE"
           value={
-            adminUsers?.filter((u) => u.digest_frequency !== 'none').length ?? 0
+            adminUsers?.filter((u) => (u.digest_frequency ?? 'none') !== 'none').length ?? 0
           }
           icon={<Mail className="h-3.5 w-3.5" />}
           color="#00aaff"
@@ -173,16 +173,16 @@ export function AdminPanel() {
                   className="px-2 py-0.5 rounded-full text-[10px] font-mono"
                   style={{
                     background:
-                      u.digest_frequency === 'none'
+                      (u.digest_frequency ?? 'none') === 'none'
                         ? 'rgba(100,100,100,0.15)'
                         : 'rgba(0,170,255,0.1)',
                     color:
-                      u.digest_frequency === 'none'
+                      (u.digest_frequency ?? 'none') === 'none'
                         ? 'rgba(226,232,240,0.35)'
                         : '#00aaff',
                   }}
                 >
-                  {u.digest_frequency.toUpperCase()}
+                  {(u.digest_frequency ?? 'none').toUpperCase()}
                 </span>
               </div>
 
@@ -192,12 +192,12 @@ export function AdminPanel() {
                   className="text-xs font-mono"
                   style={{
                     color:
-                      u.watchlist.length > 0
+                      (u.watchlist ?? []).length > 0
                         ? '#e2e8f0'
                         : 'rgba(226,232,240,0.3)',
                   }}
                 >
-                  {u.watchlist.length} page{u.watchlist.length !== 1 ? 's' : ''}
+                  {(u.watchlist ?? []).length} page{(u.watchlist ?? []).length !== 1 ? 's' : ''}
                 </span>
               </div>
 
