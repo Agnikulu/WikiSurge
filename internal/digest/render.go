@@ -12,34 +12,51 @@ import (
 
 // DigestEmailData is the template context for rendering a digest email.
 type DigestEmailData struct {
-	UserEmail        string
-	Period           string // "Daily" or "Weekly"
-	PeriodLabel      string // "yesterday" or "this week"
-	DateRange        string
-	GlobalHighlights []GlobalHighlight
-	WatchlistEvents  []WatchlistEvent
-	NotableEvents    []WatchlistEvent // only watchlist events that are notable
-	QuietEvents      []WatchlistEvent // quiet watchlist events (shown as one-liners)
-	Stats            FunStats
-	ShowWatchlist    bool
-	ShowGlobal       bool
-	DashboardURL     string
-	UnsubscribeURL   string
-	Year             int
+	UserEmail          string
+	Period             string // "Daily" or "Weekly"
+	PeriodLabel        string // "yesterday" or "this week"
+	DateRange          string
+	GlobalHighlights   []GlobalHighlight
+	EditWarHighlights  []GlobalHighlight // edit wars with detailed info
+	TrendingHighlights []GlobalHighlight // trending pages
+	WatchlistEvents    []WatchlistEvent
+	NotableEvents      []WatchlistEvent // only watchlist events that are notable
+	QuietEvents        []WatchlistEvent // quiet watchlist events (shown as one-liners)
+	Stats              FunStats
+	ShowWatchlist      bool
+	ShowGlobal         bool
+	ShowEditWars       bool
+	ShowTrending       bool
+	DashboardURL       string
+	UnsubscribeURL     string
+	Year               int
 }
 
 // RenderDigestEmail renders the HTML email body from digest data + user preferences.
 func RenderDigestEmail(data *DigestData, user *models.User, dashboardURL, unsubToken string) (subject, htmlBody string, err error) {
 	// Build template data
 	td := DigestEmailData{
-		UserEmail:        user.Email,
-		Period:           strings.Title(data.Period),
-		GlobalHighlights: data.GlobalHighlights,
-		WatchlistEvents:  data.WatchlistEvents,
-		Stats:            data.Stats,
-		DashboardURL:     dashboardURL,
-		UnsubscribeURL:   fmt.Sprintf("%s/api/digest/unsubscribe?token=%s", dashboardURL, unsubToken),
-		Year:             time.Now().Year(),
+		UserEmail:          user.Email,
+		Period:             strings.Title(data.Period),
+		GlobalHighlights:   data.GlobalHighlights,
+		EditWarHighlights:  data.EditWarHighlights,
+		TrendingHighlights: data.TrendingHighlights,
+		WatchlistEvents:    data.WatchlistEvents,
+		Stats:              data.Stats,
+		DashboardURL:       dashboardURL,
+		UnsubscribeURL:     fmt.Sprintf("%s/api/digest/unsubscribe?token=%s", dashboardURL, unsubToken),
+		Year:               time.Now().Year(),
+	}
+
+	// If pre-split slices are empty, split from GlobalHighlights for backward compat
+	if td.EditWarHighlights == nil && td.TrendingHighlights == nil {
+		for _, h := range data.GlobalHighlights {
+			if h.EventType == "edit_war" {
+				td.EditWarHighlights = append(td.EditWarHighlights, h)
+			} else {
+				td.TrendingHighlights = append(td.TrendingHighlights, h)
+			}
+		}
 	}
 
 	if data.Period == "daily" {
@@ -61,6 +78,8 @@ func RenderDigestEmail(data *DigestData, user *models.User, dashboardURL, unsubT
 
 	td.ShowWatchlist = user.DigestContent == models.DigestContentWatchlist || user.DigestContent == models.DigestContentAll
 	td.ShowGlobal = user.DigestContent == models.DigestContentGlobal || user.DigestContent == models.DigestContentAll
+	td.ShowEditWars = td.ShowGlobal && len(td.EditWarHighlights) > 0
+	td.ShowTrending = td.ShowGlobal && len(td.TrendingHighlights) > 0
 
 	// Build subject line
 	subject = buildSubjectLine(data)
@@ -173,6 +192,60 @@ func TemplateFuncs() template.FuncMap {
 			default:
 				return "💬 SIMMERING"
 			}
+		},
+		// severityBadge returns a colored severity label for edit wars.
+		"severityBadge": func(severity string) string {
+			switch severity {
+			case "critical":
+				return "🔴 CRITICAL"
+			case "high":
+				return "🟠 HIGH"
+			case "moderate":
+				return "🟡 MODERATE"
+			case "low":
+				return "🟢 LOW"
+			default:
+				return ""
+			}
+		},
+		// severityColor returns a hex color for severity level.
+		"severityColor": func(severity string) string {
+			switch severity {
+			case "critical":
+				return "#EF4444"
+			case "high":
+				return "#F59E0B"
+			case "moderate":
+				return "#EAB308"
+			case "low":
+				return "#22C55E"
+			default:
+				return "#8B949E"
+			}
+		},
+		// joinEditors joins editor names with commas, capping at maxShow.
+		"joinEditors": func(editors []string, maxShow int) string {
+			if len(editors) == 0 {
+				return ""
+			}
+			if maxShow <= 0 {
+				maxShow = 3
+			}
+			if len(editors) <= maxShow {
+				return strings.Join(editors, ", ")
+			}
+			shown := strings.Join(editors[:maxShow], ", ")
+			return fmt.Sprintf("%s +%d more", shown, len(editors)-maxShow)
+		},
+		// truncate limits a string to n characters with an ellipsis.
+		"truncate": func(s string, n int) string {
+			if len(s) <= n {
+				return s
+			}
+			if n < 4 {
+				return s[:n]
+			}
+			return s[:n-3] + "..."
 		},
 	}
 }
@@ -324,22 +397,157 @@ Here's what happened on Wikipedia {{.PeriodLabel}} ⚡
 </td>
 </tr>
 
-{{if and .ShowGlobal .GlobalHighlights}}
+{{if .ShowEditWars}}
 <!-- ============================================ -->
-<!-- GLOBAL HIGHLIGHTS — RANKED CARDS            -->
+<!-- MOST POPULAR EDIT WARS — DETAILED CARDS     -->
+<!-- ============================================ -->
+<tr>
+<td style="padding:16px 20px 0;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#161B22;border-radius:20px;overflow:hidden;border:1px solid #30363D;">
+<!-- Red accent bar for conflict section -->
+<tr><td style="height:4px;background:linear-gradient(90deg,#EF4444 0%,#F59E0B 50%,#EF4444 100%);font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr><td style="padding:28px 32px 8px;">
+<p style="margin:0;font-size:11px;font-weight:700;color:#EF4444;text-transform:uppercase;letter-spacing:3px;">⚔️ Most Popular Edit Wars</p>
+</td></tr>
+
+{{range .EditWarHighlights}}
+<tr>
+<td style="padding:10px 24px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#0D1117;border-radius:14px;border:1px solid #30363D;overflow:hidden;">
+<!-- Intensity accent bar -->
+<tr><td style="height:3px;background-color:{{intensityColor .EditCount}};font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr>
+<td style="padding:20px 24px 12px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+<tr>
+<td width="44" valign="top">
+<p style="margin:0;font-size:28px;line-height:1;">{{rankLabel .Rank}}</p>
+</td>
+<td style="padding-left:8px;" valign="top">
+<p style="margin:0;font-size:17px;font-weight:700;color:#E6EDF3;line-height:1.3;">⚔️ {{.Title}}</p>
+</td>
+<td width="80" valign="top" style="text-align:right;">
+{{if gt .EditCount 0}}
+<p style="margin:0;font-size:20px;font-weight:800;color:{{intensityColor .EditCount}};">{{formatInt .EditCount}}</p>
+<p style="margin:2px 0 0;font-size:10px;color:#8B949E;text-transform:uppercase;letter-spacing:1px;">edits</p>
+{{end}}
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<!-- LLM Summary -->
+{{if .LLMSummary}}
+<tr>
+<td style="padding:0 24px 12px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#161B22;border-radius:10px;border-left:3px solid #8B5CF6;">
+<tr><td style="padding:12px 16px;">
+<p style="margin:0;font-size:13px;color:#C9D1D9;line-height:1.5;">{{truncate .LLMSummary 280}}</p>
+</td></tr>
+</table>
+</td>
+</tr>
+{{else}}
+{{if .Summary}}
+<tr>
+<td style="padding:0 24px 12px;">
+<p style="margin:0;font-size:13px;color:#8B949E;line-height:1.4;padding-left:52px;">{{.Summary}}</p>
+</td>
+</tr>
+{{end}}
+{{end}}
+
+<!-- Stats row: editors, reverts, severity, content area -->
+<tr>
+<td style="padding:0 24px 16px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+<tr>
+{{if gt .EditorCount 0}}
+<td style="padding-right:16px;vertical-align:middle;">
+<table role="presentation" cellspacing="0" cellpadding="0" style="background-color:#1C1017;border-radius:8px;border:1px solid #3D1F1F;">
+<tr><td style="padding:6px 12px;">
+<p style="margin:0;font-size:11px;color:#E6EDF3;font-weight:600;">👥 {{.EditorCount}} editors</p>
+</td></tr>
+</table>
+</td>
+{{end}}
+{{if gt .RevertCount 0}}
+<td style="padding-right:16px;vertical-align:middle;">
+<table role="presentation" cellspacing="0" cellpadding="0" style="background-color:#1C1017;border-radius:8px;border:1px solid #3D1F1F;">
+<tr><td style="padding:6px 12px;">
+<p style="margin:0;font-size:11px;color:#E6EDF3;font-weight:600;">🔄 {{.RevertCount}} reverts</p>
+</td></tr>
+</table>
+</td>
+{{end}}
+{{if .Severity}}
+<td style="padding-right:16px;vertical-align:middle;">
+<table role="presentation" cellspacing="0" cellpadding="0" style="background-color:{{severityColor .Severity}};border-radius:8px;opacity:0.9;">
+<tr><td style="padding:6px 12px;">
+<p style="margin:0;font-size:11px;color:#0D1117;font-weight:700;">{{severityBadge .Severity}}</p>
+</td></tr>
+</table>
+</td>
+{{end}}
+{{if .ContentArea}}
+<td style="vertical-align:middle;">
+<p style="margin:0;font-size:11px;color:#8B949E;font-style:italic;">📌 {{truncate .ContentArea 40}}</p>
+</td>
+{{end}}
+</tr>
+</table>
+</td>
+</tr>
+
+<!-- Editors list -->
+{{if .Editors}}
+<tr>
+<td style="padding:0 24px 16px;">
+<p style="margin:0;font-size:11px;color:#484F58;">Key participants: <span style="color:#8B949E;">{{joinEditors .Editors 4}}</span></p>
+</td>
+</tr>
+{{end}}
+
+<!-- Battle intensity -->
+<tr>
+<td style="padding:0 24px 14px;">
+<table role="presentation" cellspacing="0" cellpadding="0">
+<tr>
+<td style="background-color:{{intensityColor .EditCount}};border-radius:10px;padding:3px 12px;">
+<p style="margin:0;font-size:10px;font-weight:700;color:#0D1117;">{{battleIntensity .EditCount}}</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+</table>
+</td>
+</tr>
+{{end}}
+
+<tr><td style="padding:0 0 24px;">&nbsp;</td></tr>
+</table>
+</td>
+</tr>
+{{end}}
+
+{{if .ShowTrending}}
+<!-- ============================================ -->
+<!-- MOST TRENDING PAGES                         -->
 <!-- ============================================ -->
 <tr>
 <td style="padding:16px 20px 0;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#161B22;border-radius:20px;overflow:hidden;border:1px solid #30363D;">
 <tr><td style="padding:28px 32px 8px;">
-<p style="margin:0;font-size:11px;font-weight:700;color:#8B949E;text-transform:uppercase;letter-spacing:3px;">🌍 Global Highlights</p>
+<p style="margin:0;font-size:11px;font-weight:700;color:#F59E0B;text-transform:uppercase;letter-spacing:3px;">🔥 Most Trending Pages</p>
 </td></tr>
 
-{{range .GlobalHighlights}}
+{{range .TrendingHighlights}}
 <tr>
 <td style="padding:10px 24px;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#0D1117;border-radius:14px;border:1px solid #30363D;overflow:hidden;">
-<!-- Intensity accent bar -->
 <tr><td style="height:3px;background-color:{{intensityColor .EditCount}};font-size:0;line-height:0;">&nbsp;</td></tr>
 <tr>
 <td style="padding:16px 20px;">
@@ -349,7 +557,7 @@ Here's what happened on Wikipedia {{.PeriodLabel}} ⚡
 <p style="margin:0;font-size:28px;line-height:1;">{{rankLabel .Rank}}</p>
 </td>
 <td style="padding-left:8px;" valign="top">
-<p style="margin:0;font-size:16px;font-weight:700;color:#E6EDF3;line-height:1.3;">{{eventIcon .EventType}} {{.Title}}</p>
+<p style="margin:0;font-size:16px;font-weight:700;color:#E6EDF3;line-height:1.3;">🔥 {{.Title}}</p>
 <p style="margin:4px 0 0;font-size:13px;color:#8B949E;line-height:1.4;">{{.Summary}}</p>
 </td>
 <td width="70" valign="top" style="text-align:right;">

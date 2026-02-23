@@ -2,6 +2,7 @@ package digest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/Agnikulu/WikiSurge/internal/models"
 	"github.com/Agnikulu/WikiSurge/internal/storage"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 )
 
@@ -22,6 +24,8 @@ type DigestData struct {
 	PeriodStart      time.Time         `json:"period_start"`
 	PeriodEnd        time.Time         `json:"period_end"`
 	GlobalHighlights []GlobalHighlight `json:"global_highlights"`
+	EditWarHighlights  []GlobalHighlight `json:"edit_war_highlights"`
+	TrendingHighlights []GlobalHighlight `json:"trending_highlights"`
 	WatchlistEvents  []WatchlistEvent  `json:"watchlist_events"`
 	Stats            FunStats          `json:"stats"`
 }
@@ -35,6 +39,14 @@ type GlobalHighlight struct {
 	SpikeRatio float64 `json:"spike_ratio,omitempty"`
 	Summary    string  `json:"summary"`
 	ServerURL  string  `json:"server_url,omitempty"`
+
+	// Edit war detail fields (populated from LLM analysis + Redis state)
+	EditorCount int      `json:"editor_count,omitempty"`
+	Editors     []string `json:"editors,omitempty"`
+	RevertCount int      `json:"revert_count,omitempty"`
+	Severity    string   `json:"severity,omitempty"`    // "low", "moderate", "high", "critical"
+	LLMSummary  string   `json:"llm_summary,omitempty"` // LLM-generated conflict narrative
+	ContentArea string   `json:"content_area,omitempty"` // topic area of disagreement
 }
 
 // WatchlistEvent is a per-user event for a page they track.
@@ -71,6 +83,7 @@ type Collector struct {
 	alerts   *storage.RedisAlerts
 	hotPages *storage.HotPageTracker
 	stats    *storage.StatsTracker
+	redis    *redis.Client
 	logger   zerolog.Logger
 }
 
@@ -87,6 +100,26 @@ func NewCollector(
 		alerts:   alerts,
 		hotPages: hotPages,
 		stats:    stats,
+		logger:   logger.With().Str("component", "digest-collector").Logger(),
+	}
+}
+
+// NewCollectorWithRedis creates a digest data collector with direct Redis access
+// for fetching cached LLM analysis data for edit war enrichment.
+func NewCollectorWithRedis(
+	trending *storage.TrendingScorer,
+	alerts *storage.RedisAlerts,
+	hotPages *storage.HotPageTracker,
+	stats *storage.StatsTracker,
+	redisClient *redis.Client,
+	logger zerolog.Logger,
+) *Collector {
+	return &Collector{
+		trending: trending,
+		alerts:   alerts,
+		hotPages: hotPages,
+		stats:    stats,
+		redis:    redisClient,
 		logger:   logger.With().Str("component", "digest-collector").Logger(),
 	}
 }
@@ -117,6 +150,19 @@ func (c *Collector) CollectGlobal(ctx context.Context, period string) (*DigestDa
 		c.logger.Warn().Err(err).Msg("failed to collect highlights, continuing with empty")
 	}
 	data.GlobalHighlights = highlights
+
+	// --- Split into edit wars vs trending ---
+	for i := range highlights {
+		switch highlights[i].EventType {
+		case "edit_war":
+			data.EditWarHighlights = append(data.EditWarHighlights, highlights[i])
+		default:
+			data.TrendingHighlights = append(data.TrendingHighlights, highlights[i])
+		}
+	}
+
+	// --- Enrich edit wars with LLM analysis and editor data ---
+	c.enrichEditWars(ctx, data.EditWarHighlights)
 
 	// --- Fun stats ---
 	funStats, err := c.collectFunStats(ctx, since)
@@ -237,9 +283,9 @@ func (c *Collector) collectHighlights(ctx context.Context, since time.Time) ([]G
 		return highlights[i].EditCount > highlights[j].EditCount
 	})
 
-	// Cap at top 5
-	if len(highlights) > 5 {
-		highlights = highlights[:5]
+	// Cap at top 10 (up to 5 edit wars + 5 trending shown in separate sections)
+	if len(highlights) > 10 {
+		highlights = highlights[:10]
 	}
 
 	// Assign ranks
@@ -248,6 +294,110 @@ func (c *Collector) collectHighlights(ctx context.Context, since time.Time) ([]G
 	}
 
 	return highlights, nil
+}
+
+// enrichEditWars enriches edit war highlights with LLM analysis data, editor
+// info, and revert counts from Redis. This adds the detailed information that
+// appears on the edit war details page into the digest email.
+func (c *Collector) enrichEditWars(ctx context.Context, wars []GlobalHighlight) {
+	if c.redis == nil || len(wars) == 0 {
+		return
+	}
+
+	for i := range wars {
+		title := wars[i].Title
+
+		// 1. Fetch cached LLM analysis
+		cacheKey := fmt.Sprintf("editwar:analysis:%s", title)
+		if cached, err := c.redis.Get(ctx, cacheKey).Result(); err == nil && cached != "" {
+			var analysis struct {
+				Summary     string `json:"summary"`
+				ContentArea string `json:"content_area"`
+				Severity    string `json:"severity"`
+				EditCount   int    `json:"edit_count"`
+				Sides       []struct {
+					Position string `json:"position"`
+					Editors  []struct {
+						User      string `json:"user"`
+						EditCount int    `json:"edit_count"`
+						Role      string `json:"role"`
+					} `json:"editors"`
+				} `json:"sides"`
+			}
+			if json.Unmarshal([]byte(cached), &analysis) == nil {
+				if analysis.Summary != "" {
+					wars[i].LLMSummary = analysis.Summary
+				}
+				if analysis.ContentArea != "" {
+					wars[i].ContentArea = analysis.ContentArea
+				}
+				if analysis.Severity != "" {
+					wars[i].Severity = analysis.Severity
+				}
+				if analysis.EditCount > 0 && wars[i].EditCount == 0 {
+					wars[i].EditCount = analysis.EditCount
+				}
+				// Collect unique editors from all sides
+				editorSet := make(map[string]bool)
+				for _, side := range analysis.Sides {
+					for _, ed := range side.Editors {
+						editorSet[ed.User] = true
+					}
+				}
+				if len(editorSet) > 0 {
+					editors := make([]string, 0, len(editorSet))
+					for ed := range editorSet {
+						editors = append(editors, ed)
+					}
+					sort.Strings(editors)
+					wars[i].Editors = editors
+					wars[i].EditorCount = len(editors)
+				}
+			}
+		}
+
+		// 2. Fall back to editor hash if analysis didn't provide editors
+		if wars[i].EditorCount == 0 {
+			editorsKey := fmt.Sprintf("editwar:editors:%s", title)
+			editorMap, err := c.redis.HGetAll(ctx, editorsKey).Result()
+			if err == nil && len(editorMap) > 0 {
+				editors := make([]string, 0, len(editorMap))
+				for editor := range editorMap {
+					editors = append(editors, editor)
+				}
+				sort.Strings(editors)
+				wars[i].Editors = editors
+				wars[i].EditorCount = len(editors)
+			}
+		}
+
+		// 3. Count reverts from changes list
+		changesKey := fmt.Sprintf("editwar:changes:%s", title)
+		changes, err := c.redis.LRange(ctx, changesKey, 0, -1).Result()
+		if err == nil && len(changes) > 0 {
+			revertCount := 0
+			for _, ch := range changes {
+				if len(ch) > 0 && (ch[0] == '-') {
+					revertCount++
+				}
+			}
+			wars[i].RevertCount = revertCount
+		}
+
+		// 4. Update the summary to use LLM summary if available
+		if wars[i].LLMSummary != "" {
+			wars[i].Summary = wars[i].LLMSummary
+		} else if wars[i].EditorCount > 0 {
+			wars[i].Summary = fmt.Sprintf("Edit war with %d editors involved", wars[i].EditorCount)
+		}
+
+		c.logger.Debug().
+			Str("title", title).
+			Int("editor_count", wars[i].EditorCount).
+			Str("severity", wars[i].Severity).
+			Bool("has_llm_summary", wars[i].LLMSummary != "").
+			Msg("enriched edit war for digest")
+	}
 }
 
 func (c *Collector) collectFunStats(ctx context.Context, since time.Time) (FunStats, error) {

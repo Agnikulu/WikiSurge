@@ -382,8 +382,8 @@ func TestHighlightsCappedAtFive(t *testing.T) {
 		t.Fatalf("CollectGlobal: %v", err)
 	}
 
-	if len(data.GlobalHighlights) > 5 {
-		t.Errorf("highlights should be capped at 5, got %d", len(data.GlobalHighlights))
+	if len(data.GlobalHighlights) > 10 {
+		t.Errorf("highlights should be capped at 10, got %d", len(data.GlobalHighlights))
 	}
 }
 
@@ -595,5 +595,150 @@ func TestWatchlist_MixedPagesSort(t *testing.T) {
 	}
 	if personalized.WatchlistEvents[2].Title != "Knitting" {
 		t.Errorf("third event = %q, want Knitting (quiet)", personalized.WatchlistEvents[2].Title)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Edit war / trending split tests
+// ---------------------------------------------------------------------------
+
+func TestCollectGlobal_SplitsEditWarsAndTrending(t *testing.T) {
+	collector, rc, _ := setupTestCollector(t)
+	ctx := context.Background()
+
+	// Seed edit war alerts only — no trending data
+	seedEditWarAlert(t, rc, "Bitcoin", 200)
+	seedEditWarAlert(t, rc, "OpenAI", 500)
+
+	data, err := collector.CollectGlobal(ctx, "daily")
+	if err != nil {
+		t.Fatalf("CollectGlobal: %v", err)
+	}
+
+	if len(data.EditWarHighlights) != 2 {
+		t.Errorf("expected 2 edit war highlights, got %d", len(data.EditWarHighlights))
+	}
+	if len(data.TrendingHighlights) != 0 {
+		t.Errorf("expected 0 trending highlights, got %d", len(data.TrendingHighlights))
+	}
+
+	// EditWarHighlights should be ordered by edit count
+	if len(data.EditWarHighlights) >= 2 {
+		if data.EditWarHighlights[0].Title != "OpenAI" {
+			t.Errorf("first edit war = %q, want OpenAI (highest edits)", data.EditWarHighlights[0].Title)
+		}
+	}
+}
+
+func TestEnrichEditWars_WithCachedAnalysis(t *testing.T) {
+	collector, rc, _ := setupTestCollector(t)
+	// Inject Redis client for enrichment
+	collector.redis = rc
+	ctx := context.Background()
+
+	// Seed edit war alert
+	seedEditWarAlert(t, rc, "Climate_change", 300)
+
+	// Seed a cached LLM analysis
+	analysis := map[string]interface{}{
+		"summary":      "Editors disagree about temperature data attribution.",
+		"content_area": "Climate attribution",
+		"severity":     "high",
+		"edit_count":   300,
+		"sides": []map[string]interface{}{
+			{
+				"position": "Human-caused",
+				"editors": []map[string]interface{}{
+					{"user": "Alice", "edit_count": 10, "role": "content defender"},
+					{"user": "Bob", "edit_count": 8, "role": "reverter"},
+				},
+			},
+			{
+				"position": "Natural cycles",
+				"editors": []map[string]interface{}{
+					{"user": "Charlie", "edit_count": 12, "role": "primary aggressor"},
+				},
+			},
+		},
+	}
+	analysisJSON, _ := json.Marshal(analysis)
+	rc.Set(ctx, "editwar:analysis:Climate_change", string(analysisJSON), 0)
+
+	data, err := collector.CollectGlobal(ctx, "daily")
+	if err != nil {
+		t.Fatalf("CollectGlobal: %v", err)
+	}
+
+	if len(data.EditWarHighlights) == 0 {
+		t.Fatal("expected at least 1 edit war highlight")
+	}
+
+	ew := data.EditWarHighlights[0]
+	if ew.LLMSummary == "" {
+		t.Error("expected LLM summary to be populated from cached analysis")
+	}
+	if ew.ContentArea != "Climate attribution" {
+		t.Errorf("content_area = %q, want 'Climate attribution'", ew.ContentArea)
+	}
+	if ew.Severity != "high" {
+		t.Errorf("severity = %q, want 'high'", ew.Severity)
+	}
+	if ew.EditorCount != 3 {
+		t.Errorf("editor_count = %d, want 3", ew.EditorCount)
+	}
+	if len(ew.Editors) != 3 {
+		t.Errorf("editors = %v, want 3 editors", ew.Editors)
+	}
+}
+
+func TestEnrichEditWars_FallbackToEditorHash(t *testing.T) {
+	collector, rc, _ := setupTestCollector(t)
+	collector.redis = rc
+	ctx := context.Background()
+
+	seedEditWarAlert(t, rc, "Bitcoin", 100)
+
+	// No LLM analysis cached, but set editor hash
+	rc.HSet(ctx, "editwar:editors:Bitcoin", "Alice", "5")
+	rc.HSet(ctx, "editwar:editors:Bitcoin", "Bob", "3")
+
+	data, err := collector.CollectGlobal(ctx, "daily")
+	if err != nil {
+		t.Fatalf("CollectGlobal: %v", err)
+	}
+
+	if len(data.EditWarHighlights) == 0 {
+		t.Fatal("expected edit war highlights")
+	}
+
+	ew := data.EditWarHighlights[0]
+	if ew.EditorCount != 2 {
+		t.Errorf("editor_count = %d, want 2", ew.EditorCount)
+	}
+	if ew.LLMSummary != "" {
+		t.Error("should not have LLM summary without cached analysis")
+	}
+}
+
+func TestEnrichEditWars_NoRedisClient(t *testing.T) {
+	collector, rc, _ := setupTestCollector(t)
+	// Do NOT set collector.redis — enrichment should be a no-op
+	ctx := context.Background()
+
+	seedEditWarAlert(t, rc, "Bitcoin", 100)
+
+	data, err := collector.CollectGlobal(ctx, "daily")
+	if err != nil {
+		t.Fatalf("CollectGlobal: %v", err)
+	}
+
+	if len(data.EditWarHighlights) == 0 {
+		t.Fatal("expected edit war highlights")
+	}
+
+	// Without Redis, enrichment is skipped
+	ew := data.EditWarHighlights[0]
+	if ew.EditorCount != 0 {
+		t.Errorf("editor_count should be 0 without Redis, got %d", ew.EditorCount)
 	}
 }

@@ -225,7 +225,7 @@ func TestE2E_FullDigestPipeline(t *testing.T) {
 		{"header", "WikiSurge"},
 		{"watchlist heading", "Your Watchlist"},
 		{"watchlist page", "Bitcoin"},
-		{"global heading", "Global Highlights"},
+		{"global heading", "Most Popular Edit Wars"},
 		{"edit war page", "OpenAI"},
 		{"stats heading", "Fun Stats"},
 		{"total edits", "163.0K"},
@@ -248,8 +248,8 @@ func TestE2E_FullDigestPipeline(t *testing.T) {
 	if strings.Contains(bobEmail.HTML, "Your Watchlist") {
 		t.Error("Bob (global-only) should NOT see Watchlist section")
 	}
-	if !strings.Contains(bobEmail.HTML, "Global Highlights") {
-		t.Error("Bob should see Global Highlights")
+	if !strings.Contains(bobEmail.HTML, "Most Popular Edit Wars") {
+		t.Error("Bob should see Most Popular Edit Wars")
 	}
 	if !strings.Contains(bobEmail.HTML, "Fun Stats") {
 		t.Error("Bob should see Fun Stats")

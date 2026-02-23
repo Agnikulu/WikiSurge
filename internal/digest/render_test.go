@@ -61,7 +61,7 @@ func TestRenderDigestEmail_Basic(t *testing.T) {
 		{"notable event", "Bitcoin"},
 		{"edit war summary", "Edit war detected"},
 		{"quiet event", "Taylor Swift"},
-		{"global heading", "Global Highlights"},
+		{"global heading", "Most Popular Edit Wars"},
 		{"global #1", "2026 Turkish earthquake"},
 		{"global #3", "Boeing"},
 		{"stats - total", "2.4M"},
@@ -128,7 +128,7 @@ func TestRenderDigestEmail_WatchlistOnly(t *testing.T) {
 		t.Fatalf("RenderDigestEmail: %v", err)
 	}
 
-	if strings.Contains(html, "Global Highlights") {
+	if strings.Contains(html, "Most Popular Edit Wars") || strings.Contains(html, "Most Trending Pages") {
 		t.Error("watchlist-only user should not see Global Highlights section")
 	}
 }
@@ -161,8 +161,8 @@ func TestRenderDigestEmail_GlobalOnly(t *testing.T) {
 	if strings.Contains(html, "Your Watchlist") {
 		t.Error("global-only user should not see Watchlist section")
 	}
-	if !strings.Contains(html, "Global Highlights") {
-		t.Error("global-only user should see Global Highlights")
+	if !strings.Contains(html, "Most Popular Edit Wars") {
+		t.Error("global-only user should see edit wars section")
 	}
 }
 
@@ -228,5 +228,198 @@ func TestEventIcon(t *testing.T) {
 	}
 	if iconFn("unknown") != "📄" {
 		t.Error("unknown icon wrong")
+	}
+}
+
+func TestRenderDigestEmail_EditWarDetails(t *testing.T) {
+	data := &DigestData{
+		Period:      "daily",
+		PeriodStart: time.Now().Add(-24 * time.Hour),
+		PeriodEnd:   time.Now(),
+		EditWarHighlights: []GlobalHighlight{
+			{
+				Rank: 1, Title: "Climate_change", EditCount: 500, EventType: "edit_war",
+				EditorCount: 12, Editors: []string{"Alice", "Bob", "Charlie", "Diana", "Eve"},
+				RevertCount: 18, Severity: "critical",
+				LLMSummary:  "Editors are clashing over the attribution of recent temperature data to human activity vs natural cycles.",
+				ContentArea: "Attribution of climate data",
+				Summary:     "Editors are clashing over the attribution of recent temperature data to human activity vs natural cycles.",
+			},
+		},
+		TrendingHighlights: []GlobalHighlight{
+			{Rank: 1, Title: "Mars Rover", EditCount: 80, EventType: "trending", Summary: "Trending (score: 900)"},
+		},
+		Stats: FunStats{TotalEdits: 500000},
+	}
+
+	user := &models.User{
+		Email:         "test@example.com",
+		DigestContent: models.DigestContentAll,
+		UnsubToken:    "t",
+	}
+
+	_, html, err := RenderDigestEmail(data, user, "http://localhost", "t")
+	if err != nil {
+		t.Fatalf("RenderDigestEmail: %v", err)
+	}
+
+	checks := []struct {
+		label string
+		want  string
+	}{
+		{"edit wars heading", "Most Popular Edit Wars"},
+		{"trending heading", "Most Trending Pages"},
+		{"edit war title", "Climate_change"},
+		{"LLM summary", "attribution of recent temperature data"},
+		{"editor count", "12 editors"},
+		{"revert count", "18 reverts"},
+		{"severity", "CRITICAL"},
+		{"content area", "Attribution of climate data"},
+		{"editors list", "Alice"},
+		{"trending title", "Mars Rover"},
+	}
+
+	for _, c := range checks {
+		if !strings.Contains(html, c.want) {
+			t.Errorf("HTML missing %s (looking for %q)", c.label, c.want)
+		}
+	}
+}
+
+func TestRenderDigestEmail_EditWarWithoutLLM(t *testing.T) {
+	data := &DigestData{
+		Period:      "daily",
+		PeriodStart: time.Now().Add(-24 * time.Hour),
+		PeriodEnd:   time.Now(),
+		EditWarHighlights: []GlobalHighlight{
+			{Rank: 1, Title: "Bitcoin", EditCount: 200, EventType: "edit_war", Summary: "Edit war detected"},
+		},
+		Stats: FunStats{TotalEdits: 100},
+	}
+
+	user := &models.User{
+		Email:         "test@example.com",
+		DigestContent: models.DigestContentAll,
+		UnsubToken:    "t",
+	}
+
+	_, html, err := RenderDigestEmail(data, user, "http://localhost", "t")
+	if err != nil {
+		t.Fatalf("RenderDigestEmail: %v", err)
+	}
+
+	if !strings.Contains(html, "Most Popular Edit Wars") {
+		t.Error("should show edit wars section")
+	}
+	if !strings.Contains(html, "Bitcoin") {
+		t.Error("should show Bitcoin")
+	}
+	if !strings.Contains(html, "Edit war detected") {
+		t.Error("should show fallback summary")
+	}
+}
+
+func TestRenderDigestEmail_TrendingOnly(t *testing.T) {
+	data := &DigestData{
+		Period:      "daily",
+		PeriodStart: time.Now().Add(-24 * time.Hour),
+		PeriodEnd:   time.Now(),
+		TrendingHighlights: []GlobalHighlight{
+			{Rank: 1, Title: "Taylor Swift", EditCount: 200, EventType: "trending", Summary: "Album drop edits"},
+		},
+		Stats: FunStats{TotalEdits: 100},
+	}
+
+	user := &models.User{
+		Email:         "test@example.com",
+		DigestContent: models.DigestContentGlobal,
+		UnsubToken:    "t",
+	}
+
+	_, html, err := RenderDigestEmail(data, user, "http://localhost", "t")
+	if err != nil {
+		t.Fatalf("RenderDigestEmail: %v", err)
+	}
+
+	if strings.Contains(html, "Most Popular Edit Wars") {
+		t.Error("should NOT show edit wars section when no edit wars exist")
+	}
+	if !strings.Contains(html, "Most Trending Pages") {
+		t.Error("should show trending section")
+	}
+	if !strings.Contains(html, "Taylor Swift") {
+		t.Error("should show Taylor Swift")
+	}
+}
+
+func TestSeverityBadge(t *testing.T) {
+	fns := TemplateFuncs()
+	fn := fns["severityBadge"].(func(string) string)
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"critical", "CRITICAL"},
+		{"high", "HIGH"},
+		{"moderate", "MODERATE"},
+		{"low", "LOW"},
+		{"unknown", ""},
+	}
+
+	for _, tt := range tests {
+		got := fn(tt.input)
+		if tt.want != "" && !strings.Contains(got, tt.want) {
+			t.Errorf("severityBadge(%q) = %q, want contains %q", tt.input, got, tt.want)
+		}
+		if tt.want == "" && got != "" {
+			t.Errorf("severityBadge(%q) = %q, want empty", tt.input, got)
+		}
+	}
+}
+
+func TestJoinEditors(t *testing.T) {
+	fns := TemplateFuncs()
+	fn := fns["joinEditors"].(func([]string, int) string)
+
+	tests := []struct {
+		editors  []string
+		maxShow  int
+		want     string
+	}{
+		{nil, 3, ""},
+		{[]string{"Alice"}, 3, "Alice"},
+		{[]string{"Alice", "Bob"}, 3, "Alice, Bob"},
+		{[]string{"Alice", "Bob", "Charlie", "Diana", "Eve"}, 3, "Alice, Bob, Charlie +2 more"},
+	}
+
+	for _, tt := range tests {
+		got := fn(tt.editors, tt.maxShow)
+		if got != tt.want {
+			t.Errorf("joinEditors(%v, %d) = %q, want %q", tt.editors, tt.maxShow, got, tt.want)
+		}
+	}
+}
+
+func TestTruncate(t *testing.T) {
+	fns := TemplateFuncs()
+	fn := fns["truncate"].(func(string, int) string)
+
+	tests := []struct {
+		input string
+		n     int
+		want  string
+	}{
+		{"short", 10, "short"},
+		{"this is a long string", 10, "this is..."},
+		{"abc", 3, "abc"},
+		{"abcd", 4, "abcd"},
+	}
+
+	for _, tt := range tests {
+		got := fn(tt.input, tt.n)
+		if got != tt.want {
+			t.Errorf("truncate(%q, %d) = %q, want %q", tt.input, tt.n, got, tt.want)
+		}
 	}
 }
