@@ -94,12 +94,12 @@ export function Header() {
                 border: `1px solid ${activeTab === 'settings' ? 'rgba(0,255,136,0.3)' : 'rgba(0,255,136,0.1)'}`,
                 color: activeTab === 'settings' ? '#00ff88' : 'rgba(0,255,136,0.5)',
               }}
-              title={user ? `Settings (${user.email})` : 'Sign in'}
+              title={user ? `Settings (${user.email ?? ''})` : 'Sign in'}
             >
               {user ? (
                 <>
                   <User className="h-3.5 w-3.5" />
-                  <span className="hidden lg:inline max-w-[80px] truncate">{user.email.split('@')[0]}</span>
+                  <span className="hidden lg:inline max-w-[80px] truncate">{(user.email ?? '').split('@')[0]}</span>
                 </>
               ) : (
                 <>

@@ -83,6 +83,24 @@ export function SettingsPanel() {
 
   if (!user) return null;
 
+  // Guard against malformed/partial user object from stale localStorage
+  if (!user?.id || !user?.email) {
+    return (
+      <div className="max-w-2xl mx-auto text-center py-12">
+        <p className="text-xs font-mono mb-4" style={{ color: 'rgba(0,255,136,0.5)' }}>
+          Session data is incomplete. Please sign in again.
+        </p>
+        <button
+          onClick={logout}
+          className="px-4 py-2 rounded-lg text-xs font-mono font-bold"
+          style={{ background: 'rgba(0,255,136,0.12)', border: '1px solid rgba(0,255,136,0.3)', color: '#00ff88' }}
+        >
+          SIGN IN
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Account header */}
