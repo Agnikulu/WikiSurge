@@ -21,8 +21,8 @@
 ---
 
 <div align="center">
-<a href="docs/assets/dashboard.png">
-<img src="docs/assets/dashboard.png" alt="WikiSurge Dashboard" width="800"/>
+<a href="docs/assets/dashboard_img.png">
+<img src="docs/assets/dashboard_img.png" alt="WikiSurge Dashboard" width="800"/>
 </a>
 <br/>
 <sub><b>Live dashboard</b> — real-time edits monitor, language distribution, spike alerts, trending pages, full-text search, and WebSocket-powered live feed · <i>click to expand</i></sub>
@@ -45,15 +45,7 @@ This isn't a toy project with a single API call. It's a distributed system with:
 
 ---
 
-## Dashboard
-
-<div align="center">
-<img src="docs/assets/edit-wars.gif" alt="WikiSurge Edit War Analysis" width="100%"/>
-<br/>
-<sub><b>AI-powered edit war analysis</b> — LLM identifies opposing sides, editor roles, content area, severity, and explains the conflict in plain English</sub>
-</div>
-
-<br/>
+## Features
 
 <table>
 <tr>
@@ -97,6 +89,16 @@ This isn't a toy project with a single API call. It's a distributed system with:
 </td>
 </tr>
 </table>
+
+### AI-Powered Edit War Analysis
+
+<div align="center">
+<a href="docs/assets/edit-wars.gif">
+<img src="docs/assets/edit-wars.gif" alt="WikiSurge Edit War Analysis" width="800"/>
+</a>
+<br/>
+<sub>LLM identifies opposing sides, editor roles, content area, severity, and explains the conflict in plain English · <i>click to expand</i></sub>
+</div>
 
 ---
 
