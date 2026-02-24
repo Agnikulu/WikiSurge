@@ -230,14 +230,14 @@ func TestOverrideWithEnv_Email(t *testing.T) {
 
 	t.Setenv("EMAIL_API_KEY", "re_test_key")
 	t.Setenv("EMAIL_FROM", "noreply@example.com")
-	t.Setenv("DASHBOARD_URL", "https://app.wikisurge.com")
+	t.Setenv("DASHBOARD_URL", "https://wikisurge.net")
 	overrideWithEnv(cfg)
 
 	assert.True(t, cfg.Email.Enabled)
 	assert.Equal(t, "resend", cfg.Email.Provider) // auto-selected
 	assert.Equal(t, "re_test_key", cfg.Email.APIKey)
 	assert.Equal(t, "noreply@example.com", cfg.Email.FromAddress)
-	assert.Equal(t, "https://app.wikisurge.com", cfg.Email.DashboardURL)
+	assert.Equal(t, "https://wikisurge.net", cfg.Email.DashboardURL)
 }
 
 func TestOverrideWithEnv_EmailSMTP(t *testing.T) {

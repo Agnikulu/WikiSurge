@@ -1056,7 +1056,7 @@ docker-compose logs -f --tail=100
 curl http://localhost:8080/api/stats
 
 # 4. Verify user access
-curl https://wikisurge.com/api/trending
+curl https://wikisurge.net/api/trending
 
 # 5. Send all-clear notification
 curl -X POST http://localhost:8080/admin/broadcast \

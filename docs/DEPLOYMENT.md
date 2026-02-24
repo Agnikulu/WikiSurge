@@ -910,7 +910,7 @@ export ES_PASSWORD=changeme
 # API
 export API_PORT=8080
 export API_HOST=0.0.0.0
-export CORS_ORIGINS=https://wikisurge.com
+export CORS_ORIGINS=https://wikisurge.net
 
 # Ingestor
 export WIKIMEDIA_STREAM_URL=https://stream.wikimedia.org/v2/stream/recentchange
@@ -969,7 +969,7 @@ elasticsearch:
 api:
   port: 8080
   host: "0.0.0.0"
-  cors_origins: ["https://wikisurge.com"]
+  cors_origins: ["https://wikisurge.net"]
   rate_limiting:
     enabled: true
     requests_per_minute: 100
