@@ -138,7 +138,7 @@ func main() {
 	var digestScheduler *digest.Scheduler
 	if cfg.Email.Enabled {
 		statsTracker := storage.NewStatsTracker(redisClient)
-		collector := digest.NewCollector(trendingScorer, alerts, hotPageTracker, statsTracker, logger)
+		collector := digest.NewCollectorWithRedis(trendingScorer, alerts, hotPageTracker, statsTracker, redisClient, logger)
 
 		var emailSender digest.EmailSender
 		switch cfg.Email.Provider {

@@ -270,6 +270,7 @@ func TestRenderDigestEmail_EditWarDetails(t *testing.T) {
 		{"edit wars heading", "Most Popular Edit Wars"},
 		{"trending heading", "Most Trending Pages"},
 		{"edit war title", "Climate_change"},
+		{"edit war article link", "/wiki/Climate_change"},
 		{"LLM summary", "attribution of recent temperature data"},
 		{"editor count", "12 editors"},
 		{"revert count", "18 reverts"},
@@ -277,6 +278,7 @@ func TestRenderDigestEmail_EditWarDetails(t *testing.T) {
 		{"content area", "Attribution of climate data"},
 		{"editors list", "Alice"},
 		{"trending title", "Mars Rover"},
+		{"trending article link", "/wiki/Mars_Rover"},
 	}
 
 	for _, c := range checks {

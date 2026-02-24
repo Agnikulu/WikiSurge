@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"net/url"
 	"strings"
 	"time"
 
@@ -247,6 +248,15 @@ func TemplateFuncs() template.FuncMap {
 			}
 			return s[:n-3] + "..."
 		},
+		// articleURL builds a Wikipedia article URL from a server URL and page title.
+		"articleURL": func(serverURL, title string) string {
+			if serverURL == "" {
+				serverURL = "https://en.wikipedia.org"
+			}
+			// Wikipedia uses underscores for spaces; percent-encode the rest.
+			encoded := url.PathEscape(strings.ReplaceAll(title, " ", "_"))
+			return serverURL + "/wiki/" + encoded
+		},
 	}
 }
 
@@ -424,7 +434,7 @@ Here's what happened on Wikipedia {{.PeriodLabel}} ⚡
 <p style="margin:0;font-size:28px;line-height:1;">{{rankLabel .Rank}}</p>
 </td>
 <td style="padding-left:8px;" valign="top">
-<p style="margin:0;font-size:17px;font-weight:700;color:#E6EDF3;line-height:1.3;">⚔️ {{.Title}}</p>
+<p style="margin:0;font-size:17px;font-weight:700;color:#E6EDF3;line-height:1.3;">⚔️ <a href="{{articleURL .ServerURL .Title}}" style="color:#E6EDF3;text-decoration:none;border-bottom:1px solid #30363D;" target="_blank">{{.Title}}</a></p>
 </td>
 <td width="80" valign="top" style="text-align:right;">
 {{if gt .EditCount 0}}
@@ -557,7 +567,7 @@ Here's what happened on Wikipedia {{.PeriodLabel}} ⚡
 <p style="margin:0;font-size:28px;line-height:1;">{{rankLabel .Rank}}</p>
 </td>
 <td style="padding-left:8px;" valign="top">
-<p style="margin:0;font-size:16px;font-weight:700;color:#E6EDF3;line-height:1.3;">🔥 {{.Title}}</p>
+<p style="margin:0;font-size:16px;font-weight:700;color:#E6EDF3;line-height:1.3;">🔥 <a href="{{articleURL .ServerURL .Title}}" style="color:#E6EDF3;text-decoration:none;border-bottom:1px solid #30363D;" target="_blank">{{.Title}}</a></p>
 <p style="margin:4px 0 0;font-size:13px;color:#8B949E;line-height:1.4;">{{.Summary}}</p>
 </td>
 <td width="70" valign="top" style="text-align:right;">
