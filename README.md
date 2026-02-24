@@ -1,267 +1,353 @@
-# WikiSurge
+<div align="center">
 
-A real-time Wikipedia change monitoring and intelligence system built with Go, Kafka, Redis, and Elasticsearch.
+# `WikiSurge`
 
-## Overview
+### Real-Time Wikipedia Intelligence
 
-WikiSurge is a high-performance system that monitors Wikipedia changes in real-time, processes them through a streaming pipeline, and provides intelligent insights and alerts. The system ingests data from Wikipedia's Server-Sent Events (SSE) stream, processes it using Kafka for message queuing, stores hot data in Redis, indexes searchable content in Elasticsearch, and provides a modern web interface for monitoring and analytics.
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Kafka](https://img.shields.io/badge/Kafka-Redpanda-E2231A?style=flat-square&logo=apachekafka&logoColor=white)](https://redpanda.com)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io)
+[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8-005571?style=flat-square&logo=elasticsearch&logoColor=white)](https://elastic.co)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
+
+**A high-performance streaming pipeline that ingests every Wikipedia edit on Earth in real-time,<br/>detects anomalies, identifies edit wars, and explains conflicts using AI.**
+
+[Dashboard](#-dashboard) · [How It Works](#-how-it-works) · [Architecture](#-architecture) · [Technical Decisions](#-technical-decisions) · [Docs](#-documentation)
+
+</div>
+
+---
+
+<div align="center">
+<img src="docs/assets/dashboard.png" alt="WikiSurge Dashboard" width="100%"/>
+<br/>
+<sub><b>Live dashboard</b> — real-time edits monitor, language distribution, spike alerts, trending pages, full-text search, and WebSocket-powered live feed</sub>
+</div>
+
+---
+
+## What Is This
+
+WikiSurge connects to Wikipedia's [EventStreams](https://stream.wikimedia.org/) SSE firehose and processes **every edit across all 300+ language editions** through a multi-stage streaming pipeline. It detects activity spikes, tracks trending pages, identifies edit wars in real-time, and uses LLMs to analyze what editors are actually fighting about — then surfaces everything through a WebSocket-powered cyberpunk dashboard and personalized email digests.
+
+This isn't a toy project with a single API call. It's a distributed system with:
+
+- **5 independent Go services** communicating through Kafka and Redis
+- **Real-time spike detection** using sliding window statistics with Z-score thresholds
+- **Edit war detection** with revert tracking, byte-delta analysis, and timeline reconstruction
+- **AI-powered conflict analysis** that fetches Wikipedia diffs and explains both sides
+- **Sub-second WebSocket delivery** from Wikipedia edit → user's browser
+- **Deployed on a single 4GB Hetzner VPS** with aggressive memory budgeting
+
+---
+
+## Dashboard
+
+<div align="center">
+<img src="docs/assets/edit-wars.gif" alt="WikiSurge Edit War Analysis" width="100%"/>
+<br/>
+<sub><b>AI-powered edit war analysis</b> — LLM identifies opposing sides, editor roles, content area, severity, and explains the conflict in plain English</sub>
+</div>
+
+<br/>
+
+<table>
+<tr>
+<td width="50%">
+
+**Real-Time Monitoring**
+- Live edit stream via WebSocket (Pub/Sub)
+- Edits/second gauge with historical graph
+- Language distribution across 300+ wikis
+- Hot page tracking with promotion/demotion
+
+</td>
+<td width="50%">
+
+**Intelligence & Alerts**
+- Spike detection with configurable Z-score thresholds
+- Edit war detection with revert ratio tracking
+- AI analysis explaining what editors fight about
+- Severity classification (LOW / MEDIUM / HIGH / CRITICAL)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Search & Discovery**
+- Full-text search powered by Elasticsearch
+- Trending pages scored by recency-weighted edits
+- Filter by severity, type, language, time range
+- CSV export for further analysis
+
+</td>
+<td width="50%">
+
+**User System**
+- JWT authentication with bcrypt password hashing
+- Personalized watchlists (track specific pages)
+- Daily/weekly email digests via Resend API
+- Admin panel for user management
+
+</td>
+</tr>
+</table>
+
+---
+
+## How It Works
+
+Wikipedia publishes every edit happening across all its wikis as a Server-Sent Events stream. WikiSurge taps into this firehose and pushes each event through a pipeline:
+
+```
+Wikipedia SSE ──► Ingestor ──► Kafka ──► Processor ──► Redis / ES ──► API ──► Browser
+   (global)       (filter)    (buffer)   (analyze)     (store)       (serve)  (display)
+```
+
+### The Pipeline, Step by Step
+
+| Step | Component | What Happens |
+|------|-----------|-------------|
+| **1** | **Ingestor** | Connects to `stream.wikimedia.org` via SSE. Filters bot edits, validates schema, enforces rate limits (token bucket), enriches metadata. Produces to Kafka with batching. Auto-reconnects with exponential backoff. |
+| **2** | **Kafka (Redpanda)** | Buffers events in `wikipedia.edits` topic with 24h retention. Decouples ingestion speed from processing speed. Dead letter queue at `wikipedia.edits.dlq` for poison messages. |
+| **3** | **Spike Detector** | Maintains 1-hour sliding windows per page. Calculates running mean/stddev. Fires alert when current rate exceeds `mean + (Z × stddev)`. Configurable Z-score threshold (default: 3.0). |
+| **4** | **Trending Scorer** | Scores pages using `edits × recency_weight × namespace_boost`. Recency decays exponentially. Scores stored in Redis Sorted Sets. Top-N retrieved in O(log N). |
+| **5** | **Edit War Detector** | Tracks per-page editor sets, revert patterns, and byte-delta oscillations. When revert ratio exceeds threshold within a time window → flags as edit war. Stores full timeline in Redis Lists. |
+| **6** | **ES Indexer** | Selectively indexes edits to Elasticsearch (not everything — that would be ~8M docs/day). Daily index rotation (`edits-2025-02-24`), 7-day retention, ILM policies. |
+| **7** | **WS Forwarder** | Publishes every processed edit to Redis Pub/Sub channel. API server subscribes and fans out to all connected WebSocket clients. |
+| **8** | **LLM Analysis** | On edit war detection → fetches actual text diffs from Wikipedia's MediaWiki API → builds structured prompt → GPT-4o identifies sides, roles, severity → caches in Redis. Heuristic fallback when no LLM configured. |
+| **9** | **Email Digests** | Scheduler runs daily/weekly. Collects highlights from Redis. Personalizes per user (watchlist + preferences). Renders HTML email. Sends via Resend API with worker pool. |
+
+---
 
 ## Architecture
 
-- **Ingestor**: Consumes Wikipedia SSE stream and publishes to Kafka
-- **Processor**: Processes Kafka messages and stores data in Redis/Elasticsearch
-- **API**: REST API for querying and managing the system
-- **Web Interface**: React-based dashboard for monitoring and analytics
-- **Monitoring**: Prometheus metrics with Grafana dashboards
-
-## Quick Start
-
-### Prerequisites
-
-- Docker and Docker Compose
-- Go 1.21+ (for development)
-- Minimum 4GB RAM and 10GB disk space
-
-### Setup
-
-1. **Clone and setup infrastructure:**
-   ```bash
-   git clone https://github.com/Agnikulu/WikiSurge.git
-   cd WikiSurge
-   make setup
-   ```
-
-2. **Check system health:**
-   ```bash
-   make health
-   ```
-
-3. **View service URLs:**
-   ```bash
-   make urls
-   ```
-
-### Available Commands
-
-- `make setup` - Set up infrastructure
-- `make start` - Start all services
-- `make stop` - Stop all services  
-- `make clean` - Clean up volumes and containers
-- `make logs` - View service logs
-- `make health` - Check service health
-- `make build` - Build Go applications
-- `make test` - Run tests
-
-## Services
-
-- **Grafana**: http://localhost:3000 (admin/admin)
-- **Prometheus**: http://localhost:9090
-- **Elasticsearch**: http://localhost:9200
-- **Kafka**: localhost:9092
-- **Redis**: localhost:6379
-
-## Ingestion Layer
-
-WikiSurge's ingestion layer is the entry point for real-time Wikipedia data. It connects to Wikipedia's Server-Sent Events (SSE) stream and processes edit events for downstream consumption.
-
-### Quick Start - Ingestion Only
-
-To run just the ingestion pipeline:
-
-```bash
-# Start Kafka and dependencies
-docker-compose up -d kafka zookeeper prometheus
-
-# Configure and start ingestion
-make build
-./bin/ingestor -config configs/config.dev.yaml
-
-# Monitor ingestion metrics
-curl localhost:2112/metrics | grep edits_ingested
+```
+                    ┌─────────────────────────────────────────────────────────┐
+                    │                    Hetzner VPS (4GB)                    │
+                    │                                                         │
+Wikipedia ──SSE──►  │  ┌──────────┐  ┌─────────┐  ┌──────────────────────┐  │
+                    │  │ Ingestor │──►│  Kafka  │──►│     Processor       │  │
+                    │  │  (100MB) │  │ (400MB) │  │      (150MB)        │  │
+                    │  └──────────┘  └─────────┘  │ ┌─────┐ ┌────────┐ │  │
+                    │                              │ │Spike│ │Edit War│ │  │
+                    │  ┌──────────┐  ┌─────────┐  │ │Det. │ │  Det.  │ │  │
+                    │  │ Frontend │  │  Redis  │◄─│ └─────┘ └────────┘ │  │
+                    │  │  (50MB)  │  │ (256MB) │  │ ┌─────┐ ┌────────┐ │  │
+                    │  └──────────┘  └─────────┘  │ │Trend│ │ES Index│ │  │
+                    │                              │ │Score│ │  er    │ │  │
+                    │  ┌──────────┐  ┌─────────┐  │ └─────┘ └────────┘ │  │
+                    │  │   API    │  │Elastic- │◄─│ ┌──────────────┐   │  │
+                    │  │  (100MB) │  │ search  │  │ │ WS Forwarder │   │  │
+                    │  │ REST+WS  │  │  (2GB)  │  │ └──────────────┘   │  │
+                    │  └──────────┘  └─────────┘  └──────────────────────┘  │
+                    │       │                                                │
+                    └───────┼────────────────────────────────────────────────┘
+                            │
+              Cloudflare ◄──┘──► Browser (WebSocket + REST)
+              (CDN/DNS/SSL)
 ```
 
-### Key Features
+**7 containers. ~3.1 GB total memory. One server. Zero managed services.**
 
-- **Real-time Processing**: Processes Wikipedia edits as they happen
-- **Intelligent Filtering**: Configurable bot, language, and edit type filters
-- **Rate Limiting**: Prevents system overload with configurable rate limits
-- **Auto-reconnection**: Robust connection handling with exponential backoff
-- **Batched Production**: Efficient Kafka message production with batching
-- **Comprehensive Monitoring**: Detailed Prometheus metrics and Grafana dashboards
+---
 
-### Configuration
+## Tech Stack
 
-Configure ingestion behavior in your config file:
+<table>
+<tr>
+<td valign="top" width="33%">
 
-```yaml
-ingestor:
-  exclude_bots: true                    # Filter bot edits
-  allowed_languages: ["en", "es", "fr"] # Language whitelist  
-  rate_limit: 50                        # Max events per second
-  burst_limit: 100                      # Burst capacity
-  reconnect_delay: 1s                   # Reconnection delay
-  metrics_port: 2112                    # Metrics endpoint port
+### Backend
+- **Go 1.24** — all 5 services
+- **Goroutines + Channels** — concurrent processing
+- **`net/http`** — HTTP server (no framework)
+- **`gorilla/websocket`** — WebSocket connections
+- **`zerolog`** — structured JSON logging
+- **`go-sqlite3`** (CGO) — user database
+
+</td>
+<td valign="top" width="33%">
+
+### Infrastructure
+- **Kafka (Redpanda)** — message streaming
+- **Redis 7** — hot data, pub/sub, streams
+- **Elasticsearch 8** — full-text search
+- **Docker** — multi-stage builds (~15MB images)
+- **GitHub Actions** — CI/CD to GHCR
+- **Coolify** — self-hosted PaaS on Hetzner
+
+</td>
+<td valign="top" width="33%">
+
+### Frontend
+- **React 19** + **TypeScript 5**
+- **Vite** — build tooling
+- **Tailwind CSS** — cyberpunk UI
+- **Recharts** — real-time graphs
+- **Zustand** — state management
+- **WebSocket** — live data feeds
+
+</td>
+</tr>
+<tr>
+<td valign="top" width="33%">
+
+### AI / Email
+- **OpenAI GPT-4o-mini** — edit war analysis
+- **Multi-provider** — Anthropic, Ollama support
+- **Resend API** — transactional email
+- **Go `html/template`** — email rendering
+
+</td>
+<td valign="top" width="33%">
+
+### Auth & Security
+- **JWT** (HMAC-SHA256) — stateless auth
+- **bcrypt** — password hashing
+- **Rate limiting** — per-IP token bucket
+- **CORS / Helmet** — security headers
+
+</td>
+<td valign="top" width="33%">
+
+### Monitoring
+- **Prometheus** — metrics collection
+- **Grafana** — dashboards & alerts
+- **Loki + Promtail** — log aggregation
+- **Custom health checks** — per-service
+
+</td>
+</tr>
+</table>
+
+---
+
+## Technical Decisions
+
+Things I built from scratch and why — the engineering choices that make this interesting.
+
+### Spike Detection with Sliding Window Statistics
+
+Not just "more edits than usual." The spike detector maintains a **1-hour sliding window** per page, computing running mean and standard deviation. An alert fires when the current rate exceeds the mean plus Z standard deviations (Z = 3.0 by default). A page with 2 edits/hour won't alert at 5 — but a page that normally gets 0.1 edits/hour will. The threshold adapts to each page's natural activity.
+
+### Edit War Detection
+
+Goes beyond simple revert counting. The detector tracks:
+- **Per-editor byte deltas** — oscillating positive/negative deltas = content being added and removed
+- **Revert ratio** — proportion of edits that undo previous edits
+- **Editor set cardinality** — how many unique editors are involved
+- **Timeline reconstruction** — full ordered sequence stored in Redis Lists
+
+When multiple signals cross thresholds simultaneously → edit war alert with full timeline for LLM analysis.
+
+### LLM Analysis Pipeline
+
+When an edit war is detected, WikiSurge doesn't just say "there's a fight." It:
+
+1. Fetches **actual text diffs** from Wikipedia's MediaWiki API (up to 8 revisions, 800 chars each)
+2. Builds a structured prompt with the timeline + diffs
+3. Asks GPT-4o to identify: **opposing sides**, **editor roles** (aggressor, defender, mediator), **content area**, **severity**, and a **recommendation**
+4. Parses the JSON response with truncation repair (LLMs sometimes run out of tokens mid-JSON)
+5. Caches the result in Redis (1hr for active wars, 7 days for resolved)
+6. Falls back to **heuristic analysis** (keyword + byte pattern matching) when no LLM is configured
+
+### Memory-Constrained Deployment
+
+Everything runs on a single 4GB Hetzner VPS. Every service has hard memory limits:
+
+```
+Elasticsearch:  2,048 MB    │  Go services use GOGC=50 and GOMEMLIMIT
+Kafka:            400 MB    │  to keep GC predictable. Redis uses
+Redis:            256 MB    │  allkeys-lru eviction at 256MB cap.
+Processor:        150 MB    │  
+API:              100 MB    │  Docker images are ~15MB each thanks to
+Ingestor:         100 MB    │  multi-stage builds (800MB builder →
+Frontend:          50 MB    │  15MB Alpine + static binary).
 ```
 
-### Monitoring Dashboard
+### CI/CD Without Crashing the Server
 
-Import the Grafana dashboard for ingestion monitoring:
+Building Docker images on the VPS would eat all available RAM and crash running services. Instead:
 
-```bash
-# Import ingestion dashboard
-curl -X POST \
-  http://admin:admin@localhost:3000/api/dashboards/db \
-  -H 'Content-Type: application/json' \
-  -d @monitoring/ingestion-dashboard.json
-```
+1. **GitHub Actions** detects which services changed (path filtering via `dorny/paths-filter`)
+2. Only affected services are rebuilt on GitHub's runners
+3. Images pushed to **GHCR** (GitHub Container Registry)
+4. Webhook triggers **Coolify** on the VPS to pull and redeploy
+5. The server only *downloads* ~15MB images — never compiles anything
 
-The dashboard provides real-time visibility into:
-- Ingestion rate (events per second)
-- Filter effectiveness (bot, language, type filters)
-- Kafka production latency and throughput
-- Error rates and buffer usage
-- Connection health and reconnection statistics
+Push to `main` → live in production in ~3 minutes.
 
-### Performance Testing
+### Two WebSocket Strategies
 
-Run load tests to validate system performance:
+WikiSurge uses two different real-time delivery patterns:
 
-```bash
-# Normal load test (10 eps for 5 minutes)
-./test/load/simulate_sse.sh --rate=10 --duration=300
+| | `/ws/feed` (Live Edits) | `/ws/alerts` (Alerts) |
+|---|---|---|
+| **Pattern** | Redis Pub/Sub | Redis Streams |
+| **Delivery** | Fire-and-forget | Guaranteed, with history |
+| **Missed data** | Gone forever | Client resumes from last ID |
+| **Use case** | "What's happening now" | "Don't miss any alert" |
 
-# Spike test (ramp 5→50 eps over 2 minutes)
-./test/load/simulate_sse.sh --scenario=spike --duration=120
+Pub/Sub for the feed because missing a few edits is fine — there are ~100/second. Streams for alerts because missing a spike notification is not acceptable.
 
-# Sustained high load (30 eps for 10 minutes) 
-./test/load/simulate_sse.sh --rate=30 --duration=600
+---
 
-# Bursty load (alternate 5/50 eps every 30s)
-./test/load/simulate_sse.sh --scenario=bursty --duration=300
-```
-
-### Testing
-
-Comprehensive test suite for ingestion components:
-
-```bash
-# Unit tests
-go test ./internal/ingestor/...
-go test ./internal/kafka/...
-
-# Integration tests
-go test ./test/integration/...
-
-# Benchmarks (performance validation)
-go test -bench=. -benchmem ./test/benchmark/...
-```
-
-### Troubleshooting
-
-Common issues and solutions:
-
-**High Latency (p99 > 100ms)**
-```bash
-# Check Kafka broker health
-kafka-topics --bootstrap-server localhost:9092 --list
-
-# Monitor batch sizes and production rate
-curl -s localhost:2112/metrics | grep kafka_produce_latency
-```
-
-**Production Errors**
-```bash
-# Check Kafka connectivity
-kafka-console-producer --bootstrap-server localhost:9092 --topic wikipedia.edits
-
-# Verify topic exists
-kafka-topics --bootstrap-server localhost:9092 --describe --topic wikipedia.edits
-```
-
-**Connection Issues**
-```bash
-# Test Wikipedia SSE directly
-curl -H "Accept: text/event-stream" \
-     https://stream.wikimedia.org/v2/stream/recentchange
-
-# Check reconnection metrics
-curl -s localhost:2112/metrics | grep sse_reconnections_total
-```
-
-For detailed troubleshooting and configuration options, see [docs/INGESTION.md](docs/INGESTION.md).
-
-## Development
-
-The project follows a modular structure:
+## Project Structure
 
 ```
 WikiSurge/
-├── cmd/           # Application entry points
-├── internal/      # Private application code
-├── configs/       # Configuration files
-├── monitoring/    # Prometheus & Grafana configs
-├── scripts/       # Setup and utility scripts
-└── web/          # Frontend application
+├── cmd/                          # Service entry points
+│   ├── api/main.go               #   → REST + WebSocket server
+│   ├── ingestor/main.go          #   → SSE consumer + Kafka producer
+│   └── processor/main.go         #   → Kafka consumer + analysis
+├── internal/                     # Core logic (not importable)
+│   ├── api/                      #   HTTP handlers, middleware, WebSocket
+│   ├── auth/                     #   JWT + bcrypt + middleware
+│   ├── config/                   #   YAML config + feature flags
+│   ├── digest/                   #   Email collection, rendering, scheduling
+│   ├── email/                    #   Resend / SMTP / Log senders
+│   ├── ingestor/                 #   SSE client, filtering, Kafka production
+│   ├── kafka/                    #   Producer, consumer, dead letter queue
+│   ├── llm/                      #   Multi-provider LLM client + analysis
+│   ├── models/                   #   Edit, User, Document models
+│   ├── monitoring/               #   Prometheus metrics registration
+│   ├── processor/                #   Spike/trending/edit-war/indexer/forwarder
+│   ├── resilience/               #   Circuit breaker, retry, backoff
+│   └── storage/                  #   Redis (hot pages, trending, alerts), ES
+├── web/                          # React 19 + TypeScript + Tailwind frontend
+├── deployments/                  # Dockerfiles + docker-compose (dev & prod)
+├── monitoring/                   # Prometheus, Grafana, Loki configs
+├── scripts/                      # Infrastructure, validation, testing
+├── test/                         # Integration, load, chaos, benchmark tests
+├── configs/                      # Dev + prod YAML configs
+└── docs/                         # Comprehensive documentation
 ```
 
-## Configuration
-
-- `config.dev.yaml` - Development configuration
-- `config.minimal.yaml` - Minimal resource configuration
-- `config.prod.yaml` - Production configuration
-
-## Monitoring
-
-The system includes comprehensive monitoring with:
-- Ingestion rate metrics
-- Kafka lag monitoring
-- Redis memory usage
-- Elasticsearch index statistics
-- Custom application metrics
-
-For complete monitoring setup and dashboard configuration, see [docs/MONITORING.md](docs/MONITORING.md).
+---
 
 ## Documentation
 
-WikiSurge comes with comprehensive documentation covering all aspects of the system:
+| Document | Description |
+|----------|-------------|
+| [Architecture Guide](docs/ARCHITECTURE_GUIDE.md) | Full data pipeline walkthrough — SSE → Kafka → Redis → WebSocket |
+| [Features Guide](docs/FEATURES_GUIDE.md) | LLM analysis, deployment, auth, email system — code-level detail |
+| [API Reference](docs/openapi.yaml) | OpenAPI 3.0 spec for all REST + WebSocket endpoints |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Docker, Hetzner, Coolify, Cloudflare setup |
+| [Operations Guide](docs/OPERATIONS.md) | Runbooks, troubleshooting, maintenance |
+| [Monitoring Guide](docs/MONITORING.md) | Prometheus metrics, Grafana dashboards, alerting |
 
-### 📚 Core Documentation
+---
 
-- **[Architecture Guide](docs/ARCHITECTURE.md)** - System design, components, data models, and algorithms
-- **[Deployment Guide](docs/DEPLOYMENT.md)** - Installation for local, production, and cloud environments
-- **[Operations Guide](docs/OPERATIONS.md)** - Daily operations, troubleshooting, and maintenance
-- **[Monitoring Guide](docs/MONITORING.md)** - Metrics, dashboards, alerts, and performance tuning
-- **[Development Guide](docs/DEVELOPMENT.md)** - Code structure, adding features, testing, and contributing
-- **[API Reference](docs/API.md)** - Complete REST and WebSocket API documentation
-- **[FAQ](docs/FAQ.md)** - Frequently asked questions and answers
-
-### 🎯 Getting Started
-
-1. **New users:** Start with this README, then read [DEPLOYMENT.md](docs/DEPLOYMENT.md)
-2. **System admins:** Check [OPERATIONS.md](docs/OPERATIONS.md) for daily tasks
-3. **Developers:** See [DEVELOPMENT.md](docs/DEVELOPMENT.md) and [ARCHITECTURE.md](docs/ARCHITECTURE.md)
-4. **Quick answers:** Search [FAQ.md](docs/FAQ.md)
-
-### 📖 Additional Resources
-
-- [Ingestion Details](docs/INGESTION.md) - Wikipedia EventStreams integration
-- [Processing Details](docs/PROCESSING.md) - Stream processing pipelines
-- [Storage Layer](docs/STORAGE_LAYER_SUMMARY.md) - Redis and Elasticsearch
-- [Spike Detection](docs/SPIKE_DETECTION_IMPLEMENTATION.md) - Algorithm details
-- [Hot Pages](docs/HOT_PAGES_IMPLEMENTATION.md) - Page promotion system
-- [Recovery](docs/RECOVERY.md) - Backup and disaster recovery
-- [Capacity Planning](docs/CAPACITY_PLANNING.md) - Resource planning
-
-For a complete documentation index, see [docs/README.md](docs/README.md).
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+<div align="center">
 
 ## License
 
-MIT License - see LICENSE file for details.
+Copyright © 2025 Agnik. All Rights Reserved. See [LICENSE](LICENSE) for details.
+
+Wikipedia content accessed through the APIs remains under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+
+</div>

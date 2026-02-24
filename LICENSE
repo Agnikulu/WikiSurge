@@ -1,0 +1,36 @@
+Copyright (c) 2025 Agnik. All Rights Reserved.
+
+PROPRIETARY SOFTWARE LICENSE
+
+This software and associated documentation files (the "Software") are the
+proprietary property of Agnik. All rights are reserved.
+
+NO PERMISSION IS GRANTED to any person or entity to:
+
+  1. Use, copy, modify, merge, publish, distribute, sublicense, or sell copies
+     of the Software;
+  2. Permit persons to whom the Software is furnished to do any of the above;
+  3. Create derivative works based on the Software;
+  4. Use the Software for any commercial or non-commercial purpose without
+     prior written permission from the copyright holder.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+For licensing inquiries, please contact the copyright holder.
+
+---
+
+THIRD-PARTY DATA NOTICE
+
+This software interacts with Wikipedia's EventStreams API and MediaWiki API.
+Wikipedia content (article text, edit diffs) accessed through these APIs
+remains licensed under the Creative Commons Attribution-ShareAlike 4.0
+International License (CC BY-SA 4.0) by its respective authors. This license
+applies only to the WikiSurge source code, not to Wikipedia content processed
+by it.
