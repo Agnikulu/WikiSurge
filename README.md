@@ -21,9 +21,11 @@
 ---
 
 <div align="center">
-<img src="docs/assets/dashboard.png" alt="WikiSurge Dashboard" width="100%"/>
+<a href="docs/assets/dashboard.png">
+<img src="docs/assets/dashboard.png" alt="WikiSurge Dashboard" width="800"/>
+</a>
 <br/>
-<sub><b>Live dashboard</b> — real-time edits monitor, language distribution, spike alerts, trending pages, full-text search, and WebSocket-powered live feed</sub>
+<sub><b>Live dashboard</b> — real-time edits monitor, language distribution, spike alerts, trending pages, full-text search, and WebSocket-powered live feed · <i>click to expand</i></sub>
 </div>
 
 ---
@@ -125,30 +127,56 @@ Wikipedia SSE ──► Ingestor ──► Kafka ──► Processor ──► R
 
 ## Architecture
 
-```
-                    ┌─────────────────────────────────────────────────────────┐
-                    │                    Hetzner VPS (4GB)                    │
-                    │                                                         │
-Wikipedia ──SSE──►  │  ┌──────────┐  ┌─────────┐  ┌──────────────────────┐  │
-                    │  │ Ingestor │──►│  Kafka  │──►│     Processor       │  │
-                    │  │  (100MB) │  │ (400MB) │  │      (150MB)        │  │
-                    │  └──────────┘  └─────────┘  │ ┌─────┐ ┌────────┐ │  │
-                    │                              │ │Spike│ │Edit War│ │  │
-                    │  ┌──────────┐  ┌─────────┐  │ │Det. │ │  Det.  │ │  │
-                    │  │ Frontend │  │  Redis  │◄─│ └─────┘ └────────┘ │  │
-                    │  │  (50MB)  │  │ (256MB) │  │ ┌─────┐ ┌────────┐ │  │
-                    │  └──────────┘  └─────────┘  │ │Trend│ │ES Index│ │  │
-                    │                              │ │Score│ │  er    │ │  │
-                    │  ┌──────────┐  ┌─────────┐  │ └─────┘ └────────┘ │  │
-                    │  │   API    │  │Elastic- │◄─│ ┌──────────────┐   │  │
-                    │  │  (100MB) │  │ search  │  │ │ WS Forwarder │   │  │
-                    │  │ REST+WS  │  │  (2GB)  │  │ └──────────────┘   │  │
-                    │  └──────────┘  └─────────┘  └──────────────────────┘  │
-                    │       │                                                │
-                    └───────┼────────────────────────────────────────────────┘
-                            │
-              Cloudflare ◄──┘──► Browser (WebSocket + REST)
-              (CDN/DNS/SSL)
+```mermaid
+graph LR
+    subgraph Internet
+        W["🌐 Wikipedia SSE"]
+        CF["☁️ Cloudflare<br/><i>CDN / DNS / SSL</i>"]
+        BR["🖥️ Browser<br/><i>WebSocket + REST</i>"]
+    end
+
+    subgraph VPS["Hetzner VPS — 4GB RAM"]
+        direction TB
+
+        subgraph Ingestion
+            IN["<b>Ingestor</b><br/>100 MB"]
+        end
+
+        subgraph Messaging
+            KF["<b>Kafka</b><br/>(Redpanda)<br/>400 MB"]
+        end
+
+        subgraph Processing
+            PR["<b>Processor</b><br/>150 MB"]
+            SD["Spike<br/>Detector"]
+            EW["Edit War<br/>Detector"]
+            TS["Trending<br/>Scorer"]
+            EI["ES<br/>Indexer"]
+            WF["WS<br/>Forwarder"]
+        end
+
+        subgraph Storage
+            RD["<b>Redis</b><br/>256 MB"]
+            ES["<b>Elasticsearch</b><br/>2 GB"]
+        end
+
+        subgraph Serving
+            API["<b>API Server</b><br/>REST + WS<br/>100 MB"]
+            FE["<b>Frontend</b><br/>React 19<br/>50 MB"]
+        end
+    end
+
+    W -->|SSE stream| IN
+    IN -->|produce| KF
+    KF -->|5 consumer groups| PR
+    PR --- SD & EW & TS & EI & WF
+    SD & EW & TS & WF -->|write| RD
+    EI -->|bulk index| ES
+    RD -->|subscribe| API
+    ES -->|query| API
+    API --> FE
+    API <-->|proxy| CF
+    CF <--> BR
 ```
 
 **7 containers. ~3.1 GB total memory. One server. Zero managed services.**
