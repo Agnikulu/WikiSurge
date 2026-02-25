@@ -76,8 +76,6 @@ services:
     image: redis:7-alpine
     container_name: wikisurge-redis
     restart: unless-stopped
-    sysctls:
-      - vm.overcommit_memory=1
     command: >
       redis-server
       --maxmemory 256mb
