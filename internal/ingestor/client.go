@@ -146,9 +146,11 @@ func (w *WikiStreamClient) eventLoop() {
 				// Determine if the disconnect is benign (not a real failure):
 				//  - idle timeout: stream was delivering data then stalled
 				//  - CANCEL: Wikipedia's normal HTTP/2 stream reset (~every 4-5 min)
-				// In both cases, reset backoff — don't penalize normal behavior.
+				//  - 503: Wikimedia temporary maintenance / overload
+				// In these cases, reset backoff — don't penalize normal behavior.
 				isBenign := strings.Contains(errMsg, "idle for") ||
-					strings.Contains(errMsg, "CANCEL")
+					strings.Contains(errMsg, "CANCEL") ||
+					strings.Contains(errMsg, "503")
 				if isBenign {
 					w.reconnectDelay = w.config.Ingestor.ReconnectDelay
 				}
@@ -217,20 +219,17 @@ func (w *WikiStreamClient) processStream() error {
 		return fmt.Errorf("preflight check failed: %w", err)
 	}
 
-	// Build the SSE URL.  If we have a last event ID from a previous
-	// stream, append it as the ?since= query parameter so Wikipedia
-	// replays any events we missed during the reconnect gap.
-	streamURL := WikipediaSSEURL
+	// Grab the last event ID we tracked from the previous stream session.
+	// Wikipedia EventStreams uses JSON-array IDs (not timestamps), so
+	// we pass them via the Last-Event-ID header (handled by r3labs/sse)
+	// rather than the ?since= query parameter.
 	w.mu.RLock()
 	lastID := w.lastEventID
 	w.mu.RUnlock()
-	if len(lastID) > 0 {
-		streamURL = fmt.Sprintf("%s?since=%s", WikipediaSSEURL, string(lastID))
-	}
 
 	// Create a fresh SSE client for each stream attempt to avoid stale
 	// internal state from the r3labs/sse library's own retry logic.
-	sseClient := sse.NewClient(streamURL)
+	sseClient := sse.NewClient(WikipediaSSEURL)
 	sseClient.Connection.Transport = &http.Transport{
 		ResponseHeaderTimeout: ConnectionTimeout,
 	}
@@ -239,8 +238,8 @@ func (w *WikiStreamClient) processStream() error {
 		"User-Agent": UserAgent,
 	}
 
-	// Seed the library's LastEventID so the header is also sent on the
-	// initial request for this client instance.
+	// Seed the library's LastEventID so the Last-Event-ID header is sent
+	// on the initial request, enabling Wikipedia to replay missed events.
 	if len(lastID) > 0 {
 		sseClient.LastEventID.Store(lastID)
 		w.logger.Info().

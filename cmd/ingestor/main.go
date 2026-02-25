@@ -82,19 +82,44 @@ func main() {
 	// Create Wikipedia SSE client
 	client := ingestor.NewWikiStreamClient(cfg, logger, producer)
 
-	// Test connection first
-	if err := client.Connect(); err != nil {
-		logger.Fatal().Err(err).Msg("Failed to connect to Wikipedia SSE stream")
+	// Set up signal handling early so we can catch SIGTERM during connect retries
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Wait for Wikipedia SSE to become reachable.  The endpoint may be
+	// temporarily down (503) during Wikimedia maintenance windows, so we
+	// retry with exponential backoff instead of crashing the process.
+	{
+		delay := cfg.Ingestor.ReconnectDelay
+		for attempt := 1; ; attempt++ {
+			if err := client.Connect(); err == nil {
+				break
+			} else {
+				logger.Warn().
+					Err(err).
+					Int("attempt", attempt).
+					Dur("retry_in", delay).
+					Msg("Wikipedia SSE not reachable, retrying")
+
+				select {
+				case <-time.After(delay):
+				case sig := <-sigChan:
+					logger.Info().Str("signal", sig.String()).Msg("Shutdown during connect retry")
+					os.Exit(0)
+				}
+
+				delay *= 2
+				if delay > cfg.Ingestor.MaxReconnectDelay {
+					delay = cfg.Ingestor.MaxReconnectDelay
+				}
+			}
+		}
 	}
 
 	// Start the client
 	if err := client.Start(); err != nil {
 		logger.Fatal().Err(err).Msg("Failed to start SSE client")
 	}
-
-	// Set up signal handling for graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	logger.Info().Msg("Wikipedia ingestor started successfully")
 	logger.Info().

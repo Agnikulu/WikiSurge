@@ -24,3 +24,4 @@ Thumbs.db
 coverage/
 *.coverprofile
 *.log
+ingestor
