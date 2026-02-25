@@ -176,9 +176,41 @@ func (w *WikiStreamClient) eventLoop() {
 	}
 }
 
+// checkConnectivity does a lightweight HTTP HEAD to the SSE endpoint to verify
+// network reachability.  This catches DNS failures, firewalls, and HTTP errors
+// that the r3labs/sse library would otherwise silently swallow.
+func (w *WikiStreamClient) checkConnectivity() error {
+	client := &http.Client{Timeout: ConnectionTimeout}
+	req, err := http.NewRequest("GET", WikipediaSSEURL, nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		w.logger.Error().Err(err).Str("url", WikipediaSSEURL).Msg("Cannot reach Wikipedia SSE endpoint")
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		w.logger.Error().Int("status", resp.StatusCode).Str("url", WikipediaSSEURL).Msg("Wikipedia SSE endpoint returned error")
+		return fmt.Errorf("HTTP %d from SSE endpoint", resp.StatusCode)
+	}
+
+	w.logger.Info().Int("status", resp.StatusCode).Msg("Preflight connectivity check passed")
+	return nil
+}
+
 // processStream handles the actual SSE stream processing
 func (w *WikiStreamClient) processStream() error {
-	eventChan := make(chan *sse.Event)
+	// Preflight connectivity check — the r3labs/sse library swallows HTTP
+	// errors, so we probe first to get a clear diagnostic.
+	if err := w.checkConnectivity(); err != nil {
+		return fmt.Errorf("preflight check failed: %w", err)
+	}
 
 	// Create a fresh SSE client for each stream attempt to avoid stale
 	// internal state from the r3labs/sse library's own retry logic.
@@ -199,18 +231,23 @@ func (w *WikiStreamClient) processStream() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// subDone signals when SubscribeChanWithContext returns, meaning the
-	// underlying HTTP connection was lost or the stream ended.  Without
-	// this, the eventChan simply stops receiving events and we'd have to
-	// wait for the full idle timeout before reconnecting.
+	// eventChan bridges the callback-based SubscribeWithContext into our
+	// select loop.  We use SubscribeWithContext instead of
+	// SubscribeChanWithContext because the latter returns immediately
+	// with nil error when StopBackOff is set, never delivering events.
+	eventChan := make(chan *sse.Event, 64)
+
+	// subDone signals when SubscribeWithContext returns, meaning the
+	// underlying HTTP connection was lost or the stream ended.
 	subDone := make(chan error, 1)
 
-	// Subscribe to the message event type
 	go func() {
-		err := sseClient.SubscribeChanWithContext(ctx, "message", eventChan)
-		if err != nil {
-			w.logger.Error().Err(err).Msg("Failed to subscribe to SSE stream")
-		}
+		err := sseClient.SubscribeWithContext(ctx, "message", func(msg *sse.Event) {
+			select {
+			case eventChan <- msg:
+			case <-ctx.Done():
+			}
+		})
 		subDone <- err
 	}()
 
@@ -228,19 +265,13 @@ func (w *WikiStreamClient) processStream() error {
 			return nil
 		case subErr := <-subDone:
 			// The SSE subscription goroutine exited — the stream is dead.
-			// Return immediately to trigger a fast reconnect instead of
-			// waiting the full idle timeout.
 			if subErr != nil {
 				return fmt.Errorf("SSE subscription ended: %w", subErr)
 			}
 			return fmt.Errorf("SSE subscription ended unexpectedly")
 		case <-idleTimer.C:
 			return fmt.Errorf("SSE stream idle for %v, forcing reconnect", idleTimeout)
-		case event, ok := <-eventChan:
-			if !ok {
-				return fmt.Errorf("SSE event channel closed")
-			}
-
+		case event := <-eventChan:
 			// Reset idle timer on every event
 			if !idleTimer.Stop() {
 				select {
