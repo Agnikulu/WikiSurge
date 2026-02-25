@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -549,18 +550,14 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 				entry.ServerURL = su
 			}
 
-			// Embed cached analysis if available; backfill via LLM on cache miss
+			// Embed cached analysis if available (populated by the processor
+			// at war start, every N edits, and at war end).
 			if entry.PageTitle != "" {
 				cacheKey := fmt.Sprintf("editwar:analysis:%s", entry.PageTitle)
 				if cached, cErr := s.redis.Get(ctx, cacheKey).Result(); cErr == nil && cached != "" {
 					var analysis interface{}
 					if json.Unmarshal([]byte(cached), &analysis) == nil {
 						entry.Analysis = analysis
-					}
-				} else if s.analysisService != nil {
-					// Analysis cache expired or missing — regenerate inline
-					if a, aErr := s.analysisService.Analyze(ctx, entry.PageTitle); aErr == nil {
-						entry.Analysis = a
 					}
 				}
 			}
@@ -640,18 +637,14 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 			entry.ServerURL = su
 		}
 
-		// Embed cached analysis if available; backfill via LLM on cache miss
+		// Embed cached analysis if available (populated by the processor
+		// at war start, every N edits, and at war end).
 		if entry.PageTitle != "" {
 			cacheKey := fmt.Sprintf("editwar:analysis:%s", entry.PageTitle)
 			if cached, cErr := s.redis.Get(ctx, cacheKey).Result(); cErr == nil && cached != "" {
 				var analysis interface{}
 				if json.Unmarshal([]byte(cached), &analysis) == nil {
 					entry.Analysis = analysis
-				}
-			} else if s.analysisService != nil {
-				// Analysis cache expired or missing — regenerate inline
-				if a, aErr := s.analysisService.Analyze(ctx, entry.PageTitle); aErr == nil {
-					entry.Analysis = a
 				}
 			}
 		}
@@ -685,7 +678,15 @@ func (s *APIServer) handleGetEditWarAnalysis(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	analysis, err := s.analysisService.Analyze(r.Context(), pageTitle)
+	// Use a detached context with its own deadline for the LLM analysis.
+	// The analysis involves Wikipedia API calls + an LLM completion which
+	// can exceed the HTTP server's write timeout.  A detached context
+	// ensures the analysis completes and gets cached even if the original
+	// HTTP request is cancelled by the client or a server deadline.
+	analysisCtx, analysisCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer analysisCancel()
+
+	analysis, err := s.analysisService.Analyze(analysisCtx, pageTitle)
 	if err != nil {
 		s.logger.Error().Err(err).Str("page", pageTitle).
 			Str("request_id", GetRequestID(r.Context())).

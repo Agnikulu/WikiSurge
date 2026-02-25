@@ -199,7 +199,7 @@ func (s *APIServer) ListenAndServe(addr string) *http.Server {
 		Addr:         addr,
 		Handler:      s.Handler(),
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 

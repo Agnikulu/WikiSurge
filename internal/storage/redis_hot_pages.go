@@ -124,10 +124,24 @@ func (h *HotPageTracker) ProcessEdit(ctx context.Context, edit *models.Wikipedia
 // promoteToHot - Hot Page Promotion
 // Purpose: Upgrade page to full tracking
 func (h *HotPageTracker) promoteToHot(ctx context.Context, edit *models.WikipediaEdit) error {
-	// Check circuit breaker: If current hot pages >= maxHotPages
-	currentCount, err := h.GetHotPagesCount(ctx)
+	windowKey := fmt.Sprintf("hot:window:%s", edit.Title)
+
+	// If the page is already being tracked as hot, just add the edit to
+	// the existing window instead of re-running the full promotion pipeline.
+	// This avoids redundant Redis writes, inflated metrics, and noisy logs
+	// when activity counter >= hotThreshold for subsequent edits.
+	exists, err := h.redis.Exists(ctx, windowKey).Result()
 	if err != nil {
-		log.Printf("Failed to get hot pages count during promotion: %v", err)
+		log.Printf("Failed to check hot window existence for %s: %v", edit.Title, err)
+		// Fall through to full promotion as a safe default.
+	} else if exists > 0 {
+		return h.AddEditToWindow(ctx, edit.Title, edit)
+	}
+
+	// Check circuit breaker: If current hot pages >= maxHotPages
+	currentCount, cpErr := h.GetHotPagesCount(ctx)
+	if cpErr != nil {
+		log.Printf("Failed to get hot pages count during promotion: %v", cpErr)
 	}
 	
 	if currentCount >= h.maxHotPages {
@@ -137,7 +151,6 @@ func (h *HotPageTracker) promoteToHot(ctx context.Context, edit *models.Wikipedi
 		return nil // Graceful degradation
 	}
 	
-	windowKey := fmt.Sprintf("hot:window:%s", edit.Title)
 	metadataKey := fmt.Sprintf("hot:meta:%s", edit.Title)
 	
 	// Use edit's timestamp if available, otherwise use current time

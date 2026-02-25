@@ -139,21 +139,34 @@ func (w *WikiStreamClient) eventLoop() {
 			if err := w.processStream(); err != nil {
 				w.logger.Error().Err(err).Msg("Stream processing failed, will reconnect")
 				metrics.SSEReconnectionsTotal.WithLabelValues().Inc()
-				
-				// Wait before reconnecting with exponential backoff
+
+				// An idle-timeout means the stream *was* delivering data
+				// before it stalled, so reset the backoff — this is not a
+				// hard connection failure that warrants exponential delay.
+				isIdle := strings.Contains(err.Error(), "idle for")
+				if isIdle {
+					w.reconnectDelay = w.config.Ingestor.ReconnectDelay
+				}
+
+				// Wait before reconnecting
 				select {
 				case <-w.stopChan:
 					w.logger.Info().Msg("Stop signal received during reconnection wait")
 					return
 				case <-time.After(w.reconnectDelay):
-					// Increase reconnect delay with exponential backoff
+					w.logger.Info().
+						Dur("delay", w.reconnectDelay).
+						Bool("idle_reset", isIdle).
+						Msg("Attempting to reconnect")
+				}
+
+				// Increase reconnect delay with exponential backoff for
+				// non-idle failures only.
+				if !isIdle {
 					w.reconnectDelay *= 2
 					if w.reconnectDelay > w.config.Ingestor.MaxReconnectDelay {
 						w.reconnectDelay = w.config.Ingestor.MaxReconnectDelay
 					}
-					w.logger.Info().
-						Dur("delay", w.reconnectDelay).
-						Msg("Attempting to reconnect")
 				}
 			} else {
 				// Reset reconnect delay on successful connection
@@ -186,12 +199,19 @@ func (w *WikiStreamClient) processStream() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// subDone signals when SubscribeChanWithContext returns, meaning the
+	// underlying HTTP connection was lost or the stream ended.  Without
+	// this, the eventChan simply stops receiving events and we'd have to
+	// wait for the full idle timeout before reconnecting.
+	subDone := make(chan error, 1)
+
 	// Subscribe to the message event type
 	go func() {
 		err := sseClient.SubscribeChanWithContext(ctx, "message", eventChan)
 		if err != nil {
 			w.logger.Error().Err(err).Msg("Failed to subscribe to SSE stream")
 		}
+		subDone <- err
 	}()
 
 	// Idle timeout: if no events arrive within this duration, assume the
@@ -206,6 +226,14 @@ func (w *WikiStreamClient) processStream() error {
 		select {
 		case <-w.stopChan:
 			return nil
+		case subErr := <-subDone:
+			// The SSE subscription goroutine exited — the stream is dead.
+			// Return immediately to trigger a fast reconnect instead of
+			// waiting the full idle timeout.
+			if subErr != nil {
+				return fmt.Errorf("SSE subscription ended: %w", subErr)
+			}
+			return fmt.Errorf("SSE subscription ended unexpectedly")
 		case <-idleTimer.C:
 			return fmt.Errorf("SSE stream idle for %v, forcing reconnect", idleTimeout)
 		case event, ok := <-eventChan:
