@@ -248,6 +248,26 @@ func TemplateFuncs() template.FuncMap {
 			}
 			return s[:n-3] + "..."
 		},
+		// needsExpand returns true if the string exceeds n characters.
+		"needsExpand": func(s string, n int) bool {
+			return len(s) > n
+		},
+		// cleanCut truncates a string at the last word boundary before n characters.
+		// No ellipsis — just a clean break.
+		"cleanCut": func(s string, n int) string {
+			if len(s) <= n {
+				return s
+			}
+			// Walk back to the last space before position n
+			cut := n
+			for cut > 0 && s[cut] != ' ' {
+				cut--
+			}
+			if cut == 0 {
+				cut = n // no space found, hard cut
+			}
+			return s[:cut]
+		},
 		// articleURL builds a Wikipedia article URL from a server URL and page title.
 		"articleURL": func(serverURL, title string) string {
 			if serverURL == "" {
@@ -269,6 +289,11 @@ const digestTemplate = `<!DOCTYPE html>
 <meta name="color-scheme" content="dark">
 <meta name="supported-color-schemes" content="dark">
 <title>WikiSurge {{.Period}} Digest</title>
+<style>
+  details[open] > summary { display:none; }
+  summary::-webkit-details-marker { display:none; }
+  summary::marker { display:none; content:""; }
+</style>
 <!--[if mso]>
 <style>body,table,td{font-family:Arial,Helvetica,sans-serif!important;}</style>
 <![endif]-->
@@ -453,7 +478,16 @@ Here's what happened on Wikipedia {{.PeriodLabel}} ⚡
 <td style="padding:0 24px 12px;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#161B22;border-radius:10px;border-left:3px solid #8B5CF6;">
 <tr><td style="padding:12px 16px;">
-<p style="margin:0;font-size:13px;color:#C9D1D9;line-height:1.5;">{{truncate .LLMSummary 280}}</p>
+{{if needsExpand .LLMSummary 280}}
+<details style="margin:0;">
+<summary style="margin:0;font-size:13px;color:#C9D1D9;line-height:1.5;cursor:pointer;list-style:none;">
+{{cleanCut .LLMSummary 280}} <span style="font-size:11px;color:#8B5CF6;font-weight:600;">▶ Read more</span>
+</summary>
+<p style="margin:0;font-size:13px;color:#C9D1D9;line-height:1.5;">{{.LLMSummary}}</p>
+</details>
+{{else}}
+<p style="margin:0;font-size:13px;color:#C9D1D9;line-height:1.5;">{{.LLMSummary}}</p>
+{{end}}
 </td></tr>
 </table>
 </td>

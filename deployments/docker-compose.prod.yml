@@ -46,10 +46,11 @@ services:
       - --advertise-rpc-addr kafka:33145
       - --smp 1
       - --reserve-memory 0M
-      - --memory 300M
+      - --memory 512M
       - --overprovisioned
       - --node-id 0
       - --check=false
+      # Production: fsync enabled (safe default — omitting --unsafe-bypass-fsync)
     volumes:
       - kafka-data:/var/lib/redpanda/data
     # No external ports — internal only in production
@@ -58,9 +59,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 400M
+          memory: 600M
         reservations:
-          memory: 256M
+          memory: 400M
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health --api-urls localhost:9644 2>/dev/null || exit 1"]
       interval: 30s

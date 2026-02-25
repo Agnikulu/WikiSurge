@@ -38,6 +38,7 @@ type WikiStreamClient struct {
 	mu                sync.RWMutex
 	isRunning         bool
 	rateLimitHitCount int64
+	lastEventID       []byte // tracks the last SSE event ID for gap-free reconnects
 }
 
 // NewWikiStreamClient creates a new Wikipedia SSE client
@@ -140,11 +141,15 @@ func (w *WikiStreamClient) eventLoop() {
 				w.logger.Error().Err(err).Msg("Stream processing failed, will reconnect")
 				metrics.SSEReconnectionsTotal.WithLabelValues().Inc()
 
-				// An idle-timeout means the stream *was* delivering data
-				// before it stalled, so reset the backoff — this is not a
-				// hard connection failure that warrants exponential delay.
-				isIdle := strings.Contains(err.Error(), "idle for")
-				if isIdle {
+				errMsg := err.Error()
+
+				// Determine if the disconnect is benign (not a real failure):
+				//  - idle timeout: stream was delivering data then stalled
+				//  - CANCEL: Wikipedia's normal HTTP/2 stream reset (~every 4-5 min)
+				// In both cases, reset backoff — don't penalize normal behavior.
+				isBenign := strings.Contains(errMsg, "idle for") ||
+					strings.Contains(errMsg, "CANCEL")
+				if isBenign {
 					w.reconnectDelay = w.config.Ingestor.ReconnectDelay
 				}
 
@@ -156,13 +161,13 @@ func (w *WikiStreamClient) eventLoop() {
 				case <-time.After(w.reconnectDelay):
 					w.logger.Info().
 						Dur("delay", w.reconnectDelay).
-						Bool("idle_reset", isIdle).
+						Bool("benign", isBenign).
 						Msg("Attempting to reconnect")
 				}
 
 				// Increase reconnect delay with exponential backoff for
-				// non-idle failures only.
-				if !isIdle {
+				// genuine failures only (not idle timeouts or CANCEL resets).
+				if !isBenign {
 					w.reconnectDelay *= 2
 					if w.reconnectDelay > w.config.Ingestor.MaxReconnectDelay {
 						w.reconnectDelay = w.config.Ingestor.MaxReconnectDelay
@@ -212,9 +217,20 @@ func (w *WikiStreamClient) processStream() error {
 		return fmt.Errorf("preflight check failed: %w", err)
 	}
 
+	// Build the SSE URL.  If we have a last event ID from a previous
+	// stream, append it as the ?since= query parameter so Wikipedia
+	// replays any events we missed during the reconnect gap.
+	streamURL := WikipediaSSEURL
+	w.mu.RLock()
+	lastID := w.lastEventID
+	w.mu.RUnlock()
+	if len(lastID) > 0 {
+		streamURL = fmt.Sprintf("%s?since=%s", WikipediaSSEURL, string(lastID))
+	}
+
 	// Create a fresh SSE client for each stream attempt to avoid stale
 	// internal state from the r3labs/sse library's own retry logic.
-	sseClient := sse.NewClient(WikipediaSSEURL)
+	sseClient := sse.NewClient(streamURL)
 	sseClient.Connection.Transport = &http.Transport{
 		ResponseHeaderTimeout: ConnectionTimeout,
 	}
@@ -222,6 +238,16 @@ func (w *WikiStreamClient) processStream() error {
 		"Accept":     "text/event-stream",
 		"User-Agent": UserAgent,
 	}
+
+	// Seed the library's LastEventID so the header is also sent on the
+	// initial request for this client instance.
+	if len(lastID) > 0 {
+		sseClient.LastEventID.Store(lastID)
+		w.logger.Info().
+			Str("last_event_id", string(lastID)).
+			Msg("Resuming stream from last known event ID")
+	}
+
 	// Disable the library's internal auto-reconnect so our outer loop
 	// controls reconnection with proper backoff and idle detection.
 	sseClient.ReconnectStrategy = &backoff.StopBackOff{}
@@ -280,6 +306,16 @@ func (w *WikiStreamClient) processStream() error {
 				}
 			}
 			idleTimer.Reset(idleTimeout)
+
+			// Track the last event ID for gap-free reconnects.
+			// Wikipedia EventStreams sends a JSON-array-style ID
+			// (e.g. [{"topic":"...","partition":0,"offset":123}]).
+			if len(event.ID) > 0 {
+				w.mu.Lock()
+				w.lastEventID = make([]byte, len(event.ID))
+				copy(w.lastEventID, event.ID)
+				w.mu.Unlock()
+			}
 
 			if err := w.processEvent(event); err != nil {
 				w.logger.Error().Err(err).Msg("Failed to process event")
