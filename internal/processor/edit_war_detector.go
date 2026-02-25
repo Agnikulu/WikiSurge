@@ -153,18 +153,28 @@ func (ewd *EditWarDetector) ProcessEdit(ctx context.Context, edit *models.Wikipe
 		return nil
 	}
 
+	// Determine the right TTL for editor/change tracking keys.
+	// If an edit war is already active (12h marker exists), use the longer 12h
+	// TTL so that counters survive gaps longer than the 10-min detection window.
+	// Otherwise, use the short detection-window TTL.
+	trackingTTL := ewd.timeWindow
+	editWarKey := fmt.Sprintf("editwar:%s", edit.Title)
+	if ex, _ := ewd.redis.Exists(ctx, editWarKey).Result(); ex > 0 {
+		trackingTTL = 12 * time.Hour
+	}
+
 	// Update editor tracking: HINCRBY for editor's edit count
 	editorsKey := fmt.Sprintf("editwar:editors:%s", edit.Title)
 	pipe := ewd.redis.Pipeline()
 	pipe.HIncrBy(ctx, editorsKey, edit.User, 1)
-	pipe.Expire(ctx, editorsKey, ewd.timeWindow)
+	pipe.Expire(ctx, editorsKey, trackingTTL)
 
 	// Update byte change tracking for revert detection
 	changesKey := fmt.Sprintf("editwar:changes:%s", edit.Title)
 	byteChange := edit.ByteChange()
 	pipe.RPush(ctx, changesKey, byteChange)
 	pipe.LTrim(ctx, changesKey, -100, -1) // Keep last 100 changes
-	pipe.Expire(ctx, changesKey, ewd.timeWindow)
+	pipe.Expire(ctx, changesKey, trackingTTL)
 
 	// Track edit timeline (user, comment, byte change, timestamp) for LLM analysis.
 	// Only stored for hot pages already in the edit-war tracking path.
@@ -493,6 +503,13 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 	// LLM analysis data stays available as long as the war is active.
 	timelineKey := fmt.Sprintf("editwar:timeline:%s", alert.PageTitle)
 	_ = ewd.redis.Expire(ctx, timelineKey, 12*time.Hour).Err()
+
+	// Also extend editors and changes TTLs to 12h so counters survive
+	// gaps between edits (prevents the 1-edit/1-editor reset problem).
+	editorsRefreshKey := fmt.Sprintf("editwar:editors:%s", alert.PageTitle)
+	_ = ewd.redis.Expire(ctx, editorsRefreshKey, 12*time.Hour).Err()
+	changesRefreshKey := fmt.Sprintf("editwar:changes:%s", alert.PageTitle)
+	_ = ewd.redis.Expire(ctx, changesRefreshKey, 12*time.Hour).Err()
 
 	// Also set editwar:{wiki}:{title} for indexing strategy compatibility
 	if wiki != "" {

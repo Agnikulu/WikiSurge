@@ -524,10 +524,41 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				revertCount = countRevertPatterns(changes)
 			}
 
-			// If editor data expired, skip this edit war (it's no longer active).
-			// Editor data has 10-min TTL, so if it's gone, there's been no activity.
+			// If the editor hash expired but timeline data still exists,
+			// reconstruct counts from the timeline so we don't lose accumulated
+			// edit history when a page resumes after a quiet gap.
 			if len(editors) == 0 {
-				continue // Skip inactive wars, they'll appear in history
+				tlEntries, tlErr := r.client.LRange(ctx, timelineKey, 0, -1).Result()
+				if tlErr != nil || len(tlEntries) == 0 {
+					continue // No data at all — truly inactive
+				}
+
+				// Rebuild editor set and counts from timeline entries
+				editorCounts := make(map[string]int)
+				for _, raw := range tlEntries {
+					var entry struct {
+						User string `json:"user"`
+					}
+					if json.Unmarshal([]byte(raw), &entry) == nil && entry.User != "" {
+						editorCounts[entry.User]++
+					}
+				}
+				for editor := range editorCounts {
+					editors = append(editors, editor)
+				}
+				totalEdits = len(tlEntries)
+
+				// Rebuild the changes list for revert counting
+				tlChanges := make([]string, 0, len(tlEntries))
+				for _, raw := range tlEntries {
+					var entry struct {
+						ByteChange int `json:"byte_change"`
+					}
+					if json.Unmarshal([]byte(raw), &entry) == nil {
+						tlChanges = append(tlChanges, strconv.Itoa(entry.ByteChange))
+					}
+				}
+				revertCount = countRevertPatterns(tlChanges)
 			}
 
 			severity := classifyEditWarSeverity(len(editors), totalEdits, revertCount)
