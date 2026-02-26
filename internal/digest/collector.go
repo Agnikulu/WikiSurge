@@ -77,6 +77,12 @@ type LanguageStat struct {
 // Collector
 // ---------------------------------------------------------------------------
 
+// EditWarAnalyzeFunc is a function that generates an edit war analysis on
+// demand. The collector only needs the side effect (result cached in Redis);
+// the return value is ignored. Assign llm.AnalysisService.Analyze (wrapped)
+// to keep the digest package decoupled from the LLM implementation.
+type EditWarAnalyzeFunc func(ctx context.Context, pageTitle string) error
+
 // Collector gathers digest data from Redis storage layers.
 type Collector struct {
 	trending *storage.TrendingScorer
@@ -84,6 +90,7 @@ type Collector struct {
 	hotPages *storage.HotPageTracker
 	stats    *storage.StatsTracker
 	redis    *redis.Client
+	analyzer EditWarAnalyzeFunc // optional: generates analysis on cache miss
 	logger   zerolog.Logger
 }
 
@@ -122,6 +129,12 @@ func NewCollectorWithRedis(
 		redis:    redisClient,
 		logger:   logger.With().Str("component", "digest-collector").Logger(),
 	}
+}
+
+// SetAnalyzer attaches an optional LLM analysis function so the collector can
+// generate fresh analysis on cache misses during digest enrichment.
+func (c *Collector) SetAnalyzer(fn EditWarAnalyzeFunc) {
+	c.analyzer = fn
 }
 
 // CollectGlobal gathers data that is shared across all users in a digest.
@@ -307,9 +320,25 @@ func (c *Collector) enrichEditWars(ctx context.Context, wars []GlobalHighlight) 
 	for i := range wars {
 		title := wars[i].Title
 
-		// 1. Fetch cached LLM analysis
+		// 1. Fetch cached LLM analysis (or regenerate on miss)
 		cacheKey := fmt.Sprintf("editwar:analysis:%s", title)
-		if cached, err := c.redis.Get(ctx, cacheKey).Result(); err == nil && cached != "" {
+		cached, err := c.redis.Get(ctx, cacheKey).Result()
+
+		// If cache is empty and we have an analyzer, generate fresh analysis.
+		// The Analyze call caches its result in Redis, so re-read afterwards.
+		if (err != nil || cached == "") && c.analyzer != nil {
+			analyzeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			if aErr := c.analyzer(analyzeCtx, title); aErr != nil {
+				c.logger.Warn().Err(aErr).Str("page", title).Msg("on-demand LLM analysis failed for digest")
+			} else {
+				c.logger.Info().Str("page", title).Msg("generated fresh LLM analysis for digest")
+				// Re-read the now-populated cache
+				cached, err = c.redis.Get(ctx, cacheKey).Result()
+			}
+			cancel()
+		}
+
+		if err == nil && cached != "" {
 			var analysis struct {
 				Summary     string `json:"summary"`
 				ContentArea string `json:"content_area"`
@@ -397,6 +426,107 @@ func (c *Collector) enrichEditWars(ctx context.Context, wars []GlobalHighlight) 
 			Str("severity", wars[i].Severity).
 			Bool("has_llm_summary", wars[i].LLMSummary != "").
 			Msg("enriched edit war for digest")
+	}
+
+	// 5. Final pass: fill any remaining gaps from the digest archive.
+	//    This covers weekly digests where the ephemeral cache AND timeline
+	//    have both expired — the archive sorted sets survive for 8 days.
+	c.fillFromDigestArchive(ctx, wars)
+}
+
+// fillFromDigestArchive looks up the durable digest archive sorted sets for any
+// edit war entries that are still missing an LLM summary after the primary
+// enrichment pass. This is the safety net for weekly digests where ephemeral
+// Redis keys have long expired.
+func (c *Collector) fillFromDigestArchive(ctx context.Context, wars []GlobalHighlight) {
+	if c.redis == nil {
+		return
+	}
+
+	// Collect titles that still need enrichment.
+	needsLLM := make(map[string]int) // title → index in wars slice
+	for i := range wars {
+		if wars[i].LLMSummary == "" {
+			needsLLM[wars[i].Title] = i
+		}
+	}
+	if len(needsLLM) == 0 {
+		return
+	}
+
+	// Scan the last 8 days of archive hash keys.
+	for d := 0; d < 8; d++ {
+		dateStr := time.Now().UTC().AddDate(0, 0, -d).Format("2006-01-02")
+		hashKey := fmt.Sprintf("digest:war_analyses:%s:data", dateStr)
+
+		for title, idx := range needsLLM {
+			raw, err := c.redis.HGet(ctx, hashKey, title).Result()
+			if err != nil || raw == "" {
+				continue
+			}
+
+			var analysis struct {
+				Summary     string `json:"summary"`
+				ContentArea string `json:"content_area"`
+				Severity    string `json:"severity"`
+				EditCount   int    `json:"edit_count"`
+				Sides       []struct {
+					Position string `json:"position"`
+					Editors  []struct {
+						User      string `json:"user"`
+						EditCount int    `json:"edit_count"`
+						Role      string `json:"role"`
+					} `json:"editors"`
+				} `json:"sides"`
+			}
+			if json.Unmarshal([]byte(raw), &analysis) != nil {
+				continue
+			}
+
+			if analysis.Summary != "" {
+				wars[idx].LLMSummary = analysis.Summary
+				wars[idx].Summary = analysis.Summary
+			}
+			if analysis.ContentArea != "" && wars[idx].ContentArea == "" {
+				wars[idx].ContentArea = analysis.ContentArea
+			}
+			if analysis.Severity != "" && wars[idx].Severity == "" {
+				wars[idx].Severity = analysis.Severity
+			}
+			if analysis.EditCount > 0 && wars[idx].EditCount == 0 {
+				wars[idx].EditCount = analysis.EditCount
+			}
+			// Fill editors from analysis sides if we have none
+			if wars[idx].EditorCount == 0 {
+				editorSet := make(map[string]bool)
+				for _, side := range analysis.Sides {
+					for _, ed := range side.Editors {
+						editorSet[ed.User] = true
+					}
+				}
+				if len(editorSet) > 0 {
+					editors := make([]string, 0, len(editorSet))
+					for ed := range editorSet {
+						editors = append(editors, ed)
+					}
+					sort.Strings(editors)
+					wars[idx].Editors = editors
+					wars[idx].EditorCount = len(editors)
+				}
+			}
+
+			c.logger.Info().
+				Str("title", title).
+				Str("archive_date", dateStr).
+				Msg("recovered LLM analysis from digest archive")
+
+			// Found it — remove from needsLLM so we don't keep searching.
+			delete(needsLLM, title)
+		}
+
+		if len(needsLLM) == 0 {
+			break
+		}
 	}
 }
 

@@ -39,7 +39,6 @@ const HistoricalEditWars = lazy(() =>
     default: m.HistoricalEditWars,
   }))
 );
-
 import { LoginForm } from './components/Auth/LoginForm';
 import { SettingsPanel } from './components/Settings/SettingsPanel';
 import { useAuthStore } from './store/authStore';

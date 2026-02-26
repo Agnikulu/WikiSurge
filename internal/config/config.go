@@ -349,7 +349,7 @@ func setDefaults(config *Config) {
 		config.LLM.Timeout = 30 * time.Second
 	}
 	if config.LLM.CacheTTL == 0 {
-		config.LLM.CacheTTL = 5 * time.Minute
+		config.LLM.CacheTTL = 25 * time.Hour
 	}
 
 	// Logging defaults

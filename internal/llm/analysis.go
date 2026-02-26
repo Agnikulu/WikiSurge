@@ -99,6 +99,9 @@ func (s *AnalysisService) FinalizeAnalysis(ctx context.Context, pageTitle string
 		_ = s.redis.Set(ctx, cacheKey, string(data), 7*24*time.Hour).Err()
 	}
 
+	// Persist to the digest archive so weekly digests have durable access.
+	s.persistForDigest(ctx, analysis)
+
 	return analysis, nil
 }
 
@@ -159,6 +162,7 @@ func (s *AnalysisService) Analyze(ctx context.Context, pageTitle string) (*Analy
 	// 3. If LLM is not enabled, return a heuristic-only summary
 	if !s.llm.Enabled() {
 		analysis := s.heuristicAnalysis(pageTitle, entries)
+		s.persistForDigest(ctx, analysis)
 		return analysis, nil
 	}
 
@@ -174,6 +178,7 @@ func (s *AnalysisService) Analyze(ctx context.Context, pageTitle string) (*Analy
 	if err != nil {
 		s.logger.Warn().Err(err).Str("page", pageTitle).Msg("LLM call failed, falling back to heuristic")
 		analysis := s.heuristicAnalysis(pageTitle, entries)
+		s.persistForDigest(ctx, analysis)
 		return analysis, nil
 	}
 
@@ -185,7 +190,39 @@ func (s *AnalysisService) Analyze(ctx context.Context, pageTitle string) (*Analy
 		_ = s.redis.Set(ctx, cacheKey, string(data), s.cacheTTL).Err()
 	}
 
+	// 9. Persist to the digest archive so weekly digests have durable access.
+	s.persistForDigest(ctx, analysis)
+
 	return analysis, nil
+}
+
+// persistForDigest saves a copy of the analysis into a date-keyed Redis sorted
+// set (digest:war_analyses:YYYY-MM-DD) so the weekly digest collector can read
+// it long after the ephemeral editwar:analysis:* cache key has expired.
+// Score = edit count so the set is naturally ordered by significance.
+// Each day's set has an 8-day TTL, guaranteeing coverage for weekly digests.
+func (s *AnalysisService) persistForDigest(ctx context.Context, a *Analysis) {
+	if a == nil || a.Summary == "" || a.PageTitle == "" {
+		return
+	}
+	data, err := json.Marshal(a)
+	if err != nil {
+		return
+	}
+	dateKey := fmt.Sprintf("digest:war_analyses:%s", time.Now().UTC().Format("2006-01-02"))
+	// Use page title as the member so later analyses for the same page
+	// on the same day simply overwrite the earlier one (keeping freshest).
+	pipe := s.redis.Pipeline()
+	// Store the JSON payload in a companion hash keyed by page title.
+	hashKey := dateKey + ":data"
+	pipe.HSet(ctx, hashKey, a.PageTitle, string(data))
+	pipe.Expire(ctx, hashKey, 8*24*time.Hour)
+	// Sorted set for ranking (score = edit count).
+	pipe.ZAdd(ctx, dateKey, redis.Z{Score: float64(a.EditCount), Member: a.PageTitle})
+	pipe.Expire(ctx, dateKey, 8*24*time.Hour)
+	if _, pErr := pipe.Exec(ctx); pErr != nil {
+		s.logger.Warn().Err(pErr).Str("page", a.PageTitle).Msg("Failed to persist analysis for digest archive")
+	}
 }
 
 // fetchDiffs retrieves diffs from the Wikipedia API for timeline entries that

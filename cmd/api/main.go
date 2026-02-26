@@ -17,6 +17,7 @@ import (
 	"github.com/Agnikulu/WikiSurge/internal/config"
 	"github.com/Agnikulu/WikiSurge/internal/digest"
 	"github.com/Agnikulu/WikiSurge/internal/email"
+	"github.com/Agnikulu/WikiSurge/internal/llm"
 	"github.com/Agnikulu/WikiSurge/internal/metrics"
 	"github.com/Agnikulu/WikiSurge/internal/storage"
 	"github.com/joho/godotenv"
@@ -139,6 +140,24 @@ func main() {
 	if cfg.Email.Enabled {
 		statsTracker := storage.NewStatsTracker(redisClient)
 		collector := digest.NewCollectorWithRedis(trendingScorer, alerts, hotPageTracker, statsTracker, redisClient, logger)
+
+		// Attach LLM analyzer so the collector can regenerate analyses on
+		// cache misses (and persist them to the digest archive).
+		llmClient := llm.NewClient(llm.Config{
+			Provider:    llm.Provider(cfg.LLM.Provider),
+			APIKey:      cfg.LLM.APIKey,
+			Model:       cfg.LLM.Model,
+			BaseURL:     cfg.LLM.BaseURL,
+			MaxTokens:   cfg.LLM.MaxTokens,
+			Temperature: cfg.LLM.Temperature,
+			Timeout:     cfg.LLM.Timeout,
+		}, logger)
+		analysisSvc := llm.NewAnalysisService(llmClient, redisClient, cfg.LLM.CacheTTL, logger)
+		collector.SetAnalyzer(func(ctx context.Context, pageTitle string) error {
+			_, err := analysisSvc.Analyze(ctx, pageTitle)
+			return err
+		})
+		logger.Info().Bool("llm_enabled", llmClient.Enabled()).Msg("Digest collector: LLM analyzer attached")
 
 		var emailSender digest.EmailSender
 		switch cfg.Email.Provider {

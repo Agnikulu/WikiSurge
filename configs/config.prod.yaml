@@ -116,5 +116,5 @@ llm:
   max_tokens: 512
   temperature: 0.3
   timeout: 30s
-  cache_ttl: 4h
+  cache_ttl: 25h
   reanalyze_every: 10
