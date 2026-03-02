@@ -6,7 +6,7 @@ import { getTimeline } from '../../utils/api';
 
 const RANGE_CONFIG: Record<TimeRange, { label: string; minutes: number; bucketSec: number }> = {
   '1h':  { label: '1H',  minutes: 60,   bucketSec: 30 },
-  '6h':  { label: '6H',  minutes: 360,  bucketSec: 90 },
+  '6h':  { label: '6H',  minutes: 360,  bucketSec: 180 },
   '24h': { label: '24H', minutes: 1440, bucketSec: 300 },
 };
 
@@ -119,8 +119,10 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
 
       if (cancelled) return;
 
-      // Add one live point immediately, then at regular intervals
-      addPoint();
+      // Start live updates after one bucket interval
+      // Don't add a point immediately — the historical data already covers
+      // up to the current time, and addPoint uses edits_per_second (a rate)
+      // which is incompatible with the summed bucket values from history.
       interval = setInterval(addPoint, config.bucketSec * 1000);
     };
 

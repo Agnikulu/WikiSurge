@@ -14,41 +14,41 @@ describe('SeverityBadge', () => {
   it('applies red classes for critical', () => {
     const { container } = render(<SeverityBadge severity="critical" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-red-100');
-    expect(badge.className).toContain('text-red-800');
+    expect(badge.className).toContain('bg-red-900/30');
+    expect(badge.className).toContain('text-red-400');
   });
 
-  it('applies orange classes for high', () => {
+  it('applies amber classes for high', () => {
     const { container } = render(<SeverityBadge severity="high" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-orange-100');
-    expect(badge.className).toContain('text-orange-800');
+    expect(badge.className).toContain('bg-amber-900/30');
+    expect(badge.className).toContain('text-amber-400');
   });
 
-  it('applies yellow classes for medium', () => {
+  it('applies emerald classes for medium', () => {
     const { container } = render(<SeverityBadge severity="medium" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-yellow-100');
-    expect(badge.className).toContain('text-yellow-800');
+    expect(badge.className).toContain('bg-emerald-900/30');
+    expect(badge.className).toContain('text-emerald-400');
   });
 
-  it('applies blue classes for low', () => {
+  it('applies cyan classes for low', () => {
     const { container } = render(<SeverityBadge severity="low" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-blue-100');
-    expect(badge.className).toContain('text-blue-800');
+    expect(badge.className).toContain('bg-cyan-900/30');
+    expect(badge.className).toContain('text-cyan-400');
   });
 
   it('falls back to low style for unknown severity', () => {
     const { container } = render(<SeverityBadge severity="unknown" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-blue-100');
+    expect(badge.className).toContain('bg-cyan-900/30');
   });
 
   it('handles case-insensitive severity', () => {
     const { container } = render(<SeverityBadge severity="CRITICAL" />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.className).toContain('bg-red-100');
+    expect(badge.className).toContain('bg-red-900/30');
   });
 
   it('renders as a small pill badge', () => {

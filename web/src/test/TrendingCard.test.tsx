@@ -64,26 +64,27 @@ describe('TrendingCard', () => {
   // Top 3 special styling
   it('applies gold styling for rank 1', () => {
     const { container } = render(<TrendingCard page={makePage()} rank={1} />);
-    const badge = container.querySelector('[class*="from-yellow"]');
-    expect(badge).not.toBeNull();
+    // Rank 1 badge has gold-tinted background via inline style
+    const rankBadge = container.querySelector('[class*="flex-shrink-0"]') as HTMLElement;
+    expect(rankBadge?.style.color).toBe('rgb(255, 170, 0)');
   });
 
-  it('applies silver styling for rank 2', () => {
+  it('applies green styling for rank 2', () => {
     const { container } = render(<TrendingCard page={makePage()} rank={2} />);
-    const badge = container.querySelector('[class*="from-gray"]');
-    expect(badge).not.toBeNull();
+    const rankBadge = container.querySelector('[class*="flex-shrink-0"]') as HTMLElement;
+    expect(rankBadge?.style.color).toBe('rgb(0, 255, 136)');
   });
 
-  it('applies bronze styling for rank 3', () => {
+  it('applies cyan styling for rank 3', () => {
     const { container } = render(<TrendingCard page={makePage()} rank={3} />);
-    const badge = container.querySelector('[class*="from-orange"]');
-    expect(badge).not.toBeNull();
+    const rankBadge = container.querySelector('[class*="flex-shrink-0"]') as HTMLElement;
+    expect(rankBadge?.style.color).toBe('rgb(0, 221, 255)');
   });
 
-  it('applies plain styling for rank > 3', () => {
+  it('applies muted styling for rank > 3', () => {
     const { container } = render(<TrendingCard page={makePage()} rank={10} />);
-    const badge = container.querySelector('[class*="bg-gray-100"]');
-    expect(badge).not.toBeNull();
+    const rankBadge = container.querySelector('[class*="flex-shrink-0"]') as HTMLElement;
+    expect(rankBadge?.style.color).toContain('rgba');
   });
 
   it('top 3 ranks have larger badge size', () => {
@@ -96,7 +97,8 @@ describe('TrendingCard', () => {
     const { container } = render(<TrendingCard page={makePage()} rank={4} isNew />);
     const wrapper = container.firstChild as HTMLElement;
     expect(wrapper.className).toContain('animate-slide-up');
-    expect(wrapper.className).toContain('ring-1');
+    // isNew uses inline border style, not ring-1 class
+    expect(wrapper.style.border).toBeTruthy();
   });
 
   it('shows trending up indicator when rank improved', () => {

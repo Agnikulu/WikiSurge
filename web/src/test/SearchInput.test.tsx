@@ -18,7 +18,7 @@ describe('SearchInput', () => {
 
   it('renders the search input', () => {
     render(<SearchInput onSearch={onSearch} loading={false} />);
-    expect(screen.getByPlaceholderText('Search pages, users, or comments...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('SEARCH PAGES, USERS, OR COMMENTS...')).toBeInTheDocument();
   });
 
   it('renders search button', () => {
@@ -34,7 +34,7 @@ describe('SearchInput', () => {
   it('shows clear button when query is present', async () => {
     const user = userEvent.setup();
     render(<SearchInput onSearch={onSearch} loading={false} />);
-    const input = screen.getByPlaceholderText('Search pages, users, or comments...');
+    const input = screen.getByPlaceholderText('SEARCH PAGES, USERS, OR COMMENTS...');
     await user.type(input, 'test');
     expect(screen.getByLabelText('Clear search')).toBeInTheDocument();
   });
@@ -42,7 +42,7 @@ describe('SearchInput', () => {
   it('clears input when clear button clicked', async () => {
     const user = userEvent.setup();
     render(<SearchInput onSearch={onSearch} loading={false} />);
-    const input = screen.getByPlaceholderText('Search pages, users, or comments...');
+    const input = screen.getByPlaceholderText('SEARCH PAGES, USERS, OR COMMENTS...');
     await user.type(input, 'test');
     await user.click(screen.getByLabelText('Clear search'));
     expect(input).toHaveValue('');
@@ -51,7 +51,7 @@ describe('SearchInput', () => {
   it('submits search on Enter key', async () => {
     const user = userEvent.setup();
     render(<SearchInput onSearch={onSearch} loading={false} />);
-    const input = screen.getByPlaceholderText('Search pages, users, or comments...');
+    const input = screen.getByPlaceholderText('SEARCH PAGES, USERS, OR COMMENTS...');
     await user.type(input, 'election{Enter}');
     expect(onSearch).toHaveBeenCalledWith('election');
   });
@@ -60,7 +60,7 @@ describe('SearchInput', () => {
     const emptySearchFn = vi.fn();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<SearchInput onSearch={emptySearchFn} loading={false} />);
-    const input = screen.getByPlaceholderText('Search pages, users, or comments...');
+    const input = screen.getByPlaceholderText('SEARCH PAGES, USERS, OR COMMENTS...');
     // Press Enter without typing anything
     await user.click(input);
     await user.keyboard('{Enter}');
@@ -79,7 +79,7 @@ describe('SearchInput', () => {
   it('shows character count when query present', async () => {
     const user = userEvent.setup();
     render(<SearchInput onSearch={onSearch} loading={false} />);
-    const input = screen.getByPlaceholderText('Search pages, users, or comments...');
+    const input = screen.getByPlaceholderText('SEARCH PAGES, USERS, OR COMMENTS...');
     await user.type(input, 'hello');
     expect(screen.getByText('5')).toBeInTheDocument();
   });
@@ -91,7 +91,7 @@ describe('SearchInput', () => {
 
   it('uses initialQuery prop', () => {
     render(<SearchInput onSearch={onSearch} loading={false} initialQuery="initial" />);
-    const input = screen.getByPlaceholderText('Search pages, users, or comments...');
+    const input = screen.getByPlaceholderText('SEARCH PAGES, USERS, OR COMMENTS...');
     expect(input).toHaveValue('initial');
   });
 });

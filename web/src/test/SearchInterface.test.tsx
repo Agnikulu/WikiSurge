@@ -20,22 +20,22 @@ describe('SearchInterface', () => {
 
   it('renders the search interface heading', () => {
     render(<SearchInterface />);
-    expect(screen.getByText('Search Edits')).toBeInTheDocument();
+    expect(screen.getByText('SEARCH EDITS')).toBeInTheDocument();
   });
 
   it('renders the search input', () => {
     render(<SearchInterface />);
-    expect(screen.getByPlaceholderText('Search pages, users, or comments...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('SEARCH PAGES, USERS, OR COMMENTS...')).toBeInTheDocument();
   });
 
   it('renders advanced search button', () => {
     render(<SearchInterface />);
-    expect(screen.getByText('Advanced search')).toBeInTheDocument();
+    expect(screen.getByText('ADVANCED')).toBeInTheDocument();
   });
 
   it('shows initial empty state', () => {
     render(<SearchInterface />);
-    expect(screen.getByText('Enter a search query to find edits')).toBeInTheDocument();
+    expect(screen.getByText('ENTER A SEARCH QUERY TO FIND EDITS')).toBeInTheDocument();
   });
 
   it('performs search on Enter key', async () => {
@@ -57,7 +57,7 @@ describe('SearchInterface', () => {
     });
 
     render(<SearchInterface />);
-    const input = screen.getByPlaceholderText('Search pages, users, or comments...');
+    const input = screen.getByPlaceholderText('SEARCH PAGES, USERS, OR COMMENTS...');
     await user.type(input, 'test{Enter}');
 
     // Wait for async render
@@ -69,26 +69,26 @@ describe('SearchInterface', () => {
     mockSearchEdits.mockRejectedValueOnce(new Error('Network error'));
 
     render(<SearchInterface />);
-    const input = screen.getByPlaceholderText('Search pages, users, or comments...');
+    const input = screen.getByPlaceholderText('SEARCH PAGES, USERS, OR COMMENTS...');
     await user.type(input, 'fail{Enter}');
 
     // Wait for error to appear
-    const errorEl = await screen.findByText('Search failed. Please try again.');
+    const errorEl = await screen.findByText('SEARCH FAILED');
     expect(errorEl).toBeInTheDocument();
   });
 
   it('opens advanced search modal', async () => {
     const user = userEvent.setup();
     render(<SearchInterface />);
-    await user.click(screen.getByText('Advanced search'));
-    expect(screen.getByText('Advanced Search')).toBeInTheDocument();
+    await user.click(screen.getByText('ADVANCED'));
+    expect(screen.getByText('ADVANCED SEARCH')).toBeInTheDocument();
   });
 
   it('closes advanced search modal', async () => {
     const user = userEvent.setup();
     render(<SearchInterface />);
-    await user.click(screen.getByText('Advanced search'));
-    expect(screen.getByText('Advanced Search')).toBeInTheDocument();
+    await user.click(screen.getByText('ADVANCED'));
+    expect(screen.getByText('ADVANCED SEARCH')).toBeInTheDocument();
     await user.click(screen.getByLabelText('Close advanced search'));
     // Modal heading should be gone
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

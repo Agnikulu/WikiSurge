@@ -69,11 +69,11 @@ describe('formatByteChange', () => {
 
 describe('getByteChangeColor', () => {
   it('returns green for positive', () => {
-    expect(getByteChangeColor(100)).toBe('text-green-600');
+    expect(getByteChangeColor(100)).toBe('text-emerald-400');
   });
 
   it('returns red for negative', () => {
-    expect(getByteChangeColor(-100)).toBe('text-red-600');
+    expect(getByteChangeColor(-100)).toBe('text-red-400');
   });
 
   it('returns gray for zero', () => {

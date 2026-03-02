@@ -54,7 +54,7 @@ describe('SearchResults', () => {
     render(
       <SearchResults {...defaultProps} error="Network error" results={[]} />
     );
-    expect(screen.getByText('Search failed. Please try again.')).toBeInTheDocument();
+    expect(screen.getByText('SEARCH FAILED')).toBeInTheDocument();
     expect(screen.getByText('Network error')).toBeInTheDocument();
   });
 
@@ -62,14 +62,14 @@ describe('SearchResults', () => {
     render(
       <SearchResults {...defaultProps} searched={false} results={[]} />
     );
-    expect(screen.getByText('Enter a search query to find edits')).toBeInTheDocument();
+    expect(screen.getByText('ENTER A SEARCH QUERY TO FIND EDITS')).toBeInTheDocument();
   });
 
   it('shows no results message', () => {
     render(
       <SearchResults {...defaultProps} results={[]} total={0} />
     );
-    expect(screen.getByText(/No edits found for/)).toBeInTheDocument();
+    expect(screen.getByText(/NO RESULTS FOR/)).toBeInTheDocument();
   });
 
   it('includes query in no-results message', () => {
@@ -81,7 +81,7 @@ describe('SearchResults', () => {
 
   it('displays result count', () => {
     render(<SearchResults {...defaultProps} />);
-    expect(screen.getByText(/Showing/)).toBeInTheDocument();
+    expect(screen.getByText(/SHOWING/)).toBeInTheDocument();
     expect(screen.getByText('1–2')).toBeInTheDocument();
   });
 

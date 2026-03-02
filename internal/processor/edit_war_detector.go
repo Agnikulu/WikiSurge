@@ -173,7 +173,7 @@ func (ewd *EditWarDetector) ProcessEdit(ctx context.Context, edit *models.Wikipe
 	changesKey := fmt.Sprintf("editwar:changes:%s", edit.Title)
 	byteChange := edit.ByteChange()
 	pipe.RPush(ctx, changesKey, byteChange)
-	pipe.LTrim(ctx, changesKey, -100, -1) // Keep last 100 changes
+	pipe.LTrim(ctx, changesKey, -500, -1) // Keep last 500 changes for better revert detection
 	pipe.Expire(ctx, changesKey, trackingTTL)
 
 	// Track edit timeline (user, comment, byte change, timestamp) for LLM analysis.

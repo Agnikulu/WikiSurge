@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { LanguageDistributionChart } from '../components/Stats/LanguageDistributionChart';
 import type { Stats } from '../types';
@@ -19,6 +19,9 @@ const mockStatsWithLanguages: Stats = {
   edits_by_type: { human: 8000, bot: 2000 },
 };
 
+// Dynamic store state — tests can override before render
+const mockStoreState = { stats: mockStatsWithLanguages as Stats | null };
+
 // Mock recharts ResponsiveContainer to avoid jsdom issues
 vi.mock('recharts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('recharts')>();
@@ -36,6 +39,11 @@ vi.mock('../utils/api', () => ({
   getStats: vi.fn(() => Promise.resolve(mockStatsWithLanguages)),
 }));
 
+vi.mock('../store/appStore', () => ({
+  useAppStore: (selector: (state: Record<string, unknown>) => unknown) =>
+    selector(mockStoreState),
+}));
+
 describe('LanguageDistributionChart', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -43,14 +51,14 @@ describe('LanguageDistributionChart', () => {
 
   it('renders the heading', () => {
     render(<LanguageDistributionChart />);
-    expect(screen.getByText('Language Distribution')).toBeInTheDocument();
+    expect(screen.getByText('LANGUAGE DISTRIBUTION')).toBeInTheDocument();
   });
 
   it('shows loading state initially then loads data', async () => {
     render(<LanguageDistributionChart />);
     // either shows loading or the chart once data arrives
     await waitFor(() => {
-      const heading = screen.getByText('Language Distribution');
+      const heading = screen.getByText('LANGUAGE DISTRIBUTION');
       expect(heading).toBeInTheDocument();
     });
   });
@@ -58,7 +66,7 @@ describe('LanguageDistributionChart', () => {
   it('renders the edit type distribution section when data is available', async () => {
     render(<LanguageDistributionChart />);
     await waitFor(() => {
-      const section = screen.queryByText('Edit Type Distribution');
+      const section = screen.queryByText('EDIT TYPE DISTRIBUTION');
       expect(section).toBeInTheDocument();
     });
   });
@@ -67,17 +75,18 @@ describe('LanguageDistributionChart', () => {
 describe('LanguageDistributionChart – no language data', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    mockStoreState.stats = mockStatsWithLanguages; // restore default
   });
 
   it('shows empty state when no languages are returned', async () => {
-    const apiModule = await import('../utils/api');
-    vi.mocked(apiModule.getStats).mockResolvedValueOnce({
+    // Override store stats to have no languages
+    mockStoreState.stats = {
       edits_per_second: 1.0,
       edits_today: 500,
       hot_pages_count: 5,
       trending_count: 3,
       active_alerts: 0,
-    });
+    };
 
     render(<LanguageDistributionChart />);
     await waitFor(() => {

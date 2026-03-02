@@ -3,8 +3,6 @@ import type { EditWar } from '../../types';
 import { getEditWars } from '../../utils/api';
 import { useAPI } from '../../hooks/useAPI';
 import { usePolling } from '../../hooks/usePolling';
-import { useWebSocket } from '../../hooks/useWebSocket';
-import { buildWebSocketUrl, WS_ENDPOINTS } from '../../utils/websocket';
 import { EditWarCard } from './EditWarCard';
 import { playEditWarAlert } from '../../utils/alertSounds';
 import { requestNotificationPermission, showEditWarNotification } from '../../utils/notifications';
@@ -54,27 +52,11 @@ export const EditWarsList = memo(function EditWarsList() {
     initialData: [],
   });
 
-  // Re-fetch when filter changes
-  useEffect(() => {
-    refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
-
-  // Poll every 15 seconds
-  usePolling({ fetcher: refetch, interval: POLL_INTERVAL });
-
-  // ── WebSocket real-time updates ────────────────────
-  const wsUrl = buildWebSocketUrl(WS_ENDPOINTS.alerts);
-  useWebSocket<{ type: string; data: EditWar }>({
-    url: wsUrl,
-    onMessage: (msg) => {
-      const parsed = msg as { type?: string; data?: EditWar };
-      if (parsed.type === 'edit_war' && parsed.data) {
-        // Trigger a refetch to stay in sync
-        refetch();
-      }
-    },
-  });
+  // Poll every 20 seconds. `immediate: false` avoids a duplicate request on
+  // mount — `useAPI` (autoFetch) already handles the initial load and also
+  // re-fetches automatically when `fetcher` identity changes (i.e. when
+  // `filter` changes), so we only need the interval here.
+  usePolling({ fetcher: refetch, interval: POLL_INTERVAL, immediate: false });
 
   // ── Request notification permission on mount ───────
   useEffect(() => {

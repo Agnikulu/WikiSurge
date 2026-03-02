@@ -34,25 +34,6 @@ vi.mock('../utils/api', () => ({
   getEditWars: vi.fn(() => Promise.resolve(mockWars)),
 }));
 
-vi.mock('../hooks/useWebSocket', () => ({
-  useWebSocket: vi.fn(() => ({
-    data: [],
-    connectionState: 'connected',
-    connected: true,
-    reconnectCount: 0,
-    messageRate: 0,
-    clearData: vi.fn(),
-    pause: vi.fn(),
-    resume: vi.fn(),
-    isPaused: false,
-  })),
-}));
-
-vi.mock('../utils/websocket', () => ({
-  buildWebSocketUrl: vi.fn(() => 'ws://localhost:8080/ws/alerts'),
-  WS_ENDPOINTS: { alerts: '/ws/alerts' },
-}));
-
 vi.mock('../utils/notifications', () => ({
   requestNotificationPermission: vi.fn(),
   showEditWarNotification: vi.fn(),
@@ -77,7 +58,7 @@ describe('EditWarsList', () => {
   it('renders the header', async () => {
     render(<EditWarsList />);
     await waitFor(() => {
-      expect(screen.getByText(/Edit Wars in Progress/)).toBeInTheDocument();
+      expect(screen.getByText(/EDIT WARS IN PROGRESS/)).toBeInTheDocument();
     });
   });
 
@@ -119,8 +100,8 @@ describe('EditWarsList', () => {
   it('shows filter toggle buttons', async () => {
     render(<EditWarsList />);
     await waitFor(() => {
-      expect(screen.getByText('Active')).toBeInTheDocument();
-      expect(screen.getByText('All')).toBeInTheDocument();
+      expect(screen.getByText('ACTIVE')).toBeInTheDocument();
+      expect(screen.getByText('ALL')).toBeInTheDocument();
     });
   });
 
@@ -133,7 +114,7 @@ describe('EditWarsList', () => {
     });
 
     // Click the header toggle to collapse
-    const header = screen.getByText(/Edit Wars in Progress/);
+    const header = screen.getByText(/EDIT WARS IN PROGRESS/);
     await user.click(header);
 
     // Cards should be hidden
@@ -147,7 +128,7 @@ describe('EditWarsList', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('No active edit wars detected'),
+        screen.getByText('NO ACTIVE EDIT WARS DETECTED'),
       ).toBeInTheDocument();
     });
   });

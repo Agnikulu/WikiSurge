@@ -9,7 +9,7 @@ const mockStats: Stats = {
   edits_today: 234567,
   hot_pages_count: 145,
   trending_count: 89,
-  active_alerts: 12,
+  active_alerts: 37,
   top_language: 'en',
 };
 
@@ -20,7 +20,7 @@ vi.mock('../utils/api', () => ({
 // Mock zustand store
 vi.mock('../store/appStore', () => ({
   useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) =>
-    selector({ updateStats: vi.fn() }),
+    selector({ updateStats: vi.fn(), setApiHealthy: vi.fn(), alertsCount: 37 }),
   ),
 }));
 
@@ -62,14 +62,14 @@ describe('StatsOverview', () => {
     expect(screen.getByText('234,567')).toBeInTheDocument();
     expect(screen.getByText('145')).toBeInTheDocument();
     expect(screen.getByText('89')).toBeInTheDocument();
-    expect(screen.getByText('12')).toBeInTheDocument();
+    expect(screen.getByText('37')).toBeInTheDocument();
     expect(screen.getByText('en')).toBeInTheDocument();
   });
 
   it('renders the Overview heading', async () => {
     render(<StatsOverview />);
     await waitFor(() => {
-      expect(screen.getByText('Overview')).toBeInTheDocument();
+      expect(screen.getByText('SYSTEM OVERVIEW')).toBeInTheDocument();
     });
   });
 

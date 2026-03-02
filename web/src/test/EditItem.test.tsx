@@ -40,7 +40,7 @@ describe('EditItem', () => {
     render(<EditItem edit={baseEdit} />);
     const byteEl = screen.getByText('+200');
     expect(byteEl).toBeInTheDocument();
-    expect(byteEl.className).toContain('text-green-600');
+    expect(byteEl.className).toContain('text-emerald-400');
   });
 
   it('renders negative byte change in red', () => {
@@ -51,7 +51,7 @@ describe('EditItem', () => {
     render(<EditItem edit={edit} />);
     const byteEl = screen.getByText('-500');
     expect(byteEl).toBeInTheDocument();
-    expect(byteEl.className).toContain('text-red-600');
+    expect(byteEl.className).toContain('text-red-400');
   });
 
   it('shows bot indicator for bot edits', () => {
@@ -136,8 +136,9 @@ describe('EditItem', () => {
   it('applies muted styling for bot edits', () => {
     const botEdit: Edit = { ...baseEdit, bot: true };
     const { container } = render(<EditItem edit={botEdit} />);
-    const article = container.querySelector('article');
-    expect(article?.className).toContain('bg-gray-50');
+    // Bot edits use inline background style instead of bg-gray-50
+    const editDiv = container.querySelector('.edit-item') as HTMLElement;
+    expect(editDiv?.style.background).toBeTruthy();
   });
 
   it('handles search API shape (string id, byte_change)', () => {

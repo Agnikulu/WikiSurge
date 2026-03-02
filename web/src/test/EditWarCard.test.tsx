@@ -71,7 +71,7 @@ describe('EditWarCard', () => {
 
   it('renders View page link pointing to Wikipedia', () => {
     render(<EditWarCard war={activeWar} />);
-    const link = screen.getByText('View page');
+    const link = screen.getByText('VIEW PAGE');
     expect(link.closest('a')).toHaveAttribute(
       'href',
       expect.stringContaining('wikipedia.org'),
@@ -99,7 +99,6 @@ describe('EditWarCard', () => {
 
     // Now visible
     expect(screen.getByText('Revert ratio:')).toBeInTheDocument();
-    expect(screen.getByText('All editors:')).toBeInTheDocument();
   });
 
   it('collapses on "Less" button click', async () => {
@@ -123,10 +122,10 @@ describe('EditWarCard', () => {
     expect(onDismiss).toHaveBeenCalledWith(activeWar);
   });
 
-  it('applies orange-themed border for high severity', () => {
+  it('applies amber-themed border for high severity', () => {
     const { container } = render(<EditWarCard war={activeWar} />);
     const card = container.firstElementChild;
-    expect(card?.className).toContain('border-l-orange');
+    expect(card?.className).toContain('border-l-amber');
   });
 
   it('applies highlight ring when isNew is true', () => {

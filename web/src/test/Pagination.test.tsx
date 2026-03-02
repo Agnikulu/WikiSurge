@@ -12,7 +12,7 @@ describe('Pagination', () => {
 
   it('renders page info text', () => {
     render(<Pagination currentPage={2} totalPages={5} onPageChange={() => {}} />);
-    expect(screen.getByText('Page 2 of 5')).toBeInTheDocument();
+    expect(screen.getByText('PAGE 2 OF 5')).toBeInTheDocument();
   });
 
   it('disables previous button on page 1', () => {

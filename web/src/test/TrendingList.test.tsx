@@ -65,7 +65,7 @@ describe('TrendingList', () => {
     // Never resolve the promise so it stays loading
     mockedGetTrending.mockReturnValue(new Promise(() => {}));
     render(<TrendingList />);
-    expect(screen.getByText('📈 Trending Pages')).toBeInTheDocument();
+    expect(screen.getByText('TRENDING PAGES')).toBeInTheDocument();
   });
 
   it('renders trending pages after fetch', async () => {
@@ -95,10 +95,10 @@ describe('TrendingList', () => {
     render(<TrendingList />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load trending pages')).toBeInTheDocument();
+      expect(screen.getByText('FAILED TO LOAD TRENDING')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Retry')).toBeInTheDocument();
+    expect(screen.getByText('RETRY')).toBeInTheDocument();
   });
 
   it('shows empty state when no trending pages', async () => {
@@ -106,7 +106,7 @@ describe('TrendingList', () => {
     render(<TrendingList />);
 
     await waitFor(() => {
-      expect(screen.getByText('No trending pages yet')).toBeInTheDocument();
+      expect(screen.getByText('NO TRENDING PAGES YET')).toBeInTheDocument();
     });
   });
 
@@ -114,7 +114,7 @@ describe('TrendingList', () => {
     render(<TrendingList />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Showing top 3 pages/)).toBeInTheDocument();
+      expect(screen.getByText(/SHOWING TOP 3 PAGES/)).toBeInTheDocument();
     });
   });
 

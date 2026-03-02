@@ -5,27 +5,33 @@ interface UsePollingOptions {
   fetcher: () => Promise<void>;
   interval: number;
   enabled?: boolean;
+  /** When true (default), calls the fetcher immediately on start. Set to
+   *  false when the caller already handles the initial fetch (e.g. via
+   *  useAPI's autoFetch) to avoid duplicate requests. */
+  immediate?: boolean;
 }
 
 /**
  * Hook that polls an API endpoint at a specified interval.
  * The caller owns the state; `fetcher` is expected to update it.
  */
-export function usePolling({ fetcher, interval, enabled = true }: UsePollingOptions) {
+export function usePolling({ fetcher, interval, enabled = true, immediate = true }: UsePollingOptions) {
   const savedFetcher = useRef(fetcher);
   savedFetcher.current = fetcher;
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const start = useCallback(() => {
-    // Initial fetch
-    savedFetcher.current();
+    // Initial fetch (skip when caller already handles it)
+    if (immediate) {
+      savedFetcher.current();
+    }
 
     // Set up polling
     intervalRef.current = setInterval(() => {
       savedFetcher.current();
     }, interval);
-  }, [interval]);
+  }, [interval, immediate]);
 
   const stop = useCallback(() => {
     if (intervalRef.current) {

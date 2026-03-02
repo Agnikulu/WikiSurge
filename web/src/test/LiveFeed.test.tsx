@@ -71,7 +71,7 @@ describe('LiveFeed', () => {
 
   it('renders the title', () => {
     render(<LiveFeed />);
-    expect(screen.getByText('Live Edit Feed')).toBeInTheDocument();
+    expect(screen.getByText('LIVE FEED')).toBeInTheDocument();
   });
 
   it('shows connecting state initially', () => {
@@ -85,7 +85,7 @@ describe('LiveFeed', () => {
     await act(async () => {
       vi.advanceTimersByTime(10);
     });
-    expect(screen.getByText('Live')).toBeInTheDocument();
+    expect(screen.getByText('LIVE')).toBeInTheDocument();
   });
 
   it('shows waiting message when connected but no edits', async () => {
@@ -156,7 +156,7 @@ describe('LiveFeed', () => {
     expect(screen.queryByText('Paused Edit')).not.toBeInTheDocument();
 
     // Paused banner should be visible
-    expect(screen.getByText(/Feed paused/i)).toBeInTheDocument();
+    expect(screen.getByText(/FEED PAUSED/i)).toBeInTheDocument();
   });
 
   it('clear button removes all edits', async () => {
@@ -189,12 +189,11 @@ describe('LiveFeed', () => {
     const filterBtn = screen.getByLabelText('Toggle filters');
     await user.click(filterBtn);
 
-    expect(screen.getByText('Filters')).toBeInTheDocument();
-    expect(screen.getByText('Exclude bots')).toBeInTheDocument();
+    expect(screen.getByText('FILTERS')).toBeInTheDocument();
   });
 
-  it('has proper feed ARIA role', () => {
+  it('has proper status ARIA role', () => {
     render(<LiveFeed />);
-    expect(screen.getByRole('feed')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeInTheDocument();
   });
 });

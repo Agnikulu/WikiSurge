@@ -80,7 +80,7 @@ afterEach(() => {
 describe('AlertsPanel', () => {
   it('renders header with title', async () => {
     render(<AlertsPanel />);
-    expect(screen.getByText(/Breaking News Alerts/)).toBeInTheDocument();
+    expect(screen.getByText('ALERTS')).toBeInTheDocument();
   });
 
   it('shows alerts from initial REST fetch', async () => {
@@ -105,8 +105,8 @@ describe('AlertsPanel', () => {
     render(<AlertsPanel />);
     // Should mention connecting or live
     await waitFor(() => {
-      const liveEl = screen.queryByText('Live');
-      const connectingEl = screen.queryByText('Connecting');
+      const liveEl = screen.queryByText('LIVE');
+      const connectingEl = screen.queryByText('CONNECTING');
       expect(liveEl || connectingEl).not.toBeNull();
     });
   });
@@ -120,16 +120,16 @@ describe('AlertsPanel', () => {
 
   it('renders severity filter buttons', () => {
     render(<AlertsPanel />);
-    expect(screen.getByText('Critical')).toBeInTheDocument();
-    expect(screen.getByText('High')).toBeInTheDocument();
-    expect(screen.getByText('Medium')).toBeInTheDocument();
-    expect(screen.getByText('Low')).toBeInTheDocument();
+    expect(screen.getByText('CRITICAL')).toBeInTheDocument();
+    expect(screen.getByText('HIGH')).toBeInTheDocument();
+    expect(screen.getByText('MEDIUM')).toBeInTheDocument();
+    expect(screen.getByText('LOW')).toBeInTheDocument();
   });
 
   it('renders type filter buttons', () => {
     render(<AlertsPanel />);
-    expect(screen.getByText('Spike')).toBeInTheDocument();
-    expect(screen.getByText('Edit War')).toBeInTheDocument();
+    expect(screen.getByText('SPIKE')).toBeInTheDocument();
+    expect(screen.getByText('EDIT WAR')).toBeInTheDocument();
   });
 
   it('filters by severity', async () => {
@@ -141,7 +141,7 @@ describe('AlertsPanel', () => {
     });
 
     // Filter to high only — should hide critical spike
-    await user.click(screen.getByText('High'));
+    await user.click(screen.getByText('HIGH'));
 
     expect(screen.queryByText('Breaking story')).not.toBeInTheDocument();
     expect(screen.getByText('Debate topic')).toBeInTheDocument();
@@ -155,8 +155,8 @@ describe('AlertsPanel', () => {
       expect(screen.getByText('Breaking story')).toBeInTheDocument();
     });
 
-    // Filter to edit_war only — use getAllByText since "Edit War" also appears in the alert card header
-    const editWarButtons = screen.getAllByText('Edit War');
+    // Filter to edit_war only — use getAllByText since "EDIT WAR" also appears in the alert card header
+    const editWarButtons = screen.getAllByText('EDIT WAR');
     // The filter button is the smaller pill button, find it among the matches
     const filterButton = editWarButtons.find(
       (el) => el.className.includes('rounded-full'),
@@ -177,9 +177,9 @@ describe('AlertsPanel', () => {
     });
 
     // Filter to low severity — neither alert matches
-    await user.click(screen.getByText('Low'));
+    await user.click(screen.getByText('LOW'));
 
-    expect(screen.getByText(/No alerts match/)).toBeInTheDocument();
+    expect(screen.getByText(/NO ALERTS MATCH/)).toBeInTheDocument();
   });
 
   it('shows empty state when no alerts exist', async () => {
@@ -187,7 +187,7 @@ describe('AlertsPanel', () => {
     render(<AlertsPanel />);
 
     await waitFor(() => {
-      expect(screen.getByText(/No alerts yet/)).toBeInTheDocument();
+      expect(screen.getByText(/MONITORING/)).toBeInTheDocument();
     });
   });
 
@@ -218,6 +218,6 @@ describe('AlertsPanel', () => {
 
     expect(screen.queryByText('Breaking story')).not.toBeInTheDocument();
     expect(screen.queryByText('Debate topic')).not.toBeInTheDocument();
-    expect(screen.getByText(/No alerts yet/)).toBeInTheDocument();
+    expect(screen.getByText(/MONITORING/)).toBeInTheDocument();
   });
 });

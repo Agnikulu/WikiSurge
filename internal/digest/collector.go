@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/Agnikulu/WikiSurge/internal/models"
@@ -238,17 +239,50 @@ func (c *Collector) collectHighlights(ctx context.Context, since time.Time) ([]G
 		if title == "" {
 			continue
 		}
+		alertEditorCount := intFromData(a.Data, "editor_count")
+		alertRevertCount := intFromData(a.Data, "revert_count")
+		alertEditCount := intFromData(a.Data, "edit_count")
+		alertSeverity := stringFromData(a.Data, "severity")
+		// Extract editors array from alert data
+		var alertEditors []string
+		if rawEditors, ok := a.Data["editors"]; ok {
+			if edArr, ok := rawEditors.([]interface{}); ok {
+				for _, e := range edArr {
+					if s, ok := e.(string); ok {
+						alertEditors = append(alertEditors, s)
+					}
+				}
+			}
+		}
+
 		if existing, ok := seen[title]; ok {
-			// Upgrade to edit_war type if it was just a spike
+			// Upgrade to edit_war type and use highest counts
 			existing.EventType = "edit_war"
 			existing.Summary = "Edit war detected"
+			if alertEditCount > existing.EditCount {
+				existing.EditCount = alertEditCount
+			}
+			if alertEditorCount > existing.EditorCount {
+				existing.EditorCount = alertEditorCount
+				existing.Editors = alertEditors
+			}
+			if alertRevertCount > existing.RevertCount {
+				existing.RevertCount = alertRevertCount
+			}
+			if alertSeverity != "" {
+				existing.Severity = alertSeverity
+			}
 		} else {
 			seen[title] = &GlobalHighlight{
-				Title:     title,
-				EditCount: intFromData(a.Data, "edit_count"),
-				EventType: "edit_war",
-				Summary:   "Edit war detected",
-				ServerURL: stringFromData(a.Data, "server_url"),
+				Title:       title,
+				EditCount:   alertEditCount,
+				EventType:   "edit_war",
+				Summary:     "Edit war detected",
+				ServerURL:   stringFromData(a.Data, "server_url"),
+				EditorCount: alertEditorCount,
+				Editors:     alertEditors,
+				RevertCount: alertRevertCount,
+				Severity:    alertSeverity,
 			}
 		}
 	}
@@ -366,51 +400,56 @@ func (c *Collector) enrichEditWars(ctx context.Context, wars []GlobalHighlight) 
 				if analysis.EditCount > 0 && wars[i].EditCount == 0 {
 					wars[i].EditCount = analysis.EditCount
 				}
-				// Collect unique editors from all sides
-				editorSet := make(map[string]bool)
+				// Collect unique editors from LLM analysis sides and add them
+				// to wars[i].Editors so they get merged with hash editors below.
 				for _, side := range analysis.Sides {
 					for _, ed := range side.Editors {
-						editorSet[ed.User] = true
+						wars[i].Editors = append(wars[i].Editors, ed.User)
 					}
 				}
-				if len(editorSet) > 0 {
-					editors := make([]string, 0, len(editorSet))
-					for ed := range editorSet {
-						editors = append(editors, ed)
-					}
-					sort.Strings(editors)
-					wars[i].Editors = editors
-					wars[i].EditorCount = len(editors)
-				}
+				// Note: LLM editors are merged with hash editors below
 			}
 		}
 
-		// 2. Fall back to editor hash if analysis didn't provide editors
-		if wars[i].EditorCount == 0 {
-			editorsKey := fmt.Sprintf("editwar:editors:%s", title)
-			editorMap, err := c.redis.HGetAll(ctx, editorsKey).Result()
-			if err == nil && len(editorMap) > 0 {
-				editors := make([]string, 0, len(editorMap))
-				for editor := range editorMap {
-					editors = append(editors, editor)
-				}
-				sort.Strings(editors)
-				wars[i].Editors = editors
-				wars[i].EditorCount = len(editors)
+		// 2. Always merge editors from the tracking hash — the hash has every
+		// editor who participated, while the LLM analysis typically only
+		// mentions a handful of prominent ones.
+		editorSet := make(map[string]bool)
+		// Start with any editors already set (from alert stream data)
+		for _, ed := range wars[i].Editors {
+			editorSet[ed] = true
+		}
+		editorsKey := fmt.Sprintf("editwar:editors:%s", title)
+		editorMap, err := c.redis.HGetAll(ctx, editorsKey).Result()
+		if err == nil && len(editorMap) > 0 {
+			for editor := range editorMap {
+				editorSet[editor] = true
 			}
 		}
+		if len(editorSet) > 0 {
+			editors := make([]string, 0, len(editorSet))
+			for ed := range editorSet {
+				editors = append(editors, ed)
+			}
+			sort.Strings(editors)
+			wars[i].Editors = editors
+			wars[i].EditorCount = len(editors)
+		}
 
-		// 3. Count reverts from changes list
+		// 3. Count reverts from changes list using proper alternating-sign
+		// pattern detection (matching the edit war detector's algorithm).
+		// The existing RevertCount from alert stream data is used as a floor.
+		alertRevertCount := wars[i].RevertCount
 		changesKey := fmt.Sprintf("editwar:changes:%s", title)
 		changes, err := c.redis.LRange(ctx, changesKey, 0, -1).Result()
-		if err == nil && len(changes) > 0 {
-			revertCount := 0
-			for _, ch := range changes {
-				if len(ch) > 0 && (ch[0] == '-') {
-					revertCount++
-				}
+		if err == nil && len(changes) >= 2 {
+			revertCount := countRevertsFromChanges(changes)
+			// Use whichever source gives a higher count — the alert stream
+			// captured the count at detection time, but the changes list may
+			// have accumulated more reverts since then.
+			if revertCount > alertRevertCount {
+				wars[i].RevertCount = revertCount
 			}
-			wars[i].RevertCount = revertCount
 		}
 
 		// 4. Update the summary to use LLM summary if available
@@ -681,4 +720,61 @@ func intFromData(data map[string]interface{}, key string) int {
 		}
 	}
 	return 0
+}
+
+// countRevertsFromChanges detects reversions by analyzing byte change patterns,
+// mirroring the algorithm from processor.EditWarDetector.countReverts().
+// It looks for consecutive edits with opposite signs and similar magnitudes.
+func countRevertsFromChanges(changesStr []string) int {
+	if len(changesStr) < 2 {
+		return 0
+	}
+
+	changes := make([]int, 0, len(changesStr))
+	for _, cs := range changesStr {
+		val, err := strconv.Atoi(cs)
+		if err != nil {
+			continue
+		}
+		changes = append(changes, val)
+	}
+
+	if len(changes) < 2 {
+		return 0
+	}
+
+	revertCount := 0
+	for i := 1; i < len(changes); i++ {
+		prev := changes[i-1]
+		curr := changes[i]
+
+		// Two consecutive zero-byte edits often indicate reverts
+		if prev == 0 && curr == 0 {
+			revertCount++
+			continue
+		}
+
+		// Check for opposite signs
+		if (prev > 0 && curr < 0) || (prev < 0 && curr > 0) {
+			// For very small edits, be lenient
+			absPrev := math.Abs(float64(prev))
+			absCurr := math.Abs(float64(curr))
+
+			if absPrev < 10 && absCurr < 10 {
+				revertCount++
+				continue
+			}
+
+			// If magnitudes are within 40% of each other, likely a revert
+			ratio := absCurr / absPrev
+			if ratio > 1 {
+				ratio = absPrev / absCurr
+			}
+			if ratio >= 0.6 {
+				revertCount++
+			}
+		}
+	}
+
+	return revertCount
 }

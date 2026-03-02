@@ -110,9 +110,9 @@ describe('AlertCard – Edit War Alert', () => {
     expect(screen.getByLabelText('edit war')).toHaveTextContent('⚔️');
   });
 
-  it('applies orange border for high severity', () => {
+  it('applies amber border for high severity', () => {
     const { container } = render(<AlertCard alert={editWarAlert} />);
-    const card = container.querySelector('[class*="border-orange"]');
+    const card = container.querySelector('[class*="border-amber"]');
     expect(card).not.toBeNull();
   });
 });
