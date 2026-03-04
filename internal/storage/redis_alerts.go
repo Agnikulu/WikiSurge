@@ -430,9 +430,10 @@ func (r *RedisAlerts) GetEditWarAlertsSince(ctx context.Context, since time.Time
 
 // GetActiveEditWars scans Redis for marker keys that flag active edit wars,
 // then enriches each entry with editor / change data when still available.
-// Marker keys ("editwar:<page>") have a 12-hour TTL set by the processor,
-// while the editor hashes ("editwar:editors:<page>") have a shorter 10-min TTL
-// and may already have expired.
+// Marker keys ("editwar:<page>") have a 30-min TTL refreshed on every
+// incoming edit, so they expire once editing activity stops.
+// Data keys (editors, timeline, changes) have a longer 12h TTL for
+// LLM analysis and may outlive the marker.
 func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[string]interface{}, error) {
 	var cursor uint64
 	var activeWars []map[string]interface{}
@@ -495,8 +496,8 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				markerKey := key
 				ttl, ttlErr := r.client.TTL(ctx, markerKey).Result()
 				if ttlErr == nil && ttl > 0 {
-					// Marker TTL is 12 hours; elapsed = maxTTL - remaining
-					elapsed := 12*time.Hour - ttl
+					// Marker TTL is 30 min (refreshed on each edit); elapsed = maxTTL - remaining
+					elapsed := 30*time.Minute - ttl
 					if elapsed > 0 {
 						startTime = now.Add(-elapsed)
 					}

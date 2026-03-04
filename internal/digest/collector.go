@@ -243,6 +243,8 @@ func (c *Collector) collectHighlights(ctx context.Context, since time.Time) ([]G
 		alertRevertCount := intFromData(a.Data, "revert_count")
 		alertEditCount := intFromData(a.Data, "edit_count")
 		alertSeverity := stringFromData(a.Data, "severity")
+		alertLLMSummary := stringFromData(a.Data, "llm_summary")
+		alertContentArea := stringFromData(a.Data, "content_area")
 		// Extract editors array from alert data
 		var alertEditors []string
 		if rawEditors, ok := a.Data["editors"]; ok {
@@ -272,6 +274,13 @@ func (c *Collector) collectHighlights(ctx context.Context, since time.Time) ([]G
 			if alertSeverity != "" {
 				existing.Severity = alertSeverity
 			}
+			// Prefer LLM data from final snapshot (most recent entry wins)
+			if alertLLMSummary != "" {
+				existing.LLMSummary = alertLLMSummary
+			}
+			if alertContentArea != "" {
+				existing.ContentArea = alertContentArea
+			}
 		} else {
 			seen[title] = &GlobalHighlight{
 				Title:       title,
@@ -283,6 +292,8 @@ func (c *Collector) collectHighlights(ctx context.Context, since time.Time) ([]G
 				Editors:     alertEditors,
 				RevertCount: alertRevertCount,
 				Severity:    alertSeverity,
+				LLMSummary:  alertLLMSummary,
+				ContentArea: alertContentArea,
 			}
 		}
 	}

@@ -54,6 +54,8 @@ type EditWarAlert struct {
 	StartTime   time.Time `json:"start_time"`
 	Editors     []string  `json:"editors"`
 	ServerURL   string    `json:"server_url,omitempty"`
+	LLMSummary  string    `json:"llm_summary,omitempty"`
+	ContentArea string    `json:"content_area,omitempty"`
 }
 
 // EditWarMetrics contains Prometheus metrics for edit war detection
@@ -197,6 +199,18 @@ func (ewd *EditWarDetector) ProcessEdit(ctx context.Context, edit *models.Wikipe
 	if err != nil {
 		ewd.logger.Error().Err(err).Str("page", edit.Title).Msg("Failed to update editor/change tracking")
 		return err
+	}
+
+	// If this page already has an active edit war marker, refresh its TTL.
+	// The marker uses a short 30-min TTL so wars become "historical" once
+	// editing activity stops, but we keep it alive as long as edits arrive.
+	if ex, _ := ewd.redis.Exists(ctx, editWarKey).Result(); ex > 0 {
+		_ = ewd.redis.Expire(ctx, editWarKey, 30*time.Minute).Err()
+		// Also refresh the wiki-specific marker if present
+		if edit.Wiki != "" {
+			wikiKey := fmt.Sprintf("editwar:%s:%s", edit.Wiki, edit.Title)
+			_ = ewd.redis.Expire(ctx, wikiKey, 30*time.Minute).Err()
+		}
 	}
 
 	// Get editor hash to check counts
@@ -468,10 +482,14 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 		return fmt.Errorf("failed to publish edit war alert to stream: %w", err)
 	}
 
-	// Mark page as having edit war (12 hour TTL)
-	// Use editwar:{title} for simple lookups
+	// Mark page as having an active edit war (30-min TTL).
+	// The marker is refreshed on every incoming edit in ProcessEdit, so it
+	// stays alive as long as the page receives edits.  Once editing stops
+	// for 30 min the marker expires and the war moves to history.
+	// Data keys (editors, timeline, changes, start, serverurl) keep a
+	// longer 12h TTL so LLM analysis data is preserved across gaps.
 	editWarKey := fmt.Sprintf("editwar:%s", alert.PageTitle)
-	if err := ewd.redis.Set(ctx, editWarKey, 1, 12*time.Hour).Err(); err != nil {
+	if err := ewd.redis.Set(ctx, editWarKey, 1, 30*time.Minute).Err(); err != nil {
 		ewd.logger.Warn().Err(err).Str("page", alert.PageTitle).Msg("Failed to set editwar marker key")
 	}
 
@@ -512,9 +530,10 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 	_ = ewd.redis.Expire(ctx, changesRefreshKey, 12*time.Hour).Err()
 
 	// Also set editwar:{wiki}:{title} for indexing strategy compatibility
+	// Uses the same short 30-min TTL as the main marker.
 	if wiki != "" {
 		editWarWikiKey := fmt.Sprintf("editwar:%s:%s", wiki, alert.PageTitle)
-		if err := ewd.redis.Set(ctx, editWarWikiKey, 1, 12*time.Hour).Err(); err != nil {
+		if err := ewd.redis.Set(ctx, editWarWikiKey, 1, 30*time.Minute).Err(); err != nil {
 			ewd.logger.Warn().Err(err).Str("page", alert.PageTitle).Msg("Failed to set editwar wiki marker key")
 		}
 	}
@@ -655,22 +674,174 @@ func (ewd *EditWarDetector) sweepDeactivatedWars(ctx context.Context, trackingKe
 			continue // still active, nothing to do
 		}
 
-		// This war just became inactive — run a final analysis.
-		ewd.logger.Info().Str("page", page).Msg("Edit war deactivated, running final analysis")
+		// This war just became inactive.
+		ewd.logger.Info().Str("page", page).Msg("Edit war deactivated, running final analysis + snapshot")
 
-		go func(p string) {
-			fCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-			defer cancel()
-			if _, err := ewd.analysisService.FinalizeAnalysis(fCtx, p); err != nil {
-				ewd.logger.Warn().Err(err).Str("page", p).Msg("Final analysis failed for deactivated edit war")
-			} else {
-				ewd.logger.Info().Str("page", p).Msg("Final analysis completed for deactivated edit war")
-			}
-		}(page)
+		// Run LLM analysis synchronously BEFORE writing the final snapshot
+		// so the analysis is cached and can be embedded in the stream entry.
+		// This makes the snapshot fully self-contained for digests.
+		fCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		if _, err := ewd.analysisService.FinalizeAnalysis(fCtx, page); err != nil {
+			ewd.logger.Warn().Err(err).Str("page", page).Msg("Final analysis failed for deactivated edit war")
+		} else {
+			ewd.logger.Info().Str("page", page).Msg("Final analysis completed for deactivated edit war")
+		}
+		cancel()
+
+		// Write a final snapshot to the stream with accumulated lifetime
+		// counts + embedded LLM analysis. This becomes the authoritative
+		// historical record — superseding the stale mid-war alert entries.
+		ewd.writeFinalSnapshot(ctx, page)
 
 		// Remove from tracking set so we don't re-trigger.
 		_ = ewd.redis.SRem(ctx, trackingKey, page).Err()
 	}
+}
+
+// writeFinalSnapshot reads the accumulated lifetime data for a deactivated
+// edit war from the Redis data keys and writes a final entry to the
+// alerts:editwars stream. This snapshot contains the true total counts
+// (editors, edits, reverts) over the war's entire lifetime and supersedes
+// the stale mid-war alert entries in the stream.
+func (ewd *EditWarDetector) writeFinalSnapshot(ctx context.Context, pageTitle string) {
+	// --- Editors and edit counts ---
+	editorsKey := fmt.Sprintf("editwar:editors:%s", pageTitle)
+	editorMap, err := ewd.redis.HGetAll(ctx, editorsKey).Result()
+	if err != nil || len(editorMap) == 0 {
+		// Try reconstructing from timeline as fallback
+		editorMap = ewd.editorsFromTimeline(ctx, pageTitle)
+	}
+
+	editors := make([]string, 0, len(editorMap))
+	totalEdits := 0
+	for editor, countStr := range editorMap {
+		editors = append(editors, editor)
+		count, _ := strconv.Atoi(countStr)
+		totalEdits += count
+	}
+
+	if len(editors) == 0 {
+		ewd.logger.Warn().Str("page", pageTitle).Msg("Final snapshot: no editor data found, skipping")
+		return
+	}
+
+	// --- Revert count ---
+	revertCount, _ := ewd.countReverts(ctx, pageTitle)
+
+	// --- Severity (recompute from final totals) ---
+	severity := ewd.calculateEditWarSeverity(totalEdits, len(editors), revertCount)
+
+	// --- Start time ---
+	startTime := time.Now()
+	startKey := fmt.Sprintf("editwar:start:%s", pageTitle)
+	if s, sErr := ewd.redis.Get(ctx, startKey).Result(); sErr == nil && s != "" {
+		if t, pErr := time.Parse(time.RFC3339, s); pErr == nil {
+			startTime = t
+		}
+	} else {
+		// Fallback: first timeline entry
+		timelineKey := fmt.Sprintf("editwar:timeline:%s", pageTitle)
+		if firstRaw, tlErr := ewd.redis.LIndex(ctx, timelineKey, 0).Result(); tlErr == nil && firstRaw != "" {
+			var firstEntry struct {
+				Timestamp int64 `json:"timestamp"`
+			}
+			if json.Unmarshal([]byte(firstRaw), &firstEntry) == nil && firstEntry.Timestamp > 0 {
+				startTime = time.Unix(firstEntry.Timestamp, 0)
+			}
+		}
+	}
+
+	// --- Server URL ---
+	serverURL := ""
+	urlKey := fmt.Sprintf("editwar:serverurl:%s", pageTitle)
+	if u, uErr := ewd.redis.Get(ctx, urlKey).Result(); uErr == nil && u != "" {
+		serverURL = u
+	}
+
+	// --- LLM analysis (already cached by FinalizeAnalysis above) ---
+	var llmSummary, contentArea string
+	analysisKey := fmt.Sprintf("editwar:analysis:%s", pageTitle)
+	if cached, cErr := ewd.redis.Get(ctx, analysisKey).Result(); cErr == nil && cached != "" {
+		var analysis struct {
+			Summary     string `json:"summary"`
+			ContentArea string `json:"content_area"`
+		}
+		if json.Unmarshal([]byte(cached), &analysis) == nil {
+			llmSummary = analysis.Summary
+			contentArea = analysis.ContentArea
+		}
+	}
+
+	// --- Build the final alert and write to stream ---
+	finalAlert := &EditWarAlert{
+		PageTitle:   pageTitle,
+		EditorCount: len(editors),
+		EditCount:   totalEdits,
+		RevertCount: revertCount,
+		Severity:    severity,
+		StartTime:   startTime,
+		Editors:     editors,
+		ServerURL:   serverURL,
+		LLMSummary:  llmSummary,
+		ContentArea: contentArea,
+	}
+
+	alertData, err := json.Marshal(finalAlert)
+	if err != nil {
+		ewd.logger.Warn().Err(err).Str("page", pageTitle).Msg("Final snapshot: marshal failed")
+		return
+	}
+
+	args := &redis.XAddArgs{
+		Stream: ewd.alertStream,
+		MaxLen: 1000,
+		Approx: true,
+		Values: map[string]interface{}{
+			"data":     string(alertData),
+			"severity": severity,
+			"page":     pageTitle,
+			"final":    "true",
+		},
+	}
+
+	if _, err := ewd.redis.XAdd(ctx, args).Result(); err != nil {
+		ewd.logger.Warn().Err(err).Str("page", pageTitle).Msg("Final snapshot: failed to write to stream")
+		return
+	}
+
+	ewd.logger.Info().
+		Str("page", pageTitle).
+		Int("editors", len(editors)).
+		Int("edits", totalEdits).
+		Int("reverts", revertCount).
+		Str("severity", severity).
+		Msg("Final edit war snapshot written to stream")
+}
+
+// editorsFromTimeline reconstructs editor counts from the timeline list
+// when the editors hash has expired.
+func (ewd *EditWarDetector) editorsFromTimeline(ctx context.Context, pageTitle string) map[string]string {
+	timelineKey := fmt.Sprintf("editwar:timeline:%s", pageTitle)
+	entries, err := ewd.redis.LRange(ctx, timelineKey, 0, -1).Result()
+	if err != nil || len(entries) == 0 {
+		return nil
+	}
+
+	counts := make(map[string]int)
+	for _, raw := range entries {
+		var entry struct {
+			User string `json:"user"`
+		}
+		if json.Unmarshal([]byte(raw), &entry) == nil && entry.User != "" {
+			counts[entry.User]++
+		}
+	}
+
+	result := make(map[string]string, len(counts))
+	for user, count := range counts {
+		result[user] = strconv.Itoa(count)
+	}
+	return result
 }
 
 // GetActiveEditWars retrieves all currently active edit wars
