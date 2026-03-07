@@ -23,11 +23,26 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 600, h: 240 });
   const [tick, setTick] = useState(0); // animation driver
+  // Incremented when the tab becomes visible after being hidden; forces the
+  // data effect to reload historical data and reset the live interval.
+  const [reloadKey, setReloadKey] = useState(0);
   
   // Get stats from global store (shared with StatsOverview)
   const stats = useAppStore((s) => s.stats);
   const statsRef = useRef(stats);
   statsRef.current = stats;
+
+  // Reload chart data when the tab becomes visible again (handles stale live
+  // points accumulated while the browser throttled background timers).
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        setReloadKey((k) => k + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   // Animation tick for scan-line sweep - 24 FPS for smooth animation
   useEffect(() => {
@@ -132,7 +147,7 @@ export const EditsTimelineChart = memo(function EditsTimelineChart() {
       cancelled = true;
       if (interval) clearInterval(interval);
     };
-  }, [statsReady, config.minutes, config.bucketSec, maxPoints]);
+  }, [statsReady, config.minutes, config.bucketSec, maxPoints, reloadKey]);
 
   const loading = !statsReady;
   const chartW = dims.w - PAD.left - PAD.right;

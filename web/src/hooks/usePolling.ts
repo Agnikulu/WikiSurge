@@ -130,5 +130,18 @@ export function usePollingData<T>({
     };
   }, [execute, interval, enabled]);
 
+  // Re-fetch immediately when the tab becomes visible again (guards against
+  // browser-throttled intervals after the tab has been backgrounded).
+  useEffect(() => {
+    if (!enabled) return;
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        execute();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [execute, enabled]);
+
   return { data, loading, error, refresh: execute, lastUpdate };
 }

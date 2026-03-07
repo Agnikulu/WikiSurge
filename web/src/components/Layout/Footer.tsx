@@ -1,4 +1,4 @@
-import { Heart, Github, BookOpen, ExternalLink } from 'lucide-react';
+import { Heart, Github, ExternalLink } from 'lucide-react';
 
 const techBadges = [
   { label: 'React', color: 'rgba(0,255,136,0.6)' },
@@ -52,7 +52,7 @@ export function Footer() {
           {/* Right: links */}
           <div className="flex items-center space-x-4">
             <a
-              href="https://github.com"
+              href="https://github.com/Agnikulu/WikiSurge"
               target="_blank"
               rel="noopener noreferrer"
               className="transition-colors flex items-center gap-1"
@@ -63,19 +63,6 @@ export function Footer() {
             >
               <Github className="h-3.5 w-3.5" aria-hidden="true" />
               <span>GitHub</span>
-            </a>
-            <a
-              href="/docs/API.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors flex items-center gap-1"
-              style={{ color: 'rgba(0,255,136,0.3)' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#00ff88')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(0,255,136,0.3)')}
-              aria-label="API documentation"
-            >
-              <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>API Docs</span>
             </a>
             <a
               href="https://stream.wikimedia.org/"

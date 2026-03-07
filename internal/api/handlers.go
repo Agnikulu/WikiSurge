@@ -195,11 +195,20 @@ func (s *APIServer) handleGetStats(w http.ResponseWriter, r *http.Request) {
 		resp.EditsToday = int(todayCount)
 	}
 
-	// Compute edits_per_second: use activity count / uptime as approximation.
+	// Compute edits_per_second: divide edits_today by seconds elapsed since midnight
+	// UTC (not server uptime), so the rate stays accurate after a day rollover.
+	// Cap the window at server uptime in case the server started after midnight.
 	if resp.Uptime > 0 && resp.EditsToday > 0 {
-		resp.EditsPerSecond = float64(resp.EditsToday) / float64(resp.Uptime)
-		// Round to 1 decimal
-		resp.EditsPerSecond = math.Round(resp.EditsPerSecond*10) / 10
+		now := time.Now().UTC()
+		midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		secondsSinceMidnight := int64(now.Sub(midnight).Seconds())
+		window := secondsSinceMidnight
+		if resp.Uptime < window {
+			window = resp.Uptime
+		}
+		if window > 0 {
+			resp.EditsPerSecond = math.Round(float64(resp.EditsToday)/float64(window)*10) / 10
+		}
 	}
 
 	// Compute real per-language stats from Redis (tracked by processor).
