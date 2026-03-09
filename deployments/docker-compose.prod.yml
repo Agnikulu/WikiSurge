@@ -79,7 +79,7 @@ services:
     restart: unless-stopped
     command: >
       redis-server
-      --maxmemory 256mb
+      --maxmemory 220mb
       --maxmemory-policy allkeys-lru
       --save ""
       --appendonly no
@@ -95,7 +95,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 150M
+          memory: 300M
         reservations:
           memory: 64M
     healthcheck:

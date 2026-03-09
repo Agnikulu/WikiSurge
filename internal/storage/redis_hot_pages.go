@@ -182,11 +182,19 @@ func (h *HotPageTracker) promoteToHot(ctx context.Context, edit *models.Wikipedi
 	// HSET on metadata "last_edit" timestamp
 	pipe.HSet(ctx, metadataKey, "last_edit", timestamp)
 	
-	// Update unique editors (append if new)
+	// Track unique editors up to a cap to prevent unbounded hash growth.
+	// Hot pages that stay active for days can accumulate thousands of editor
+	// fields; 500 unique editors is more than enough for display purposes.
+	const maxTrackedEditors = 500
 	if edit.User != "" {
-		pipe.HSetNX(ctx, metadataKey, fmt.Sprintf("editor:%s", edit.User), timestamp)
+		// Soft cap: one extra round-trip per hot-page edit, acceptable cost.
+		hlen, _ := h.redis.HLen(ctx, metadataKey).Result()
+		// hlen includes ~4 non-editor fields (edit_count, last_edit, last_byte_change, server_url)
+		if hlen < int64(maxTrackedEditors+4) {
+			pipe.HSetNX(ctx, metadataKey, fmt.Sprintf("editor:%s", edit.User), timestamp)
+		}
 	}
-	
+
 	// Set byte change
 	byteChange := edit.Length.New - edit.Length.Old
 	pipe.HSet(ctx, metadataKey, "last_byte_change", byteChange)
@@ -270,10 +278,17 @@ func (h *HotPageTracker) AddEditToWindow(ctx context.Context, pageTitle string, 
 	// HSET last_byte_change
 	byteChange := edit.Length.New - edit.Length.Old
 	pipe.HSet(ctx, metadataKey, "last_byte_change", byteChange)
-	
-	// HSET unique_editors (append if new)
+
+	// Track unique editors up to a cap to prevent unbounded hash growth.
+	// Hot pages that remain active for days accumulate one field per unique
+	// editor; 500 is more than enough for display and keeps memory bounded.
+	const maxTrackedEditors = 500
 	if edit.User != "" {
-		pipe.HSetNX(ctx, metadataKey, fmt.Sprintf("editor:%s", edit.User), timestamp)
+		hlen, _ := h.redis.HLen(ctx, metadataKey).Result()
+		// hlen includes ~4 non-editor fields (edit_count, last_edit, last_byte_change, server_url)
+		if hlen < int64(maxTrackedEditors+4) {
+			pipe.HSetNX(ctx, metadataKey, fmt.Sprintf("editor:%s", edit.User), timestamp)
+		}
 	}
 
 	// Persist server_url for wiki link building (backfills pages promoted before this field existed)
