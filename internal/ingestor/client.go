@@ -2,8 +2,10 @@ package ingestor
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -24,6 +26,26 @@ const (
 	UserAgent       = "WikipediaRTI/1.0"
 	ConnectionTimeout = 30 * time.Second
 )
+
+// sseTransport returns an *http.Transport tuned for long-lived SSE streams.
+// Keep-alive, larger idle pools, and explicit TLS settings reduce the
+// frequency of TCP/TLS re-handshakes that trigger HTTP/2 CANCEL resets.
+func sseTransport() *http.Transport {
+	return &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   ConnectionTimeout,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
+		TLSHandshakeTimeout:   15 * time.Second,
+		ResponseHeaderTimeout:  ConnectionTimeout,
+		MaxIdleConns:           5,
+		MaxIdleConnsPerHost:    2,
+		IdleConnTimeout:        5 * time.Minute,
+		ForceAttemptHTTP2:      true,
+		DisableKeepAlives:      false,
+	}
+}
 
 // WikiStreamClient handles connection to Wikipedia's SSE stream
 type WikiStreamClient struct {
@@ -46,11 +68,9 @@ func NewWikiStreamClient(cfg *config.Config, logger zerolog.Logger, producer kaf
 	// Create rate limiter with configured limits
 	rateLimiter := rate.NewLimiter(rate.Limit(cfg.Ingestor.RateLimit), cfg.Ingestor.BurstLimit)
 	
-	// Create SSE client
+	// Create SSE client with robust transport
 	client := sse.NewClient(WikipediaSSEURL)
-	client.Connection.Transport = &http.Transport{
-		ResponseHeaderTimeout: ConnectionTimeout,
-	}
+	client.Connection.Transport = sseTransport()
 	client.Headers = map[string]string{
 		"Accept":     "text/event-stream",
 		"User-Agent": UserAgent,
@@ -230,9 +250,7 @@ func (w *WikiStreamClient) processStream() error {
 	// Create a fresh SSE client for each stream attempt to avoid stale
 	// internal state from the r3labs/sse library's own retry logic.
 	sseClient := sse.NewClient(WikipediaSSEURL)
-	sseClient.Connection.Transport = &http.Transport{
-		ResponseHeaderTimeout: ConnectionTimeout,
-	}
+	sseClient.Connection.Transport = sseTransport()
 	sseClient.Headers = map[string]string{
 		"Accept":     "text/event-stream",
 		"User-Agent": UserAgent,

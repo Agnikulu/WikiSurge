@@ -170,6 +170,10 @@ func (s *APIServer) Handler() http.Handler {
 	// Wrap in middleware (innermost first)
 	h = MetricsMiddleware(h)
 
+	// Request timeout: cancel context after 90s for non-WebSocket requests
+	// so handlers bail out before nginx's proxy_read_timeout (120s) fires.
+	h = RequestTimeoutMiddleware(90*time.Second, h)
+
 	// Rate limiting: prefer Redis sliding-window when available.
 	if s.rateLimiter != nil {
 		h = s.rateLimiter.Middleware(h)

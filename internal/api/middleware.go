@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -213,6 +214,25 @@ func RateLimitMiddleware(rps int, next http.Handler) http.Handler {
 			return
 		}
 		next.ServeHTTP(w, r)
+	})
+}
+
+// RequestTimeoutMiddleware applies a context deadline to non-WebSocket API
+// requests.  If a handler takes longer than the given duration (e.g. because
+// Redis or Elasticsearch is slow), the context is cancelled so the handler can
+// bail out — preventing nginx from returning a 504 Gateway Timeout.
+func RequestTimeoutMiddleware(timeout time.Duration, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip WebSocket upgrades — they are long-lived connections.
+		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+		defer cancel()
+
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
