@@ -54,6 +54,7 @@ type processorOrchestrator struct {
 	editWarDetector    *processor.EditWarDetector
 	trendingAggregator *processor.TrendingAggregator
 	selectiveIndexer   *processor.SelectiveIndexer
+	indexingStrategy   *storage.IndexingStrategy
 	wsForwarder        *processor.WebSocketForwarder
 
 	// WebSocket hub
@@ -282,13 +283,13 @@ func (o *processorOrchestrator) initProcessors() {
 
 	// Selective Indexer (if ES is available)
 	if o.esClient != nil {
-		indexingStrategy := storage.NewIndexingStrategy(
+		o.indexingStrategy = storage.NewIndexingStrategy(
 			&o.cfg.Elasticsearch.SelectiveCriteria,
 			o.redisClient,
 			o.trendingScorer,
 			o.hotPageTracker,
 		)
-		o.selectiveIndexer = processor.NewSelectiveIndexer(o.esClient, indexingStrategy, o.cfg, o.logger)
+		o.selectiveIndexer = processor.NewSelectiveIndexer(o.esClient, o.indexingStrategy, o.cfg, o.logger)
 		o.selectiveIndexer.Start()
 		o.logger.Info().Msg("Initialized SelectiveIndexer")
 		o.registerComponent("selective-indexer")
@@ -619,6 +620,16 @@ func (o *processorOrchestrator) gracefulShutdown() {
 	o.logger.Info().Msg("Stopping trending scorer...")
 	o.trendingScorer.Stop()
 	o.logger.Info().Msg("Trending scorer stopped")
+
+	// 4b. Stop indexing strategy eviction goroutine
+	if o.indexingStrategy != nil {
+		o.indexingStrategy.Stop()
+		o.logger.Info().Msg("Indexing strategy stopped")
+	}
+
+	// 4c. Stop hot page tracker cleanup goroutine
+	o.hotPageTracker.Shutdown()
+	o.logger.Info().Msg("Hot page tracker stopped")
 
 	// 5. Stop metrics server
 	o.logger.Info().Msg("Stopping metrics server...")

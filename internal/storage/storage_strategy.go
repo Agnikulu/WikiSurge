@@ -25,6 +25,7 @@ type IndexingStrategy struct {
 	contextCache      map[string]*PageContext
 	contextCacheMu    sync.RWMutex
 	contextCacheTTL   time.Duration
+	stopCh            chan struct{}
 }
 
 // PageContext contains the current status of a page for indexing decisions
@@ -55,6 +56,7 @@ func NewIndexingStrategy(cfg *config.SelectiveCriteria, redisClient *redis.Clien
 		watchlist:       make(map[string]bool),
 		contextCache:    make(map[string]*PageContext),
 		contextCacheTTL: 1 * time.Second, // Brief caching to reduce Redis queries
+		stopCh:          make(chan struct{}),
 	}
 
 	// Initialize watchlist from Redis if it exists
@@ -64,8 +66,13 @@ func NewIndexingStrategy(cfg *config.SelectiveCriteria, redisClient *redis.Clien
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			strategy.evictStaleContextCache()
+		for {
+			select {
+			case <-ticker.C:
+				strategy.evictStaleContextCache()
+			case <-strategy.stopCh:
+				return
+			}
 		}
 	}()
 
@@ -110,14 +117,14 @@ func (s *IndexingStrategy) ShouldIndex(ctx context.Context, edit *models.Wikiped
 	// Check trending status
 	if pageContext.TrendingRank > 0 && pageContext.TrendingRank <= s.config.TrendingTopN {
 		decision.ShouldIndex = true
-		decision.Reason = fmt.Sprintf("trending_top_%d", pageContext.TrendingRank)
+		decision.Reason = "trending"
 		return decision, nil
 	}
 
 	// Check spiking status
 	if pageContext.IsSpiking && pageContext.SpikeRatio >= s.config.SpikeRatioMin {
 		decision.ShouldIndex = true
-		decision.Reason = fmt.Sprintf("spiking_%.2f", pageContext.SpikeRatio)
+		decision.Reason = "spiking"
 		return decision, nil
 	}
 
@@ -399,4 +406,9 @@ func (s *IndexingStrategy) evictStaleContextCache() {
 			delete(s.contextCache, key)
 		}
 	}
+}
+
+// Stop terminates the background eviction goroutine.
+func (s *IndexingStrategy) Stop() {
+	close(s.stopCh)
 }
