@@ -4,12 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"github.com/Agnikulu/WikiSurge/internal/config"
 	"github.com/Agnikulu/WikiSurge/internal/models"
 	"github.com/Agnikulu/WikiSurge/internal/storage"
+)
+
+var (
+	aggregatorMetricsOnce sync.Once
+	sharedAggregatorMetrics *AggregatorMetrics
 )
 
 // TrendingAggregator processes edits to update trending scores
@@ -40,27 +46,45 @@ func NewTrendingAggregatorForTest(scorer *storage.TrendingScorer, cfg *config.Co
 
 // newTrendingAggregator is the internal constructor
 func newTrendingAggregator(scorer *storage.TrendingScorer, statsTracker *storage.StatsTracker, cfg *config.Config, logger zerolog.Logger, registerMetrics bool) *TrendingAggregator {
-	metrics := &AggregatorMetrics{
-		EditsProcessed: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "trending_edits_processed_total",
-			Help: "Total edits processed by trending aggregator",
-		}),
-		ProcessError: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "trending_process_errors_total",
-			Help: "Total trending processing errors",
-		}),
-		UpdateLatency: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name:    "trending_update_duration_seconds",
-			Help:    "Trending update latency",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0},
-		}),
-	}
-
-	// Register metrics only if requested
+	var metrics *AggregatorMetrics
 	if registerMetrics {
-		prometheus.MustRegister(metrics.EditsProcessed)
-		prometheus.MustRegister(metrics.ProcessError)
-		prometheus.MustRegister(metrics.UpdateLatency)
+		aggregatorMetricsOnce.Do(func() {
+			sharedAggregatorMetrics = &AggregatorMetrics{
+				EditsProcessed: prometheus.NewCounter(prometheus.CounterOpts{
+					Name: "trending_edits_processed_total",
+					Help: "Total edits processed by trending aggregator",
+				}),
+				ProcessError: prometheus.NewCounter(prometheus.CounterOpts{
+					Name: "trending_process_errors_total",
+					Help: "Total trending processing errors",
+				}),
+				UpdateLatency: prometheus.NewHistogram(prometheus.HistogramOpts{
+					Name:    "trending_update_duration_seconds",
+					Help:    "Trending update latency",
+					Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0},
+				}),
+			}
+			prometheus.MustRegister(sharedAggregatorMetrics.EditsProcessed)
+			prometheus.MustRegister(sharedAggregatorMetrics.ProcessError)
+			prometheus.MustRegister(sharedAggregatorMetrics.UpdateLatency)
+		})
+		metrics = sharedAggregatorMetrics
+	} else {
+		metrics = &AggregatorMetrics{
+			EditsProcessed: prometheus.NewCounter(prometheus.CounterOpts{
+				Name: "trending_edits_processed_total",
+				Help: "Total edits processed by trending aggregator",
+			}),
+			ProcessError: prometheus.NewCounter(prometheus.CounterOpts{
+				Name: "trending_process_errors_total",
+				Help: "Total trending processing errors",
+			}),
+			UpdateLatency: prometheus.NewHistogram(prometheus.HistogramOpts{
+				Name:    "trending_update_duration_seconds",
+				Help:    "Trending update latency",
+				Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0},
+			}),
+		}
 	}
 
 	return &TrendingAggregator{

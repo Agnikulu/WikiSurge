@@ -34,6 +34,8 @@ type Scheduler struct {
 	config     SchedulerConfig
 	logger     zerolog.Logger
 	stopCh     chan struct{}
+	ctx        context.Context
+	cancel     context.CancelFunc
 	wg         sync.WaitGroup
 }
 
@@ -48,6 +50,7 @@ func NewScheduler(
 	if cfg.MaxConcurrentSends <= 0 {
 		cfg.MaxConcurrentSends = 10
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
 		collector:  collector,
 		sender:     sender,
@@ -55,6 +58,8 @@ func NewScheduler(
 		config:     cfg,
 		logger:     logger.With().Str("component", "digest-scheduler").Logger(),
 		stopCh:     make(chan struct{}),
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 }
 
@@ -73,6 +78,7 @@ func (s *Scheduler) Start() {
 // Stop signals the scheduler to stop and waits for it to finish.
 func (s *Scheduler) Stop() {
 	close(s.stopCh)
+	s.cancel()
 	s.wg.Wait()
 	s.logger.Info().Msg("Digest scheduler stopped")
 }
@@ -105,8 +111,10 @@ func (s *Scheduler) loop() {
 				if now.Sub(lastDailyRun) > 23*time.Hour {
 					lastDailyRun = now
 					s.logger.Info().Msg("Triggering daily digest run")
+					s.wg.Add(1)
 					go func() {
-						ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+						defer s.wg.Done()
+						ctx, cancel := context.WithTimeout(s.ctx, 30*time.Minute)
 						defer cancel()
 						sent, skipped, errored := s.runDigest(ctx, "daily")
 						s.logger.Info().Int("sent", sent).Int("skipped", skipped).Int("errors", errored).Msg("Daily digest run complete")
@@ -119,8 +127,10 @@ func (s *Scheduler) loop() {
 				if now.Sub(lastWeeklyRun) > 6*24*time.Hour {
 					lastWeeklyRun = now
 					s.logger.Info().Msg("Triggering weekly digest run")
+					s.wg.Add(1)
 					go func() {
-						ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+						defer s.wg.Done()
+						ctx, cancel := context.WithTimeout(s.ctx, 30*time.Minute)
 						defer cancel()
 						sent, skipped, errored := s.runDigest(ctx, "weekly")
 						s.logger.Info().Int("sent", sent).Int("skipped", skipped).Int("errors", errored).Msg("Weekly digest run complete")
