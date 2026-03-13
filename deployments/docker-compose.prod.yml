@@ -19,7 +19,6 @@ volumes:
   redis-data:
   elasticsearch-data:
   api-data:            # SQLite user database
-  traefik-certs:       # Let's Encrypt TLS certificates
 
 x-logging: &default-logging
   driver: json-file
@@ -28,48 +27,6 @@ x-logging: &default-logging
     max-file: "1"
 
 services:
-  # ---------------------------------------------------------------------------
-  # Traefik - Reverse Proxy & TLS Termination
-  # ---------------------------------------------------------------------------
-  traefik:
-    image: traefik:v3.0
-    container_name: wikisurge-traefik
-    restart: unless-stopped
-    command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=wikisurge
-      - --entrypoints.http.address=:80
-      - --entrypoints.https.address=:443
-      - --entrypoints.http.http.redirections.entrypoint.to=https
-      - --entrypoints.http.http.redirections.entrypoint.scheme=https
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=http
-      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@wikisurge.net}
-      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
-      - --ping=true
-      - --log.level=WARN
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik-certs:/letsencrypt
-    networks:
-      - wikisurge
-    deploy:
-      resources:
-        limits:
-          memory: 100M
-        reservations:
-          memory: 50M
-    healthcheck:
-      test: ["CMD", "traefik", "healthcheck", "--ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    logging: *default-logging
-
   # ---------------------------------------------------------------------------
   # Kafka (Redpanda) - Message Broker
   # ---------------------------------------------------------------------------
