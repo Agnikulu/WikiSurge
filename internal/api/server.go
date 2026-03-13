@@ -219,9 +219,28 @@ func (s *APIServer) Hub() *WebSocketHub {
 // publishes live edits, and feeds them into the API's WebSocket hub so that
 // connected dashboard clients receive real-time updates.
 func (s *APIServer) StartEditRelay(redisClient *redis.Client) {
+	s.startEditRelayWithRestart(redisClient, 0)
+}
+
+func (s *APIServer) startEditRelayWithRestart(redisClient *redis.Client, restartCount int) {
+	// Cancel previous relay context if any to avoid leaking old subscriptions.
+	if s.editRelayCancel != nil {
+		s.editRelayCancel()
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.editRelayCancel = cancel
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if restartCount >= maxPanicRestarts {
+					s.logger.Error().Interface("panic", r).Int("restarts", restartCount).Msg("Edit relay panic limit reached — not restarting")
+					return
+				}
+				s.logger.Error().Interface("panic", r).Int("restart", restartCount+1).Msg("Edit relay recovered from panic — restarting")
+				time.Sleep(time.Duration(restartCount+1) * time.Second)
+				s.startEditRelayWithRestart(redisClient, restartCount+1)
+			}
+		}()
 		sub := redisClient.Subscribe(ctx, "wikisurge:edits:live")
 		defer sub.Close()
 		ch := sub.Channel()

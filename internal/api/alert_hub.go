@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/Agnikulu/WikiSurge/internal/storage"
 	"github.com/rs/zerolog"
@@ -34,6 +35,26 @@ func NewAlertHub(alerts *storage.RedisAlerts, logger zerolog.Logger) *AlertHub {
 // Run starts the single Redis subscription loop.  It should be launched
 // as a goroutine: go hub.Run()
 func (h *AlertHub) Run() {
+	h.runWithRestart(0)
+}
+
+// maxPanicRestarts caps how many times Run() will auto-restart after a panic
+// to prevent unbounded goroutine spawning on persistent failures.
+const maxPanicRestarts = 5
+
+func (h *AlertHub) runWithRestart(restartCount int) {
+	defer func() {
+		if r := recover(); r != nil {
+			if restartCount >= maxPanicRestarts {
+				h.logger.Error().Interface("panic", r).Int("restarts", restartCount).Msg("Alert hub panic limit reached — not restarting")
+				return
+			}
+			h.logger.Error().Interface("panic", r).Int("restart", restartCount+1).Msg("Alert hub recovered from panic — restarting")
+			time.Sleep(time.Duration(restartCount+1) * time.Second)
+			go h.runWithRestart(restartCount + 1)
+		}
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	h.cancelMu.Lock()
 	h.cancel = cancel
@@ -47,6 +68,7 @@ func (h *AlertHub) Run() {
 
 	h.logger.Info().Msg("Alert hub started — single shared subscription")
 
+	backoff := time.Second
 	for {
 		err := h.alerts.SubscribeToAlerts(ctx, []string{"spikes", "editwars"}, func(alert storage.Alert) error {
 			h.broadcast(alert)
@@ -57,7 +79,17 @@ func (h *AlertHub) Run() {
 			return // shutdown
 		}
 
-		h.logger.Warn().Err(err).Msg("Alert subscription ended, reconnecting...")
+		h.logger.Warn().Err(err).Dur("backoff", backoff).Msg("Alert subscription ended, reconnecting after backoff...")
+
+		// Exponential backoff with cap at 30s.
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
 	}
 }
 
@@ -79,8 +111,9 @@ func (h *AlertHub) Subscribe() chan storage.Alert {
 	ch := make(chan storage.Alert, 128) // Increased buffer from 64 to 128
 	h.mu.Lock()
 	h.subscribers[ch] = struct{}{}
+	total := len(h.subscribers)
 	h.mu.Unlock()
-	h.logger.Debug().Int("total", len(h.subscribers)).Msg("Alert subscriber added")
+	h.logger.Debug().Int("total", total).Msg("Alert subscriber added")
 	return ch
 }
 
@@ -90,8 +123,9 @@ func (h *AlertHub) Unsubscribe(ch chan storage.Alert) {
 	h.mu.Lock()
 	delete(h.subscribers, ch)
 	close(ch)
+	total := len(h.subscribers)
 	h.mu.Unlock()
-	h.logger.Debug().Int("total", len(h.subscribers)).Msg("Alert subscriber removed")
+	h.logger.Debug().Int("total", total).Msg("Alert subscriber removed")
 }
 
 // broadcast sends an alert to all subscribers (non-blocking per subscriber).

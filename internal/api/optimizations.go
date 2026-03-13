@@ -85,6 +85,7 @@ func respondJSONPooled(w interface{ Write([]byte) (int, error) }, status int, he
 // Since page titles don't change for a given entry, this is safe.
 var languageCache sync.Map
 var languageCacheLen int64 // approximate count, updated atomically
+var languageCacheResetMu sync.Mutex
 const languageCacheMaxSize = 100_000
 
 // cachedExtractLanguage extracts and caches the language from a page title.
@@ -93,10 +94,20 @@ func cachedExtractLanguage(pageTitle string) string {
 		return lang.(string)
 	}
 	lang := extractLanguage(pageTitle)
-	// Evict entire cache if it grows too large (language values are cheap to recompute)
+	// Evict all entries if the cache grows too large (language values are cheap
+	// to recompute).  We clear via Range+Delete instead of replacing the global
+	// sync.Map to avoid a data race between the assignment and concurrent
+	// Load/Store calls.
 	if atomic.AddInt64(&languageCacheLen, 1) > languageCacheMaxSize {
-		languageCache = sync.Map{}
-		atomic.StoreInt64(&languageCacheLen, 0)
+		languageCacheResetMu.Lock()
+		if atomic.LoadInt64(&languageCacheLen) > languageCacheMaxSize {
+			languageCache.Range(func(key, _ any) bool {
+				languageCache.Delete(key)
+				return true
+			})
+			atomic.StoreInt64(&languageCacheLen, 0)
+		}
+		languageCacheResetMu.Unlock()
 	}
 	languageCache.Store(pageTitle, lang)
 	return lang

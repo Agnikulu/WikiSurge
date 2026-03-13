@@ -253,6 +253,9 @@ type WebSocketHub struct {
 
 	// stop channel to shut down the hub.
 	stop chan struct{}
+
+	// stopOnce ensures Stop() is safe to call multiple times.
+	stopOnce sync.Once
 }
 
 // NewWebSocketHub creates and returns a new WebSocketHub.
@@ -260,8 +263,8 @@ func NewWebSocketHub(logger zerolog.Logger) *WebSocketHub {
 	return &WebSocketHub{
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan []byte, 512), // Increased buffer from 256
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		register:   make(chan *Client, 64),
+		unregister: make(chan *Client, 64),
 		maxClients: defaultMaxClients,
 		maxPerIP:   defaultMaxPerIP,
 		logger:     logger.With().Str("component", "websocket-hub").Logger(),
@@ -292,6 +295,22 @@ func (h *WebSocketHub) ClientCount() int {
 
 // Run is the main event loop for the hub. Start it as a goroutine.
 func (h *WebSocketHub) Run() {
+	h.runWithRestart(0)
+}
+
+func (h *WebSocketHub) runWithRestart(restartCount int) {
+	defer func() {
+		if r := recover(); r != nil {
+			if restartCount >= maxPanicRestarts {
+				h.logger.Error().Interface("panic", r).Int("restarts", restartCount).Msg("WebSocket hub panic limit reached — not restarting")
+				return
+			}
+			h.logger.Error().Interface("panic", r).Int("restart", restartCount+1).Msg("WebSocket hub recovered from panic — restarting")
+			time.Sleep(time.Duration(restartCount+1) * time.Second)
+			go h.runWithRestart(restartCount + 1)
+		}
+	}()
+
 	ticker := time.NewTicker(pingPeriod)
 	staleTicker := time.NewTicker(staleTimeout)
 	defer ticker.Stop()
@@ -303,10 +322,11 @@ func (h *WebSocketHub) Run() {
 			h.mu.Lock()
 			// Check global limit.
 			if len(h.clients) >= h.maxClients {
+				currentCount := len(h.clients)
 				h.mu.Unlock()
 				h.logger.Warn().
 					Str("client", client.id).
-					Int("current", len(h.clients)).
+					Int("current", currentCount).
 					Int("max", h.maxClients).
 					Msg("Max clients reached, rejecting connection")
 				_ = client.conn.WriteMessage(
@@ -339,15 +359,16 @@ func (h *WebSocketHub) Run() {
 			}
 
 			h.clients[client] = true
+			clientCount := len(h.clients)
 			h.mu.Unlock()
 
 			metrics.WebSocketConnectionsTotal.With(nil).Inc()
-			metrics.WebSocketConnectionsActive.With(nil).Set(float64(len(h.clients)))
+			metrics.WebSocketConnectionsActive.With(nil).Set(float64(clientCount))
 
 			h.logger.Info().
 				Str("client", client.id).
 				Str("ip", client.remoteAddr).
-				Int("total", len(h.clients)).
+				Int("total", clientCount).
 				Msg("Client connected")
 
 		case client := <-h.unregister:
@@ -400,7 +421,9 @@ func (h *WebSocketHub) Run() {
 			h.mu.Lock()
 			for client := range h.clients {
 				close(client.send)
-				client.conn.Close()
+				if client.conn != nil {
+					client.conn.Close()
+				}
 				delete(h.clients, client)
 			}
 			h.mu.Unlock()
@@ -410,9 +433,11 @@ func (h *WebSocketHub) Run() {
 	}
 }
 
-// Stop shuts down the hub gracefully.
+// Stop shuts down the hub gracefully. Safe to call multiple times.
 func (h *WebSocketHub) Stop() {
-	close(h.stop)
+	h.stopOnce.Do(func() {
+		close(h.stop)
+	})
 }
 
 // cleanupStaleConnections removes clients whose send buffer is full (stuck).

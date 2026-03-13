@@ -15,9 +15,10 @@ type cacheEntry struct {
 
 // responseCache is a simple in-memory TTL cache for expensive API responses.
 type responseCache struct {
-	mu      sync.RWMutex
-	entries map[string]*cacheEntry
-	stopCh  chan struct{}
+	mu       sync.RWMutex
+	entries  map[string]*cacheEntry
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // newResponseCache creates a new response cache and starts a background cleanup goroutine.
@@ -42,10 +43,19 @@ func (c *responseCache) Get(key string) ([]byte, bool) {
 	return entry.data, true
 }
 
+// responseCacheMaxEntries caps the number of entries to prevent unbounded growth
+// between cleanup intervals on high-traffic instances.
+const responseCacheMaxEntries = 10_000
+
 // Set stores a response in the cache with the given TTL.
 func (c *responseCache) Set(key string, data []byte, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Prevent unbounded growth: skip caching if at capacity.
+	if len(c.entries) >= responseCacheMaxEntries {
+		return
+	}
 
 	c.entries[key] = &cacheEntry{
 		data:      data,
@@ -53,9 +63,11 @@ func (c *responseCache) Set(key string, data []byte, ttl time.Duration) {
 	}
 }
 
-// Stop terminates the background cleanup goroutine.
+// Stop terminates the background cleanup goroutine. Safe to call multiple times.
 func (c *responseCache) Stop() {
-	close(c.stopCh)
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
 }
 
 // cleanup periodically evicts expired entries.

@@ -215,7 +215,7 @@ services:
       - LOG_LEVEL=info
       - LOG_FORMAT=json
       - GOGC=50
-      - GOMEMLIMIT=90MiB
+      - GOMEMLIMIT=170MiB
       - DB_PATH=/data/wikisurge.db
       # Email: set EMAIL_API_KEY in .env to enable digest emails
       # - JWT_SECRET=          # set in .env file
@@ -235,9 +235,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 100M
+          memory: 200M
         reservations:
-          memory: 64M
+          memory: 100M
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
       interval: 30s

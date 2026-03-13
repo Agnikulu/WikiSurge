@@ -298,7 +298,6 @@ func (g *gzipResponseWriter) WriteHeader(code int) {
 
 func (g *gzipResponseWriter) Write(b []byte) (int, error) {
 	if !g.wroteHeader {
-		g.wroteHeader = true
 		g.buf = append(g.buf, b...)
 
 		// Wait until we have enough data to decide.
@@ -307,6 +306,7 @@ func (g *gzipResponseWriter) Write(b []byte) (int, error) {
 		}
 
 		// Buffer exceeds min size — compress.
+		g.wroteHeader = true
 		g.compressed = true
 		g.ResponseWriter.Header().Set("Content-Encoding", "gzip")
 		g.ResponseWriter.Header().Del("Content-Length")
