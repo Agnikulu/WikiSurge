@@ -250,11 +250,17 @@ func (w *WikiStreamClient) processStream() error {
 	// Create a fresh SSE client for each stream attempt to avoid stale
 	// internal state from the r3labs/sse library's own retry logic.
 	sseClient := sse.NewClient(WikipediaSSEURL)
-	sseClient.Connection.Transport = sseTransport()
+	transport := sseTransport()
+	sseClient.Connection.Transport = transport
 	sseClient.Headers = map[string]string{
 		"Accept":     "text/event-stream",
 		"User-Agent": UserAgent,
 	}
+
+	// Close this transport's idle connections when the stream attempt ends.
+	// Without this, each reconnect (~every 3-7 min) leaks a transport with
+	// its TCP/TLS connection pool, causing FD exhaustion after days.
+	defer transport.CloseIdleConnections()
 
 	// Seed the library's LastEventID so the Last-Event-ID header is sent
 	// on the initial request, enabling Wikipedia to replay missed events.

@@ -53,6 +53,9 @@ func (s *APIServer) WebSocketAlerts(w http.ResponseWriter, r *http.Request) {
 	// Main write loop.
 	go func() {
 		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error().Interface("panic", r).Msg("Alert WS write loop recovered from panic")
+			}
 			pingTicker.Stop()
 			s.alertHub.Unsubscribe(alertCh)
 			conn.Close()

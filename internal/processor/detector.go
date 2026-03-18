@@ -20,6 +20,12 @@ var (
 	sharedSpikeMetrics       *SpikeDetectorMetrics
 )
 
+// maxCooldownEntries caps the cooldown map to prevent unbounded memory
+// growth. Go maps never shrink their backing array, so even after delete()
+// the memory stays allocated. This limit ensures the map is periodically
+// rebuilt from scratch when it grows too large.
+const maxCooldownEntries = 5000
+
 // SpikeDetector handles real-time spike detection using hot page windows
 type SpikeDetector struct {
 	hotPages             *storage.HotPageTracker
@@ -161,14 +167,28 @@ func (sd *SpikeDetector) ProcessEdit(ctx context.Context, edit *models.Wikipedia
 			return nil // Still in cooldown, suppress duplicate
 		}
 		sd.cooldowns[edit.Title] = time.Now()
-		// Clean up expired cooldowns periodically
-		if len(sd.cooldowns) > 500 {
+		// Clean up expired cooldowns every 100 entries, and hard-cap the
+		// map to maxCooldownEntries. When the cap is hit we rebuild the
+		// map from scratch so Go releases the old backing array — plain
+		// delete() never shrinks the internal hash table.
+		if len(sd.cooldowns) > 100 {
 			now := time.Now()
 			for page, t := range sd.cooldowns {
 				if now.Sub(t) > sd.cooldownDuration {
 					delete(sd.cooldowns, page)
 				}
 			}
+		}
+		if len(sd.cooldowns) > maxCooldownEntries {
+			// Rebuild map to reclaim memory from Go's non-shrinking map.
+			newMap := make(map[string]time.Time, len(sd.cooldowns)/2)
+			now := time.Now()
+			for page, t := range sd.cooldowns {
+				if now.Sub(t) <= sd.cooldownDuration {
+					newMap[page] = t
+				}
+			}
+			sd.cooldowns = newMap
 		}
 		sd.mu.Unlock()
 

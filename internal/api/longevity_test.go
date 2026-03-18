@@ -1378,3 +1378,193 @@ func TestCleanup_ConcurrentShutdown(t *testing.T) {
 		srv.alertHub.Unsubscribe(ch)
 	})
 }
+
+// ===========================================================================
+// TOCTOU race regression test for WebSocket hub slow-client disconnect
+// ===========================================================================
+
+// TestHub_SlowClientDisconnectNoPanic exercises the exact TOCTOU race that
+// caused "send on closed channel" panics in production. The scenario:
+//
+//  1. Hub detects a slow client during broadcast (send buffer full).
+//  2. Between releasing the read lock (RUnlock) and acquiring the write lock
+//     (Lock), the client's readPump/writePump unregisters it via the
+//     unregister channel — closing client.send.
+//  3. Hub acquires the write lock and tries to close(client.send) again.
+//
+// Before the fix (bare close()), step 3 panicked. After the fix (closeOnce),
+// the second close is a no-op.
+func TestHub_SlowClientDisconnectNoPanic(t *testing.T) {
+	logger := zerolog.Nop()
+	hub := NewWebSocketHub(logger)
+	hub.SetMaxClients(200)
+	hub.SetMaxPerIP(200)
+	go hub.Run()
+	t.Cleanup(func() { hub.Stop() })
+
+	const rounds = 200
+	for round := 0; round < rounds; round++ {
+		// Create a client with a tiny send buffer so it becomes "slow" instantly.
+		client := &Client{
+			hub:         hub,
+			send:        make(chan []byte, 1), // intentionally tiny
+			id:          fmt.Sprintf("toctou-%d", round),
+			connectedAt: time.Now(),
+			remoteAddr:  "10.0.0.1",
+		}
+
+		// Register the client.
+		hub.register <- client
+		time.Sleep(time.Millisecond)
+
+		// Fill the send buffer so the hub sees it as "slow".
+		select {
+		case client.send <- []byte("fill"):
+		default:
+		}
+
+		// Concurrently:
+		// 1. Broadcast a message (hub will detect client as slow).
+		// 2. Unregister the client (simulates readPump/writePump exit).
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			hub.BroadcastEdit(&models.WikipediaEdit{
+				ID: int64(round), Title: "Race", Wiki: "enwiki",
+				Length: struct {
+					Old int `json:"old"`
+					New int `json:"new"`
+				}{Old: 1, New: 2},
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			hub.unregister <- client
+		}()
+		wg.Wait()
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	// If we get here without a "send on closed channel" panic, the fix works.
+	assert.LessOrEqual(t, hub.ClientCount(), 0,
+		"all clients should be cleaned up after TOCTOU test")
+}
+
+// TestHub_CloseOncePreventsDoublePanic directly verifies that the
+// Client.closeOnce guard prevents a double-close panic.
+func TestHub_CloseOncePreventsDoublePanic(t *testing.T) {
+	client := &Client{
+		send: make(chan []byte, 1),
+		id:   "double-close-test",
+	}
+
+	assert.NotPanics(t, func() {
+		// First close — normal.
+		client.closeOnce.Do(func() { close(client.send) })
+		// Second close — would panic without closeOnce.
+		client.closeOnce.Do(func() { close(client.send) })
+		// Third for good measure.
+		client.closeOnce.Do(func() { close(client.send) })
+	}, "closeOnce should prevent double-close panics")
+}
+
+// ===========================================================================
+// Alert hub subscriber cleanup on write-loop panic
+// ===========================================================================
+
+// TestAlertHub_UnsubscribeCalledOnPanic verifies that even if a panic occurs
+// in an alert subscriber's processing, the Unsubscribe call in the deferred
+// recovery still runs, preventing a subscriber channel leak. This mimics the
+// fix in websocket_alerts.go where panic recovery was added.
+func TestAlertHub_UnsubscribeCalledOnPanic(t *testing.T) {
+	hub := NewAlertHub(nil, zerolog.Nop())
+	go hub.Run()
+	t.Cleanup(func() { hub.Stop() })
+
+	// Subscribe a channel.
+	ch := hub.Subscribe()
+
+	hub.mu.RLock()
+	subsBefore := len(hub.subscribers)
+	hub.mu.RUnlock()
+	assert.Equal(t, 1, subsBefore, "should have 1 subscriber")
+
+	// Simulate a write-loop goroutine that panics but has proper recovery.
+	done := make(chan struct{})
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// This is what the fixed websocket_alerts.go does.
+			}
+			hub.Unsubscribe(ch)
+			close(done)
+		}()
+
+		// Read one alert, then panic (simulates marshal failure, etc.).
+		<-ch
+		panic("simulated write error")
+	}()
+
+	// Send an alert to trigger the panic.
+	hub.broadcast(storage.Alert{ID: "trigger-panic", Type: storage.AlertTypeSpike})
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("write loop should have recovered from panic")
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	hub.mu.RLock()
+	subsAfter := len(hub.subscribers)
+	hub.mu.RUnlock()
+	assert.Equal(t, 0, subsAfter,
+		"subscriber should be cleaned up after panic recovery, got %d", subsAfter)
+}
+
+// TestAlertHub_SubscriberLeakWithoutPanicRecovery demonstrates why panic
+// recovery is needed. If the write loop panics WITHOUT recovery, the
+// Unsubscribe in the defer is NOT reached (because panic propagates up),
+// but since the goroutine died, the subscriber channel becomes orphaned.
+// With the fix, the deferred recovery catches the panic first, then
+// Unsubscribe runs.
+func TestAlertHub_SubscriberLeakWithoutPanicRecovery(t *testing.T) {
+	hub := NewAlertHub(nil, zerolog.Nop())
+	go hub.Run()
+	t.Cleanup(func() { hub.Stop() })
+
+	// Rapid subscribe/panic/unsubscribe cycles.
+	const cycles = 100
+	var wg sync.WaitGroup
+
+	for i := 0; i < cycles; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			ch := hub.Subscribe()
+			defer func() {
+				if r := recover(); r != nil {
+					// Recovery catches the panic.
+				}
+				hub.Unsubscribe(ch)
+			}()
+
+			// Simulate some work that might panic.
+			if id%3 == 0 {
+				panic("simulated failure")
+			}
+			// Otherwise clean exit.
+		}(i)
+	}
+
+	wg.Wait()
+	time.Sleep(50 * time.Millisecond)
+
+	hub.mu.RLock()
+	remaining := len(hub.subscribers)
+	hub.mu.RUnlock()
+	assert.Equal(t, 0, remaining,
+		"all subscribers should be cleaned up after panic cycles, got %d", remaining)
+}

@@ -142,6 +142,7 @@ type Client struct {
 	id          string
 	connectedAt time.Time
 	remoteAddr  string
+	closeOnce   sync.Once // guards close(send) to prevent double-close panics
 }
 
 // readPump reads messages from the WebSocket connection.
@@ -375,7 +376,7 @@ func (h *WebSocketHub) runWithRestart(restartCount int) {
 			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
-				close(client.send)
+				client.closeOnce.Do(func() { close(client.send) })
 				metrics.WebSocketDisconnectionsTotal.With(nil).Inc()
 				metrics.WebSocketConnectionsActive.With(nil).Set(float64(len(h.clients)))
 				h.logger.Info().
@@ -397,13 +398,15 @@ func (h *WebSocketHub) runWithRestart(restartCount int) {
 			}
 			h.mu.RUnlock()
 
-			// Disconnect slow clients outside the read-lock iteration
+			// Disconnect slow clients outside the read-lock iteration.
+			// Use closeOnce to prevent double-close if the client was
+			// already unregistered between RUnlock and Lock (TOCTOU race).
 			if len(slowClients) > 0 {
 				h.mu.Lock()
 				for _, client := range slowClients {
 					if _, ok := h.clients[client]; ok {
 						delete(h.clients, client)
-						close(client.send)
+						client.closeOnce.Do(func() { close(client.send) })
 						metrics.WebSocketDisconnectionsTotal.With(nil).Inc()
 						metrics.WebSocketConnectionsActive.With(nil).Set(float64(len(h.clients)))
 						h.logger.Warn().
@@ -420,7 +423,7 @@ func (h *WebSocketHub) runWithRestart(restartCount int) {
 		case <-h.stop:
 			h.mu.Lock()
 			for client := range h.clients {
-				close(client.send)
+				client.closeOnce.Do(func() { close(client.send) })
 				if client.conn != nil {
 					client.conn.Close()
 				}
@@ -456,7 +459,7 @@ func (h *WebSocketHub) cleanupStaleConnections() {
 	}
 	for _, client := range stale {
 		delete(h.clients, client)
-		close(client.send) // writePump will see the closed channel and exit
+		client.closeOnce.Do(func() { close(client.send) })
 		client.conn.Close()
 		metrics.WebSocketDisconnectionsTotal.With(nil).Inc()
 		h.logger.Info().
