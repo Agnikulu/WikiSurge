@@ -116,4 +116,4 @@ llm:
   temperature: 0.3
   timeout: 30s
   cache_ttl: 4h            # How long to cache LLM responses per page
-  reanalyze_every: 10      # Re-run LLM analysis every N edits on an active edit war
+  reanalyze_every: 100     # Re-run LLM analysis every N edits on an active edit war

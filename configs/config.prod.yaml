@@ -117,4 +117,4 @@ llm:
   temperature: 0.3
   timeout: 30s
   cache_ttl: 25h
-  reanalyze_every: 10
+  reanalyze_every: 100

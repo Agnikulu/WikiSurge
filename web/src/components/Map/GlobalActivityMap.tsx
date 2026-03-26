@@ -5,6 +5,7 @@ import {
   Geography,
   Graticule,
   Marker,
+  ZoomableGroup,
 } from 'react-simple-maps';
 import { getGeoActivity } from '../../utils/api';
 import type { GeoHotspot, GeoWar, GeoActivityResponse } from '../../types';
@@ -167,6 +168,12 @@ export const GlobalActivityMap = memo(function GlobalActivityMap({
           projectionConfig={{ scale: 140, center: [10, 20] }}
           style={{ width: '100%', height: responsiveHeight }}
         >
+          <ZoomableGroup
+            center={[10, 20]}
+            minZoom={1}
+            maxZoom={8}
+            translateExtent={[[-200, -200], [1200, 800]]}
+          >
           <defs>
             <linearGradient id="countryGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#1a2744" />
@@ -226,6 +233,7 @@ export const GlobalActivityMap = memo(function GlobalActivityMap({
               onClick={onWarClick}
             />
           ))}
+          </ZoomableGroup>
         </ComposableMap>
       </div>
 
@@ -303,6 +311,14 @@ const HotspotMarker = memo(function HotspotMarker({
       />
       {/* Center dot */}
       <circle r={1.5} fill={color} opacity={0.9} />
+      {/* Invisible larger hit area for easier hovering */}
+      <circle
+        r={baseRadius + 8}
+        fill="transparent"
+        style={{ cursor: 'pointer' }}
+        onMouseEnter={(e) => onMouseEnter(e as unknown as React.MouseEvent, hotspot)}
+        onMouseLeave={onMouseLeave}
+      />
     </Marker>
   );
 });
@@ -365,20 +381,15 @@ const WarMarker = memo(function WarMarker({
       />
       {/* Center dot */}
       <circle r={2} fill={color} opacity={1} />
-      {/* Label */}
-      <text
-        textAnchor="middle"
-        y={-radius - 8}
-        style={{
-          fontFamily: 'JetBrains Mono, monospace',
-          fontSize: 8,
-          fill: color,
-          opacity: 0.8,
-          pointerEvents: 'none',
-        }}
-      >
-        {war.page_title.length > 20 ? war.page_title.slice(0, 18) + '…' : war.page_title}
-      </text>
+      {/* Invisible larger hit area for easier hovering */}
+      <circle
+        r={radius + 12}
+        fill="transparent"
+        style={{ cursor: 'pointer' }}
+        onMouseEnter={(e) => onMouseEnter(e as unknown as React.MouseEvent, war)}
+        onMouseLeave={onMouseLeave}
+        onClick={() => onClick?.(war)}
+      />
     </Marker>
   );
 });
