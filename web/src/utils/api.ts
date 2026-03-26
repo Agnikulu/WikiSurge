@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { TrendingPage, Edit, Alert, Stats, EditWar, SearchResult, SearchParams, EditWarAnalysis, RawTimelineEntry } from '../types';
+import type { TrendingPage, Edit, Alert, Stats, EditWar, SearchResult, SearchParams, EditWarAnalysis, RawTimelineEntry, GeoActivityResponse } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -103,6 +103,11 @@ export const getTimeline = async (duration = '24h'): Promise<{ timestamp: number
   const response = await api.get('/api/timeline', {
     params: { duration },
   });
+  return response.data;
+};
+
+export const getGeoActivity = async (): Promise<GeoActivityResponse> => {
+  const response = await api.get('/api/geo-activity');
   return response.data;
 };
 

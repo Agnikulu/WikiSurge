@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -971,6 +973,377 @@ func (s *APIServer) parseSearchResponse(result map[string]interface{}, query str
 }
 
 // ---------------------------------------------------------------------------
+// Geo Activity — live map data
+// ---------------------------------------------------------------------------
+
+// handleGetGeoActivity returns geographic activity data for the world map.
+// It combines per-language edit activity (regions) with geolocated edit wars (wars).
+func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request) {
+	ck := cacheKey("geo-activity")
+	if cached, ok := s.cache.Get(ck); ok {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "max-age=15, stale-while-revalidate=5")
+		w.Write(cached)
+		return
+	}
+
+	ctx := r.Context()
+	resp := GeoActivityResponse{
+		Regions:  []GeoRegion{},
+		Wars:     []GeoWar{},
+		Hotspots: []GeoHotspot{},
+	}
+
+	// --- Regions: per-language activity (kept as lightweight fallback) ---
+	if s.statsTracker != nil {
+		langCounts, _, err := s.statsTracker.GetLanguageCounts(ctx)
+		if err == nil {
+			for _, lc := range langCounts {
+				lat, lng, ok := GetWikiCentroid(lc.Language)
+				if !ok {
+					continue
+				}
+				// Approximate edits per minute: today's count / minutes since midnight
+				epm := 0.0
+				now := time.Now().UTC()
+				midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+				minutesSinceMidnight := now.Sub(midnight).Minutes()
+				if minutesSinceMidnight > 0 {
+					epm = math.Round(float64(lc.Count)/minutesSinceMidnight*10) / 10
+				}
+
+				resp.Regions = append(resp.Regions, GeoRegion{
+					Wiki:           lc.Language,
+					Lat:            lat,
+					Lng:            lng,
+					EditsPerMinute: epm,
+					EditCount1h:    int(lc.Count), // Today's total — close enough for activity viz
+				})
+			}
+		}
+	}
+
+	// Fallback: if no language data yet, use configured languages with base activity
+	if len(resp.Regions) == 0 && s.config != nil && len(s.config.Ingestor.AllowedLanguages) > 0 {
+		for _, lang := range s.config.Ingestor.AllowedLanguages {
+			lat, lng, ok := GetWikiCentroid(lang)
+			if !ok {
+				continue
+			}
+			resp.Regions = append(resp.Regions, GeoRegion{
+				Wiki:           lang,
+				Lat:            lat,
+				Lng:            lng,
+				EditsPerMinute: 0.1, // Base pulse so map is never empty
+				EditCount1h:    0,
+			})
+		}
+	}
+
+	// --- Wars: active edit wars with coordinates ---
+	if s.alerts != nil {
+		activeWars, err := s.alerts.GetActiveEditWars(ctx, 20)
+		if err == nil {
+			for _, aw := range activeWars {
+				gw := GeoWar{Active: true}
+
+				if pt, ok := aw["page_title"].(string); ok {
+					gw.PageTitle = pt
+				}
+				if sev, ok := aw["severity"].(string); ok {
+					gw.Severity = sev
+				}
+				if ec, ok := aw["editor_count"].(int); ok {
+					gw.EditorCount = ec
+				}
+				if edc, ok := aw["edit_count"].(int); ok {
+					gw.EditCount = edc
+				}
+				if rc, ok := aw["revert_count"].(int); ok {
+					gw.RevertCount = rc
+				}
+				if st, ok := aw["start_time"].(string); ok {
+					gw.StartTime = st
+				}
+				if su, ok := aw["server_url"].(string); ok {
+					gw.ServerURL = su
+				}
+
+				// Try to get real article coordinates from Wikipedia API / semantic geocoding
+				if gw.PageTitle != "" {
+					lat, lng, src, found := s.lookupArticleCoordinates(ctx, gw.PageTitle, gw.ServerURL)
+					if found {
+						gw.Lat = lat
+						gw.Lng = lng
+						gw.LocationSource = src
+					} else {
+						// Fallback to wiki centroid
+						lang := extractLanguageFromURL(gw.ServerURL)
+						if lang == "" {
+							lang = "en"
+						}
+						if lat, lng, ok := GetWikiCentroid(lang); ok {
+							gw.Lat = lat
+							gw.Lng = lng
+						}
+						gw.LocationSource = "wiki_centroid"
+					}
+				}
+
+				// Embed cached analysis snippet
+				if gw.PageTitle != "" {
+					cacheKey := fmt.Sprintf("editwar:analysis:%s", gw.PageTitle)
+					if cached, cErr := s.redis.Get(ctx, cacheKey).Result(); cErr == nil && cached != "" {
+						var analysis map[string]interface{}
+						if json.Unmarshal([]byte(cached), &analysis) == nil {
+							gw.Analysis = analysis
+							if summary, ok := analysis["summary"].(string); ok {
+								// Truncate summary for map tooltip
+								if len(summary) > 150 {
+									gw.SummarySnippet = summary[:147] + "..."
+								} else {
+									gw.SummarySnippet = summary
+								}
+							}
+						}
+					}
+				}
+
+				resp.Wars = append(resp.Wars, gw)
+			}
+		}
+	}
+
+	// If no active wars, include the most recent resolved war so spotlight is never empty
+	if len(resp.Wars) == 0 && s.alerts != nil {
+		since := time.Now().Add(-7 * 24 * time.Hour)
+		historical, err := s.alerts.GetEditWarAlertsSince(ctx, since, 1)
+		if err == nil && len(historical) > 0 {
+			hw := historical[0]
+			gw := GeoWar{Active: false}
+			if pt, ok := hw["page_title"].(string); ok {
+				gw.PageTitle = pt
+			}
+			if sev, ok := hw["severity"].(string); ok {
+				gw.Severity = sev
+			}
+			if ec, ok := hw["editor_count"].(float64); ok {
+				gw.EditorCount = int(ec)
+			}
+			if edc, ok := hw["edit_count"].(float64); ok {
+				gw.EditCount = int(edc)
+			}
+			if rc, ok := hw["revert_count"].(float64); ok {
+				gw.RevertCount = int(rc)
+			}
+			if st, ok := hw["start_time"].(string); ok {
+				gw.StartTime = st
+			}
+			if su, ok := hw["server_url"].(string); ok {
+				gw.ServerURL = su
+			}
+
+			// Try article coordinates
+			if gw.PageTitle != "" {
+				lat, lng, src, found := s.lookupArticleCoordinates(ctx, gw.PageTitle, gw.ServerURL)
+				if found {
+					gw.Lat = lat
+					gw.Lng = lng
+					gw.LocationSource = src
+				} else {
+					lang := extractLanguageFromURL(gw.ServerURL)
+					if lang == "" {
+						lang = "en"
+					}
+					if lat, lng, ok := GetWikiCentroid(lang); ok {
+						gw.Lat = lat
+						gw.Lng = lng
+					}
+					gw.LocationSource = "wiki_centroid"
+				}
+			}
+
+			// Embed cached analysis
+			if gw.PageTitle != "" {
+				ck := fmt.Sprintf("editwar:analysis:%s", gw.PageTitle)
+				if cached, cErr := s.redis.Get(ctx, ck).Result(); cErr == nil && cached != "" {
+					var analysis map[string]interface{}
+					if json.Unmarshal([]byte(cached), &analysis) == nil {
+						gw.Analysis = analysis
+						if summary, ok := analysis["summary"].(string); ok {
+							if len(summary) > 150 {
+								gw.SummarySnippet = summary[:147] + "..."
+							} else {
+								gw.SummarySnippet = summary
+							}
+						}
+					}
+				}
+			}
+
+			resp.Wars = append(resp.Wars, gw)
+		}
+	}
+
+	// Jitter overlapping war markers so they don't stack on top of each other.
+	// Wars at the same (or very close) coordinates get spread in a spiral.
+	resp.Wars = jitterOverlappingWars(resp.Wars)
+
+	// --- Hotspots: trending pages geolocated by article semantics ---
+	if s.trending != nil {
+		trending, err := s.trending.GetTopTrending(20)
+		if err == nil {
+			// Build a set of war page titles so we skip duplicates
+			warTitles := make(map[string]bool, len(resp.Wars))
+			for _, w := range resp.Wars {
+				warTitles[w.PageTitle] = true
+			}
+
+			for i, entry := range trending {
+				if warTitles[entry.PageTitle] {
+					continue // Already shown as a war marker
+				}
+
+				lang := extractLanguageFromURL(entry.ServerURL)
+				if lang == "" {
+					lang = extractLanguage(entry.PageTitle)
+				}
+
+				// Enrich with hourly edits from hot page tracker
+				var edits1h int64
+				if s.hotPages != nil {
+					if stats, hErr := s.hotPages.GetPageStats(ctx, entry.PageTitle); hErr == nil && stats != nil {
+						edits1h = stats.EditsLastHour
+					}
+				}
+
+				hs := GeoHotspot{
+					PageTitle: entry.PageTitle,
+					Score:     entry.CurrentScore,
+					Edits1h:   int(edits1h),
+					Language:  lang,
+					ServerURL: entry.ServerURL,
+					Rank:      i + 1,
+				}
+
+				// Semantic geocoding first, then article coords, then wiki centroid fallback
+				if lat, lng, src, found := s.lookupArticleCoordinates(ctx, entry.PageTitle, entry.ServerURL); found {
+					hs.Lat = lat
+					hs.Lng = lng
+					hs.LocationSource = src
+				} else {
+					// Wiki centroid fallback
+					fallbackLang := lang
+					if fallbackLang == "" {
+						fallbackLang = "en"
+					}
+					if lat, lng, ok := GetWikiCentroid(fallbackLang); ok {
+						hs.Lat = lat
+						hs.Lng = lng
+					}
+					hs.LocationSource = "wiki_centroid"
+				}
+
+				resp.Hotspots = append(resp.Hotspots, hs)
+			}
+
+			// Jitter overlapping hotspots
+			resp.Hotspots = jitterOverlappingHotspots(resp.Hotspots)
+		}
+	}
+
+	if encoded, err := json.Marshal(resp); err == nil {
+		s.cache.Set(ck, encoded, 15*time.Second)
+	}
+	w.Header().Set("Cache-Control", "max-age=15, stale-while-revalidate=5")
+	respondJSON(w, http.StatusOK, resp)
+}
+
+// lookupArticleCoordinates checks Redis cache then Wikipedia's API for article
+// coordinates. Only called for active edit wars (~2-10 at a time), so very cheap.
+func (s *APIServer) lookupArticleCoordinates(ctx context.Context, pageTitle, serverURL string) (float64, float64, string, bool) {
+	// Check Redis cache first
+	coordKey := fmt.Sprintf("editwar:coords:%s", pageTitle)
+	if cached, err := s.redis.Get(ctx, coordKey).Result(); err == nil && cached != "" {
+		var coords struct {
+			Lat    float64 `json:"lat"`
+			Lng    float64 `json:"lng"`
+			Source string  `json:"source,omitempty"`
+		}
+		if json.Unmarshal([]byte(cached), &coords) == nil {
+			if coords.Lat == 0 && coords.Lng == 0 {
+				return 0, 0, "", false // Cached negative result
+			}
+			src := coords.Source
+			if src == "" {
+				src = "article" // Legacy cached entries
+			}
+			return coords.Lat, coords.Lng, src, true
+		}
+	}
+
+	// Determine Wikipedia API base
+	lang := extractLanguageFromURL(serverURL)
+	if lang == "" {
+		lang = "en"
+	}
+	apiBase := fmt.Sprintf("https://%s.wikipedia.org/w/api.php", url.PathEscape(lang))
+
+	// Call Wikipedia action API: action=query&prop=coordinates
+	reqURL := fmt.Sprintf("%s?action=query&prop=coordinates&titles=%s&format=json",
+		apiBase, url.QueryEscape(pageTitle))
+
+	httpCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(httpCtx, http.MethodGet, reqURL, nil)
+	if err == nil {
+		req.Header.Set("User-Agent", "WikiSurge/1.0 (https://github.com/Agnikulu/WikiSurge)")
+		if resp, doErr := http.DefaultClient.Do(req); doErr == nil {
+			defer resp.Body.Close()
+			if body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024)); readErr == nil {
+				var result struct {
+					Query struct {
+						Pages map[string]struct {
+							Coordinates []struct {
+								Lat float64 `json:"lat"`
+								Lon float64 `json:"lon"`
+							} `json:"coordinates"`
+						} `json:"pages"`
+					} `json:"query"`
+				}
+				if json.Unmarshal(body, &result) == nil {
+					for _, page := range result.Query.Pages {
+						if len(page.Coordinates) > 0 {
+							lat := page.Coordinates[0].Lat
+							lng := page.Coordinates[0].Lon
+							coordData, _ := json.Marshal(map[string]interface{}{"lat": lat, "lng": lng, "source": "article"})
+							_ = s.redis.Set(ctx, coordKey, string(coordData), 24*time.Hour).Err()
+							return lat, lng, "article", true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback: try semantic geocoding from article title keywords
+	if lat, lng, ok := semanticGeocode(pageTitle); ok {
+		coordData, _ := json.Marshal(map[string]interface{}{"lat": lat, "lng": lng, "source": "semantic"})
+		_ = s.redis.Set(ctx, coordKey, string(coordData), 24*time.Hour).Err()
+		return lat, lng, "semantic", true
+	}
+
+	s.cacheNegativeCoords(ctx, coordKey)
+	return 0, 0, "", false
+}
+
+// cacheNegativeCoords stores a "no coordinates" result to avoid re-querying Wikipedia.
+func (s *APIServer) cacheNegativeCoords(ctx context.Context, coordKey string) {
+	_ = s.redis.Set(ctx, coordKey, `{"lat":0,"lng":0}`, 24*time.Hour).Err()
+}
+
+// ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 
@@ -1001,4 +1374,83 @@ func extractLanguageFromURL(serverURL string) string {
 		return u[:idx]
 	}
 	return ""
+}
+
+// jitterOverlappingWars applies a small spiral offset to wars that share the
+// same (or very close) coordinates so their markers don't stack on the map.
+func jitterOverlappingWars(wars []GeoWar) []GeoWar {
+	if len(wars) <= 1 {
+		return wars
+	}
+
+	// Group wars by approximate grid cell (~0.5 degree ≈ 50 km)
+	type gridKey struct{ latBin, lngBin int }
+	groups := make(map[gridKey][]int) // grid cell → index list
+	for i, w := range wars {
+		k := gridKey{int(math.Round(w.Lat * 2)), int(math.Round(w.Lng * 2))}
+		groups[k] = append(groups[k], i)
+	}
+
+	// Spiral offset: each additional marker at the same cell gets pushed outward
+	const offsetDeg = 3.0 // ~330 km at equator — visible spread on world map
+	for _, indices := range groups {
+		if len(indices) <= 1 {
+			continue
+		}
+		for rank, idx := range indices {
+			if rank == 0 {
+				continue // First war stays at its original position
+			}
+			angle := math.Pi * 2 * float64(rank) / float64(len(indices))
+			radius := offsetDeg * float64(rank)
+			wars[idx].Lat += radius * math.Cos(angle)
+			wars[idx].Lng += radius * math.Sin(angle)
+			// Clamp lat to valid range
+			if wars[idx].Lat > 85 {
+				wars[idx].Lat = 85
+			} else if wars[idx].Lat < -85 {
+				wars[idx].Lat = -85
+			}
+		}
+	}
+
+	return wars
+}
+
+// jitterOverlappingHotspots applies spiral offsets to trending hotspots that
+// share the same approximate location (e.g. all "en" pages at wiki centroid).
+func jitterOverlappingHotspots(hotspots []GeoHotspot) []GeoHotspot {
+	if len(hotspots) <= 1 {
+		return hotspots
+	}
+
+	type gridKey struct{ latBin, lngBin int }
+	groups := make(map[gridKey][]int)
+	for i, h := range hotspots {
+		k := gridKey{int(math.Round(h.Lat * 2)), int(math.Round(h.Lng * 2))}
+		groups[k] = append(groups[k], i)
+	}
+
+	const offsetDeg = 2.5 // Slightly tighter than wars since there are more dots
+	for _, indices := range groups {
+		if len(indices) <= 1 {
+			continue
+		}
+		for rank, idx := range indices {
+			if rank == 0 {
+				continue
+			}
+			angle := math.Pi * 2 * float64(rank) / float64(len(indices))
+			radius := offsetDeg * (1.0 + float64(rank)*0.5)
+			hotspots[idx].Lat += radius * math.Cos(angle)
+			hotspots[idx].Lng += radius * math.Sin(angle)
+			if hotspots[idx].Lat > 85 {
+				hotspots[idx].Lat = 85
+			} else if hotspots[idx].Lat < -85 {
+				hotspots[idx].Lat = -85
+			}
+		}
+	}
+
+	return hotspots
 }

@@ -8,15 +8,16 @@ export function Header() {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const wsConnected = useAppStore((s) => s.wsConnected);
   const apiHealthy = useAppStore((s) => s.apiHealthy);
+  const activeEditWarsCount = useAppStore((s) => s.activeEditWarsCount);
   const user = useAuthStore((s) => s.user);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'edit-wars', label: 'Edit Wars', badge: activeEditWarsCount },
     { id: 'trending', label: 'Trending' },
     { id: 'alerts', label: 'Alerts' },
     { id: 'search', label: 'Search' },
-    { id: 'edit-wars', label: 'Edit Wars' },
   ] as const;
 
   const handleTabClick = useCallback((id: string) => {
@@ -44,7 +45,7 @@ export function Header() {
                 key={tab.id}
                 onClick={() => handleTabClick(tab.id)}
                 aria-current={activeTab === tab.id ? 'page' : undefined}
-                className="px-3 py-1.5 rounded text-xs font-mono font-medium transition-all"
+                className="relative px-3 py-1.5 rounded text-xs font-mono font-medium transition-all"
                 style={{
                   background: activeTab === tab.id ? 'rgba(0,255,136,0.12)' : 'transparent',
                   color: activeTab === tab.id ? '#00ff88' : 'rgba(0,255,136,0.4)',
@@ -52,6 +53,14 @@ export function Header() {
                 }}
               >
                 {tab.label.toUpperCase()}
+                {'badge' in tab && tab.badge > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full text-[9px] font-bold font-mono px-1"
+                    style={{ background: '#ff4444', color: '#fff', boxShadow: '0 0 6px rgba(255,68,68,0.5)' }}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             ))}
           </nav>

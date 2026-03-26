@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState, useCallback } from 'react';
 import { Header } from './components/Layout/Header';
 import { Footer } from './components/Layout/Footer';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -11,8 +11,17 @@ import {
 } from './components/ui/Skeleton';
 import { useAppStore } from './store/appStore';
 import { LanguageDistributionChart } from './components/Stats/LanguageDistributionChart';
+import { MapSkeleton } from './components/Map/MapSkeleton';
+import { getGeoActivity } from './utils/api';
+import type { GeoWar } from './types';
 
 // Lazy-loaded heavy components for code splitting
+const GlobalActivityMap = lazy(() =>
+  import('./components/Map/GlobalActivityMap').then((m) => ({ default: m.GlobalActivityMap }))
+);
+const ConflictSpotlight = lazy(() =>
+  import('./components/EditWars/ConflictSpotlight').then((m) => ({ default: m.ConflictSpotlight }))
+);
 const StatsOverview = lazy(() =>
   import('./components/Stats/StatsOverview').then((m) => ({ default: m.StatsOverview }))
 );
@@ -86,9 +95,35 @@ function App() {
 
 /** Dashboard: full overview with all widgets */
 function DashboardView() {
+  const setActiveEditWarsCount = useAppStore((s) => s.setActiveEditWarsCount);
+  const [spotlightWars, setSpotlightWars] = useState<GeoWar[]>([]);
+
+  // Fetch geo data for spotlight (map fetches its own)
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const data = await getGeoActivity();
+        if (!cancelled) {
+          setSpotlightWars(data.wars);
+          setActiveEditWarsCount(data.wars.filter((w) => w.active).length);
+        }
+      } catch { /* silently ignore — map has its own fetch */ }
+    };
+    load();
+    const interval = setInterval(load, 15_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [setActiveEditWarsCount]);
+
+  const handleWarClick = useCallback((war: GeoWar) => {
+    const warId = `edit-war-${war.page_title.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()}`;
+    useAppStore.getState().setPendingScrollToWar(warId);
+    useAppStore.getState().setActiveTab('edit-wars');
+  }, []);
+
   return (
     <div className="space-y-6">
-      {/* Stats - full width */}
+      {/* Stats - full width (System Overview) */}
       <section aria-label="Statistics overview">
         <ErrorBoundary>
           <Suspense fallback={<StatsOverviewSkeleton />}>
@@ -96,6 +131,26 @@ function DashboardView() {
           </Suspense>
         </ErrorBoundary>
       </section>
+
+      {/* Map Hero - full width */}
+      <section aria-label="Global activity map">
+        <ErrorBoundary>
+          <Suspense fallback={<MapSkeleton />}>
+            <GlobalActivityMap height={400} onWarClick={handleWarClick} />
+          </Suspense>
+        </ErrorBoundary>
+      </section>
+
+      {/* Conflict Spotlight - full width */}
+      {spotlightWars.length > 0 && (
+        <section aria-label="Conflict spotlight">
+          <ErrorBoundary>
+            <Suspense fallback={<ChartSkeleton />}>
+              <ConflictSpotlight wars={spotlightWars} onViewDetails={handleWarClick} />
+            </Suspense>
+          </ErrorBoundary>
+        </section>
+      )}
 
       {/* Charts - 2 columns on desktop */}
       <section aria-label="Charts" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -129,15 +184,6 @@ function DashboardView() {
         <ErrorBoundary>
           <Suspense fallback={<TrendingListSkeleton />}>
             <LiveFeed />
-          </Suspense>
-        </ErrorBoundary>
-      </section>
-
-      {/* Edit Wars - full width, collapsible */}
-      <section aria-label="Edit wars">
-        <ErrorBoundary>
-          <Suspense fallback={<ChartSkeleton />}>
-            <EditWarsList />
           </Suspense>
         </ErrorBoundary>
       </section>
@@ -184,15 +230,36 @@ function SearchView() {
   );
 }
 
-/** Edit Wars view */
+/** Edit Wars "War Room" view */
 function EditWarsView() {
+  const pendingWar = useAppStore((s) => s.pendingScrollToWar);
+  const setPendingScrollToWar = useAppStore((s) => s.setPendingScrollToWar);
+
+  useEffect(() => {
+    if (!pendingWar) return;
+    // Small delay to let the list render
+    const timer = setTimeout(() => {
+      const el = document.getElementById(pendingWar);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-cyan-400');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-cyan-400'), 2000);
+      }
+      setPendingScrollToWar(null);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [pendingWar, setPendingScrollToWar]);
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
+      {/* Active wars list */}
       <ErrorBoundary>
         <Suspense fallback={<ChartSkeleton />}>
           <EditWarsList />
         </Suspense>
       </ErrorBoundary>
+
+      {/* Historical wars */}
       <ErrorBoundary>
         <Suspense fallback={<ChartSkeleton />}>
           <HistoricalEditWars />

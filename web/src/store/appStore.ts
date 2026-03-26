@@ -19,6 +19,8 @@ interface AppState {
   trending: TrendingPage[];
   stats: Stats | null;
   alertsCount: number;
+  activeEditWarsCount: number;
+  pendingScrollToWar: string | null;
 
   // Actions
   setFilters: (filters: Partial<FilterState>) => void;
@@ -30,6 +32,8 @@ interface AppState {
   updateTrending: (trending: TrendingPage[]) => void;
   updateStats: (stats: Stats) => void;
   setAlertsCount: (count: number) => void;
+  setActiveEditWarsCount: (count: number) => void;
+  setPendingScrollToWar: (warId: string | null) => void;
   resetFilters: () => void;
 }
 
@@ -52,6 +56,8 @@ export const useAppStore = create<AppState>()(
       trending: [],
       stats: null,
       alertsCount: 0,
+      activeEditWarsCount: 0,
+      pendingScrollToWar: null,
 
       // Actions
       setFilters: (filters) =>
@@ -75,6 +81,10 @@ export const useAppStore = create<AppState>()(
       updateStats: (stats) => set({ stats }),
 
       setAlertsCount: (count) => set({ alertsCount: count }),
+
+      setActiveEditWarsCount: (count) => set({ activeEditWarsCount: count }),
+
+      setPendingScrollToWar: (warId) => set({ pendingScrollToWar: warId }),
 
       resetFilters: () => set({ filters: { ...DEFAULT_FILTERS } }),
     }),

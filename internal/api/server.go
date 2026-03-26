@@ -130,6 +130,7 @@ func (s *APIServer) setupRoutes() {
 	s.router.HandleFunc("GET /api/edit-wars/timeline", s.handleGetEditWarTimeline)
 	s.router.HandleFunc("GET /api/timeline", s.handleGetTimeline)
 	s.router.HandleFunc("GET /api/search", s.handleSearch)
+	s.router.HandleFunc("GET /api/geo-activity", s.handleGetGeoActivity)
 
 	// Documentation routes
 	s.router.HandleFunc("GET /api/docs", s.handleAPIDocs)

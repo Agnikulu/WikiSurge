@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -85,6 +86,223 @@ type EditWarEntry struct {
 	Active      bool        `json:"active"`
 	ServerURL   string      `json:"server_url,omitempty"`
 	Analysis    interface{} `json:"analysis,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// Geo Activity types
+// ---------------------------------------------------------------------------
+
+// GeoRegion represents a language-wiki's geographic activity.
+type GeoRegion struct {
+	Wiki           string  `json:"wiki"`
+	Lat            float64 `json:"lat"`
+	Lng            float64 `json:"lng"`
+	EditsPerMinute float64 `json:"edits_per_minute"`
+	EditCount1h    int     `json:"edit_count_1h"`
+	SpikeCount     int     `json:"spike_count"`
+}
+
+// GeoHotspot represents a single trending page geolocated on the map.
+type GeoHotspot struct {
+	PageTitle      string  `json:"page_title"`
+	Score          float64 `json:"score"`
+	Edits1h        int     `json:"edits_1h"`
+	Lat            float64 `json:"lat"`
+	Lng            float64 `json:"lng"`
+	LocationSource string  `json:"location_source"` // "article", "semantic", or "wiki_centroid"
+	Language       string  `json:"language,omitempty"`
+	ServerURL      string  `json:"server_url,omitempty"`
+	Rank           int     `json:"rank"`
+}
+
+// GeoWar represents an active edit war with geographic coordinates.
+type GeoWar struct {
+	PageTitle      string      `json:"page_title"`
+	Severity       string      `json:"severity"`
+	EditorCount    int         `json:"editor_count"`
+	EditCount      int         `json:"edit_count"`
+	RevertCount    int         `json:"revert_count"`
+	Lat            float64     `json:"lat"`
+	Lng            float64     `json:"lng"`
+	LocationSource string      `json:"location_source"` // "article" or "wiki_centroid"
+	SummarySnippet string      `json:"summary_snippet,omitempty"`
+	StartTime      string      `json:"start_time,omitempty"`
+	Active         bool        `json:"active"`
+	ServerURL      string      `json:"server_url,omitempty"`
+	Analysis       interface{} `json:"analysis,omitempty"`
+}
+
+// GeoActivityResponse is returned by GET /api/geo-activity.
+type GeoActivityResponse struct {
+	Regions  []GeoRegion  `json:"regions"`
+	Wars     []GeoWar     `json:"wars"`
+	Hotspots []GeoHotspot `json:"hotspots"`
+}
+
+// WikiCentroid maps a language code to an approximate geographic centroid.
+type WikiCentroid struct {
+	Lat float64
+	Lng float64
+}
+
+// wikiCentroids maps wiki language codes to approximate geographic centroids
+// of the region where that language is predominantly spoken.
+var wikiCentroids = map[string]WikiCentroid{
+	"en": {37.0902, -95.7129},   // USA (largest English Wikipedia contributor base)
+	"de": {51.1657, 10.4515},    // Germany
+	"fr": {46.6034, 1.8883},     // France
+	"es": {40.4637, -3.7492},    // Spain
+	"it": {41.8719, 12.5674},    // Italy
+	"pt": {-14.2350, -51.9253},  // Brazil
+	"ru": {61.5240, 105.3188},   // Russia
+	"ja": {36.2048, 138.2529},   // Japan
+	"zh": {35.8617, 104.1954},   // China
+	"ko": {35.9078, 127.7669},   // South Korea
+	"ar": {26.8206, 30.8025},    // Egypt (Arabic hub)
+	"hi": {20.5937, 78.9629},    // India
+	"pl": {51.9194, 19.1451},    // Poland
+	"nl": {52.1326, 5.2913},     // Netherlands
+	"sv": {60.1282, 18.6435},    // Sweden
+	"uk": {48.3794, 31.1656},    // Ukraine
+	"vi": {14.0583, 108.2772},   // Vietnam
+	"fa": {32.4279, 53.6880},    // Iran
+	"id": {-0.7893, 113.9213},   // Indonesia
+	"tr": {38.9637, 35.2433},    // Turkey
+	"th": {15.8700, 100.9925},   // Thailand
+	"he": {31.0461, 34.8516},    // Israel
+	"fi": {61.9241, 25.7482},    // Finland
+	"cs": {49.8175, 15.4730},    // Czech Republic
+	"el": {39.0742, 21.8243},    // Greece
+	"da": {56.2639, 9.5018},     // Denmark
+	"no": {60.4720, 8.4689},     // Norway
+	"hu": {47.1625, 19.5033},    // Hungary
+	"ro": {45.9432, 24.9668},    // Romania
+	"ca": {41.5912, 1.5209},     // Catalonia
+	"sr": {44.0165, 21.0059},    // Serbia
+	"bg": {42.7339, 25.4858},    // Bulgaria
+	"ms": {4.2105, 101.9758},    // Malaysia
+}
+
+// GetWikiCentroid returns the centroid for a wiki language code.
+// Returns (0,0, false) if unknown.
+func GetWikiCentroid(lang string) (float64, float64, bool) {
+	c, ok := wikiCentroids[lang]
+	if !ok {
+		return 0, 0, false
+	}
+	return c.Lat, c.Lng, true
+}
+
+// placeCoord is a keyword-to-coordinate mapping for semantic geocoding.
+type placeCoord struct {
+	Keyword string
+	Lat     float64
+	Lng     float64
+}
+
+// placeKeywords maps place names commonly found in article titles to coordinates.
+// Longer/more specific keywords are listed first so they match before shorter ones.
+var placeKeywords = []placeCoord{
+	// Regions & conflicts
+	{"Kashmir", 34.0837, 74.7973},
+	{"Jammu", 32.7266, 74.8570},
+	{"Crimea", 45.3453, 34.0549},
+	{"Donbas", 48.0159, 37.8028},
+	{"Gaza", 31.3547, 34.3088},
+	{"West Bank", 31.9466, 35.3027},
+	{"Xinjiang", 41.1129, 85.2401},
+	{"Tibet", 29.6524, 91.1719},
+	{"Taiwan", 23.6978, 120.9605},
+	{"Hong Kong", 22.3193, 114.1694},
+	{"Catalonia", 41.5912, 1.5209},
+	{"Kurdistan", 36.4103, 44.3872},
+	{"Sahel", 14.4974, 2.1160},
+	{"Balkans", 42.7339, 21.0059},
+	{"Caucasus", 42.2, 43.5},
+
+	// Countries
+	{"United States", 38.9072, -77.0369},
+	{"United Kingdom", 51.5074, -0.1278},
+	{"Ukraine", 48.3794, 31.1656},
+	{"Russia", 55.7558, 37.6173},
+	{"China", 39.9042, 116.4074},
+	{"Japan", 35.6762, 139.6503},
+	{"India", 28.6139, 77.2090},
+	{"Pakistan", 33.6844, 73.0479},
+	{"Iran", 35.6892, 51.3890},
+	{"Iraq", 33.3152, 44.3661},
+	{"Syria", 33.5138, 36.2765},
+	{"Israel", 31.7683, 35.2137},
+	{"Palestine", 31.9522, 35.2332},
+	{"Egypt", 30.0444, 31.2357},
+	{"Turkey", 39.9334, 32.8597},
+	{"Germany", 52.5200, 13.4050},
+	{"France", 48.8566, 2.3522},
+	{"Brazil", -15.7975, -47.8919},
+	{"Mexico", 19.4326, -99.1332},
+	{"Canada", 45.4215, -75.6972},
+	{"Australia", -35.2809, 149.1300},
+	{"South Korea", 37.5665, 126.9780},
+	{"North Korea", 39.0392, 125.7625},
+	{"South Africa", -25.7479, 28.2293},
+	{"Nigeria", 9.0579, 7.4951},
+	{"Kenya", -1.2921, 36.8219},
+	{"Ethiopia", 9.0250, 38.7469},
+	{"Saudi Arabia", 24.7136, 46.6753},
+	{"Afghanistan", 34.5553, 69.2075},
+	{"Myanmar", 19.7633, 96.0785},
+	{"Thailand", 13.7563, 100.5018},
+	{"Vietnam", 21.0285, 105.8542},
+	{"Indonesia", -6.2088, 106.8456},
+	{"Philippines", 14.5995, 120.9842},
+	{"Argentina", -34.6037, -58.3816},
+	{"Colombia", 4.7110, -74.0721},
+	{"Venezuela", 10.4806, -66.9036},
+	{"Cuba", 23.1136, -82.3666},
+	{"Poland", 52.2297, 21.0122},
+	{"Italy", 41.9028, 12.4964},
+	{"Spain", 40.4168, -3.7038},
+	{"Netherlands", 52.3676, 4.9041},
+	{"Sweden", 59.3293, 18.0686},
+	{"Norway", 59.9139, 10.7522},
+
+	// Adjective forms ("Russian", "American", "Chinese" etc.)
+	{"American", 38.9072, -77.0369},
+	{"Russian", 55.7558, 37.6173},
+	{"Chinese", 39.9042, 116.4074},
+	{"Japanese", 35.6762, 139.6503},
+	{"Indian", 28.6139, 77.2090},
+	{"Israeli", 31.7683, 35.2137},
+	{"Palestinian", 31.9522, 35.2332},
+	{"Ukrainian", 48.3794, 31.1656},
+	{"Iranian", 35.6892, 51.3890},
+	{"Iraqi", 33.3152, 44.3661},
+	{"Syrian", 33.5138, 36.2765},
+	{"Turkish", 39.9334, 32.8597},
+	{"Brazilian", -15.7975, -47.8919},
+	{"Mexican", 19.4326, -99.1332},
+	{"British", 51.5074, -0.1278},
+	{"Korean", 37.5665, 126.9780},
+	{"Pakistani", 33.6844, 73.0479},
+	{"Afghan", 34.5553, 69.2075},
+	{"Nigerian", 9.0579, 7.4951},
+	{"Egyptian", 30.0444, 31.2357},
+	{"Saudi", 24.7136, 46.6753},
+	{"German", 52.5200, 13.4050},
+	{"French", 48.8566, 2.3522},
+}
+
+// semanticGeocode attempts to extract a geographic location from an article
+// title by matching known place/country keywords. Returns the coordinates of
+// the first (most specific) match.
+func semanticGeocode(title string) (float64, float64, bool) {
+	lower := strings.ToLower(title)
+	for _, pc := range placeKeywords {
+		if strings.Contains(lower, strings.ToLower(pc.Keyword)) {
+			return pc.Lat, pc.Lng, true
+		}
+	}
+	return 0, 0, false
 }
 
 // respondJSON writes a JSON payload with the given HTTP status.

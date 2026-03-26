@@ -276,7 +276,7 @@ function DigestPreviewSection({ onSignUp }: { onSignUp: () => void }) {
       </div>
 
       {/* Period toggle */}
-      <div className="flex items-center justify-center gap-4 mb-5">
+      <div className="flex items-center justify-center gap-4 mb-8">
         <button onClick={() => setPeriod('daily')}
           className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all"
           style={{ background: period === 'daily' ? 'rgba(0,255,136,0.12)' : 'rgba(0,255,136,0.02)', border: `1px solid ${period === 'daily' ? 'rgba(0,255,136,0.4)' : 'rgba(0,255,136,0.1)'}`, color: period === 'daily' ? '#00ff88' : 'rgba(0,255,136,0.4)' }}>

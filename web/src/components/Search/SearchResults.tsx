@@ -112,12 +112,12 @@ export function SearchResults({
               value={sortBy}
               onChange={(e) => onSortChange(e.target.value as SortOption)}
               className="text-sm border-0 bg-transparent focus:ring-0 cursor-pointer py-0 pr-6"
-              style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace' }}
+              style={{ color: 'rgba(0,255,136,0.5)', fontFamily: 'monospace', backgroundColor: 'transparent' }}
               aria-label="Sort results"
             >
-              <option value="relevance">Relevance</option>
-              <option value="date_desc">Newest first</option>
-              <option value="date_asc">Oldest first</option>
+              <option value="relevance" style={{ background: '#161b22', color: '#c9d1d9' }}>Relevance</option>
+              <option value="date_desc" style={{ background: '#161b22', color: '#c9d1d9' }}>Newest first</option>
+              <option value="date_asc" style={{ background: '#161b22', color: '#c9d1d9' }}>Oldest first</option>
             </select>
           </div>
 

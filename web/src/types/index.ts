@@ -198,6 +198,53 @@ export interface WebSocketMessage<T = unknown> {
   timestamp: string;
 }
 
+// ---------------------------------------------------------------------------
+// Geo Activity types (for world map)
+// ---------------------------------------------------------------------------
+
+export interface GeoRegion {
+  wiki: string;
+  lat: number;
+  lng: number;
+  edits_per_minute: number;
+  edit_count_1h: number;
+  spike_count: number;
+}
+
+export interface GeoHotspot {
+  page_title: string;
+  score: number;
+  edits_1h: number;
+  lat: number;
+  lng: number;
+  location_source: 'article' | 'semantic' | 'wiki_centroid';
+  language?: string;
+  server_url?: string;
+  rank: number;
+}
+
+export interface GeoWar {
+  page_title: string;
+  severity: string;
+  editor_count: number;
+  edit_count: number;
+  revert_count: number;
+  lat: number;
+  lng: number;
+  location_source: 'article' | 'semantic' | 'wiki_centroid';
+  summary_snippet?: string;
+  start_time?: string;
+  active: boolean;
+  server_url?: string;
+  analysis?: EditWarAnalysis;
+}
+
+export interface GeoActivityResponse {
+  regions: GeoRegion[];
+  wars: GeoWar[];
+  hotspots: GeoHotspot[];
+}
+
 export interface PaginationParams {
   limit: number;
   offset?: number;

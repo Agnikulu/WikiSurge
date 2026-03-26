@@ -80,8 +80,11 @@ export function EditWarCard({ war, onDismiss, isNew = false }: EditWarCardProps)
   const wikiUrl = buildWikiUrl(war.page_title, war.server_url);
   const historyUrl = `${wikiUrl}?action=history`;
 
+  const warId = `edit-war-${war.page_title.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()}`;
+
   return (
     <div
+      id={warId}
       className={`
         relative rounded-lg border border-l-4 ${severity.bg} ${severity.border} ${accentBorder}
         transition-all duration-300 group

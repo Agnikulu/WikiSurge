@@ -786,21 +786,21 @@ func inferContentArea(comments []string) string {
 	// Keyword-based classification
 	allText := strings.ToLower(strings.Join(comments, " "))
 	keywords := map[string]string{
-		"death":       "biographical details",
-		"died":        "biographical details",
-		"born":        "biographical details",
-		"vandal":      "vandalism dispute",
-		"spam":        "spam/promotion",
-		"source":      "sourcing/references",
-		"citation":    "sourcing/references",
-		"ref":         "sourcing/references",
-		"pov":         "neutrality/POV",
-		"bias":        "neutrality/POV",
-		"neutral":     "neutrality/POV",
-		"image":       "media/images",
-		"infobox":     "infobox content",
-		"category":    "categorization",
-		"revert":      "content dispute",
+		"death":       "Biographical Details",
+		"died":        "Biographical Details",
+		"born":        "Biographical Details",
+		"vandal":      "Vandalism Dispute",
+		"spam":        "Spam/Promotion",
+		"source":      "Sourcing/References",
+		"citation":    "Sourcing/References",
+		"ref":         "Sourcing/References",
+		"pov":         "Neutrality/POV",
+		"bias":        "Neutrality/POV",
+		"neutral":     "Neutrality/POV",
+		"image":       "Media/Images",
+		"infobox":     "Infobox Content",
+		"category":    "Categorization",
+		"revert":      "Content Dispute",
 	}
 	for keyword, area := range keywords {
 		if strings.Contains(allText, keyword) {
@@ -808,7 +808,7 @@ func inferContentArea(comments []string) string {
 		}
 	}
 
-	return "general content dispute"
+	return "General Content Dispute"
 }
 
 // deduplicateComments returns up to maxCount unique, non-empty comments.
