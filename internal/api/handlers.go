@@ -1342,7 +1342,10 @@ func (s *APIServer) lookupArticleCoordinates(ctx context.Context, pageTitle, ser
 		}
 	}
 
-	// 2. Wikidata structured location (P625 / P17 / P131 / P276 / P159)
+	// 2. Wikidata structured location:
+	//    - P625 (coordinates on entity itself)
+	//    - P17/P131/P276/P159 (place properties: country, admin territory, location, HQ)
+	//    - P27/P19/P740/P495 (subject properties: citizenship, birthplace, formation loc, country of origin)
 	//    Also retrieves English description + en.wiki sitelink for language-agnostic NER.
 	var enDescription, enWikiTitle string
 	if wikidataID != "" {
@@ -1393,8 +1396,9 @@ func (s *APIServer) cacheCoords(ctx context.Context, coordKey string, lat, lng f
 }
 
 // wikidataLocationLookup queries the Wikidata API for location properties.
-// It checks P625 (coordinate location), then P17 (country), P131 (admin territory),
-// P276 (location), P159 (HQ location) — resolving entity IDs to coordinates.
+// It checks P625 (coordinate location), then two tiers of entity-reference properties:
+//   Tier A (places): P17 (country), P131 (admin territory), P276 (location), P159 (HQ location)
+//   Tier B (subjects): P27 (citizenship), P19 (birthplace), P740 (formation loc), P495 (country of origin)
 // Also returns the English description and English Wikipedia title for language-agnostic NER.
 func (s *APIServer) wikidataLocationLookup(ctx context.Context, wikidataID string) (float64, float64, bool, string, string) {
 	// Validate wikidata ID format (Q followed by digits)
@@ -1480,8 +1484,26 @@ func (s *APIServer) wikidataLocationLookup(ctx context.Context, wikidataID strin
 		}
 	}
 
-	// P17/P131/P276/P159: resolve entity ID to known country/territory coordinates
+	// Tier A: Place properties — the article IS about a place.
+	// P17 (country), P131 (admin territory), P276 (location), P159 (HQ location)
 	for _, prop := range []string{"P17", "P131", "P276", "P159"} {
+		if claims, ok := entity.Claims[prop]; ok && len(claims) > 0 {
+			if claims[0].Mainsnak.Datavalue.Type == "wikibase-entityid" {
+				var entRef struct {
+					ID string `json:"id"`
+				}
+				if json.Unmarshal(claims[0].Mainsnak.Datavalue.Value, &entRef) == nil && entRef.ID != "" {
+					if lat, lng, found := wikidataEntityCoords(entRef.ID); found {
+						return lat, lng, true, enDescription, enWikiTitle
+					}
+				}
+			}
+		}
+	}
+
+	// Tier B: Subject properties — the article is about a person, org, or creative work.
+	// P27 (citizenship), P19 (birthplace), P740 (formation location), P495 (country of origin)
+	for _, prop := range []string{"P27", "P19", "P740", "P495"} {
 		if claims, ok := entity.Claims[prop]; ok && len(claims) > 0 {
 			if claims[0].Mainsnak.Datavalue.Type == "wikibase-entityid" {
 				var entRef struct {
@@ -1617,6 +1639,54 @@ var wikidataEntityToCoords = map[string][2]float64{
 	"Q1581":  {41.8781, -87.6298},   // Illinois
 	"Q1400":  {39.9612, -82.9988},   // Ohio
 	"Q1391":  {33.7490, -84.3880},   // Georgia
+
+	// Major world cities (common as P19 birthplace / P740 formation location)
+	"Q60":    {40.7128, -74.0060},   // New York City
+	"Q65":    {34.0522, -118.2437},  // Los Angeles
+	"Q1297":  {41.8781, -87.6298},   // Chicago
+	"Q84":    {51.5074, -0.1278},    // London
+	"Q90":    {48.8566, 2.3522},     // Paris
+	"Q64":    {52.5200, 13.4050},    // Berlin
+	"Q1726":  {48.1351, 11.5820},    // Munich
+	"Q220":   {41.0082, 28.9784},    // Istanbul
+	"Q649":   {55.7558, 37.6173},    // Moscow
+	"Q1930":  {59.9311, 30.3609},    // Saint Petersburg
+	"Q1490":  {35.0116, 135.7681},   // Kyoto
+	"Q1861":  {35.6762, 139.6503},   // Tokyo (ward area)
+	"Q8684":  {37.5665, 126.9780},   // Seoul
+	"Q956":   {39.9042, 116.4074},   // Beijing
+	"Q8686":  {31.2304, 121.4737},   // Shanghai
+	"Q1156":  {19.0760, 72.8777},    // Mumbai
+	"Q987":   {28.6139, 77.2090},    // Delhi
+	"Q406":   {-6.2088, 106.8456},   // Jakarta
+	"Q1563":  {23.8103, 90.4125},    // Dhaka
+	"Q3630":  {13.7563, 100.5018},   // Bangkok
+	"Q1530":  {14.5995, 120.9842},   // Manila
+	"Q3616":  {21.0285, 105.8542},   // Hanoi
+	"Q597":   {51.5074, -1.2578},    // Lisbon (approximate)
+	"Q2807":  {40.4168, -3.7038},    // Madrid
+	"Q490":   {41.3874, 2.1686},     // Barcelona
+	"Q2044":  {41.9028, 12.4964},    // Rome
+	"Q3820":  {37.9838, 23.7275},    // Athens
+	"Q3838":  {38.7223, -9.1393},    // Lisbon
+	"Q85":    {30.0444, 31.2357},    // Cairo
+	"Q3624":  {9.0579, 7.4951},      // Abuja
+	"Q3870":  {-1.2921, 36.8219},    // Nairobi
+	"Q5465":  {-33.9249, 18.4241},   // Cape Town
+	"Q5083":  {-26.2041, 28.0473},   // Johannesburg
+	"Q3561":  {-34.6037, -58.3816},  // Buenos Aires
+	"Q8678":  {-15.7975, -47.8919},  // Brasília
+	"Q8673":  {-23.5505, -46.6333},  // São Paulo
+	"Q2887":  {19.4326, -99.1332},   // Mexico City
+	"Q24826": {53.4084, -2.9916},    // Liverpool
+	"Q1218":  {53.4808, -2.2426},    // Manchester
+	"Q36036": {52.4862, -1.8904},    // Birmingham (UK)
+	"Q62":    {37.7749, -122.4194},  // San Francisco
+	"Q5092":  {47.6062, -122.3321},  // Seattle
+	"Q18426": {42.3601, -71.0589},   // Boston
+	"Q16555": {25.2048, 55.2708},    // Dubai
+	"Q3711":  {3.1390, 101.6869},    // Kuala Lumpur
+	"Q334":   {1.3521, 103.8198},    // Singapore
 }
 
 func wikidataEntityCoords(entityID string) (float64, float64, bool) {
