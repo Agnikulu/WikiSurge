@@ -182,6 +182,45 @@ var wikiCentroids = map[string]WikiCentroid{
 	"sr": {44.0165, 21.0059},    // Serbia
 	"bg": {42.7339, 25.4858},    // Bulgaria
 	"ms": {4.2105, 101.9758},    // Malaysia
+	"bn": {23.6850, 90.3563},    // Bangladesh (Bengali)
+	"ta": {11.1271, 78.6569},    // Tamil Nadu, India
+	"te": {15.9129, 79.7400},    // Andhra Pradesh, India (Telugu)
+	"ml": {10.8505, 76.2711},    // Kerala, India (Malayalam)
+	"kn": {15.3173, 75.7139},    // Karnataka, India (Kannada)
+	"mr": {19.7515, 75.7139},    // Maharashtra, India (Marathi)
+	"gu": {22.2587, 71.1924},    // Gujarat, India (Gujarati)
+	"pa": {31.1471, 75.3412},    // Punjab, India (Punjabi)
+	"ur": {30.3753, 69.3451},    // Pakistan (Urdu)
+	"ne": {28.3949, 84.1240},    // Nepal (Nepali)
+	"si": {7.8731, 80.7718},     // Sri Lanka (Sinhala)
+	"my": {19.7633, 96.0785},    // Myanmar (Burmese)
+	"km": {12.5657, 104.9910},   // Cambodia (Khmer)
+	"lo": {19.8563, 102.4955},   // Laos (Lao)
+	"ka": {42.3154, 43.3569},    // Georgia (Georgian)
+	"hy": {40.0691, 45.0382},    // Armenia (Armenian)
+	"az": {40.1431, 47.5769},    // Azerbaijan (Azerbaijani)
+	"uz": {41.3775, 64.5853},    // Uzbekistan (Uzbek)
+	"kk": {48.0196, 66.9237},    // Kazakhstan (Kazakh)
+	"tl": {14.5995, 120.9842},   // Philippines (Tagalog)
+	"sw": {-6.3690, 34.8888},    // Tanzania (Swahili)
+	"am": {9.1450, 40.4897},     // Ethiopia (Amharic)
+	"yo": {7.9465, 3.7842},      // Nigeria (Yoruba)
+	"ha": {12.0, 8.5167},        // Nigeria (Hausa)
+	"af": {-30.5595, 22.9375},   // South Africa (Afrikaans)
+	"eu": {43.2627, -2.9253},    // Basque Country
+	"gl": {42.5751, -8.1339},    // Galicia, Spain (Galician)
+	"cy": {52.1307, -3.7837},    // Wales (Welsh)
+	"ga": {53.1424, -7.6921},    // Ireland (Irish)
+	"is": {64.9631, -19.0208},   // Iceland (Icelandic)
+	"sq": {41.1533, 20.1683},    // Albania (Albanian)
+	"mk": {41.5122, 21.7453},    // North Macedonia (Macedonian)
+	"hr": {45.1000, 15.2000},    // Croatia (Croatian)
+	"sk": {48.6690, 19.6990},    // Slovakia (Slovak)
+	"sl": {46.1512, 14.9955},    // Slovenia (Slovenian)
+	"lt": {55.1694, 23.8813},    // Lithuania (Lithuanian)
+	"lv": {56.8796, 24.6032},    // Latvia (Latvian)
+	"et": {58.5953, 25.0136},    // Estonia (Estonian)
+	"be": {53.7098, 27.9534},    // Belarus (Belarusian)
 }
 
 // GetWikiCentroid returns the centroid for a wiki language code.

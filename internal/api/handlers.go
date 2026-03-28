@@ -1085,8 +1085,8 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 						if lat, lng, ok := GetWikiCentroid(lang); ok {
 							gw.Lat = lat
 							gw.Lng = lng
+							gw.LocationSource = "wiki_centroid"
 						}
-						gw.LocationSource = "wiki_centroid"
 					}
 				}
 
@@ -1158,8 +1158,8 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 					if lat, lng, ok := GetWikiCentroid(lang); ok {
 						gw.Lat = lat
 						gw.Lng = lng
+						gw.LocationSource = "wiki_centroid"
 					}
-					gw.LocationSource = "wiki_centroid"
 				}
 			}
 
@@ -1240,8 +1240,11 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 					if lat, lng, ok := GetWikiCentroid(fallbackLang); ok {
 						hs.Lat = lat
 						hs.Lng = lng
+						hs.LocationSource = "wiki_centroid"
+					} else {
+						// Unknown language with no centroid — skip to avoid (0,0) markers
+						continue
 					}
-					hs.LocationSource = "wiki_centroid"
 				}
 
 				resp.Hotspots = append(resp.Hotspots, hs)
@@ -1340,11 +1343,16 @@ func (s *APIServer) lookupArticleCoordinates(ctx context.Context, pageTitle, ser
 	}
 
 	// 2. Wikidata structured location (P625 / P17 / P131 / P276 / P159)
+	//    Also retrieves English description + en.wiki sitelink for language-agnostic NER.
+	var enDescription, enWikiTitle string
 	if wikidataID != "" {
-		if lat, lng, ok := s.wikidataLocationLookup(ctx, wikidataID); ok {
+		lat, lng, ok, desc, enTitle := s.wikidataLocationLookup(ctx, wikidataID)
+		if ok {
 			s.cacheCoords(ctx, coordKey, lat, lng, "wikidata")
 			return lat, lng, "wikidata", true
 		}
+		enDescription = desc
+		enWikiTitle = enTitle
 	}
 
 	// 3. NER-style location extraction from title + intro extract
@@ -1355,6 +1363,23 @@ func (s *APIServer) lookupArticleCoordinates(ctx context.Context, pageTitle, ser
 	if lat, lng, ok := extractLocationNER(combinedText); ok {
 		s.cacheCoords(ctx, coordKey, lat, lng, "semantic")
 		return lat, lng, "semantic", true
+	}
+
+	// 4. Language-agnostic NER: try English description from Wikidata
+	//    (e.g. Bengali article → Wikidata → "public high school in Jackson, Mississippi")
+	if enDescription != "" {
+		if lat, lng, ok := extractLocationNER(enDescription); ok {
+			s.cacheCoords(ctx, coordKey, lat, lng, "semantic")
+			return lat, lng, "semantic", true
+		}
+	}
+
+	// 5. Language-agnostic NER: fetch English Wikipedia extract via Wikidata sitelink
+	if enWikiTitle != "" && lang != "en" {
+		if lat, lng, ok := s.fetchEnWikiExtractAndNER(ctx, enWikiTitle); ok {
+			s.cacheCoords(ctx, coordKey, lat, lng, "semantic")
+			return lat, lng, "semantic", true
+		}
 	}
 
 	s.cacheNegativeCoords(ctx, coordKey)
@@ -1370,22 +1395,120 @@ func (s *APIServer) cacheCoords(ctx context.Context, coordKey string, lat, lng f
 // wikidataLocationLookup queries the Wikidata API for location properties.
 // It checks P625 (coordinate location), then P17 (country), P131 (admin territory),
 // P276 (location), P159 (HQ location) — resolving entity IDs to coordinates.
-func (s *APIServer) wikidataLocationLookup(ctx context.Context, wikidataID string) (float64, float64, bool) {
+// Also returns the English description and English Wikipedia title for language-agnostic NER.
+func (s *APIServer) wikidataLocationLookup(ctx context.Context, wikidataID string) (float64, float64, bool, string, string) {
 	// Validate wikidata ID format (Q followed by digits)
 	if len(wikidataID) < 2 || wikidataID[0] != 'Q' {
-		return 0, 0, false
+		return 0, 0, false, "", ""
 	}
 	for _, c := range wikidataID[1:] {
 		if c < '0' || c > '9' {
-			return 0, 0, false
+			return 0, 0, false, "", ""
 		}
 	}
 
+	// Use wbgetentities to get claims + descriptions + sitelinks in one call
 	reqURL := fmt.Sprintf(
-		"https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=%s&property=P625|P17|P131|P276|P159&format=json",
+		"https://www.wikidata.org/w/api.php?action=wbgetentities&ids=%s&props=claims|descriptions|sitelinks&languages=en&sitefilter=enwiki&format=json",
 		url.PathEscape(wikidataID))
 
 	httpCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(httpCtx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return 0, 0, false, "", ""
+	}
+	req.Header.Set("User-Agent", "WikiSurge/1.0 (https://github.com/Agnikulu/WikiSurge)")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, 0, false, "", ""
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
+	if err != nil {
+		return 0, 0, false, "", ""
+	}
+
+	// Parse the entities response
+	var result struct {
+		Entities map[string]struct {
+			Claims map[string][]struct {
+				Mainsnak struct {
+					Datavalue struct {
+						Type  string          `json:"type"`
+						Value json.RawMessage `json:"value"`
+					} `json:"datavalue"`
+				} `json:"mainsnak"`
+			} `json:"claims"`
+			Descriptions map[string]struct {
+				Value string `json:"value"`
+			} `json:"descriptions"`
+			Sitelinks map[string]struct {
+				Title string `json:"title"`
+			} `json:"sitelinks"`
+		} `json:"entities"`
+	}
+	if json.Unmarshal(body, &result) != nil {
+		return 0, 0, false, "", ""
+	}
+
+	entity, ok := result.Entities[wikidataID]
+	if !ok {
+		return 0, 0, false, "", ""
+	}
+
+	// Extract English description and en.wiki title for fallback NER
+	var enDescription, enWikiTitle string
+	if desc, ok := entity.Descriptions["en"]; ok {
+		enDescription = desc.Value
+	}
+	if sl, ok := entity.Sitelinks["enwiki"]; ok {
+		enWikiTitle = sl.Title
+	}
+
+	// P625: direct coordinate location on the entity itself
+	if claims, ok := entity.Claims["P625"]; ok && len(claims) > 0 {
+		var globe struct {
+			Latitude  float64 `json:"latitude"`
+			Longitude float64 `json:"longitude"`
+		}
+		if json.Unmarshal(claims[0].Mainsnak.Datavalue.Value, &globe) == nil && (globe.Latitude != 0 || globe.Longitude != 0) {
+			return globe.Latitude, globe.Longitude, true, enDescription, enWikiTitle
+		}
+	}
+
+	// P17/P131/P276/P159: resolve entity ID to known country/territory coordinates
+	for _, prop := range []string{"P17", "P131", "P276", "P159"} {
+		if claims, ok := entity.Claims[prop]; ok && len(claims) > 0 {
+			if claims[0].Mainsnak.Datavalue.Type == "wikibase-entityid" {
+				var entRef struct {
+					ID string `json:"id"`
+				}
+				if json.Unmarshal(claims[0].Mainsnak.Datavalue.Value, &entRef) == nil && entRef.ID != "" {
+					if lat, lng, found := wikidataEntityCoords(entRef.ID); found {
+						return lat, lng, true, enDescription, enWikiTitle
+					}
+				}
+			}
+		}
+	}
+
+	return 0, 0, false, enDescription, enWikiTitle
+}
+
+// fetchEnWikiExtractAndNER fetches the English Wikipedia intro for an article
+// (using the en.wiki title from Wikidata sitelinks) and runs NER on it.
+// This enables language-agnostic location extraction: a Bengali article's
+// English Wikipedia equivalent often says "...is a school in Queens, New York".
+func (s *APIServer) fetchEnWikiExtractAndNER(ctx context.Context, enWikiTitle string) (float64, float64, bool) {
+	reqURL := fmt.Sprintf(
+		"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&exsentences=3&titles=%s&format=json",
+		url.QueryEscape(enWikiTitle))
+
+	httpCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(httpCtx, http.MethodGet, reqURL, nil)
@@ -1400,53 +1523,28 @@ func (s *APIServer) wikidataLocationLookup(ctx context.Context, wikidataID strin
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
 		return 0, 0, false
 	}
 
-	// Parse the claims response
 	var result struct {
-		Claims map[string][]struct {
-			Mainsnak struct {
-				Datavalue struct {
-					Type  string          `json:"type"`
-					Value json.RawMessage `json:"value"`
-				} `json:"datavalue"`
-			} `json:"mainsnak"`
-		} `json:"claims"`
+		Query struct {
+			Pages map[string]struct {
+				Extract string `json:"extract"`
+			} `json:"pages"`
+		} `json:"query"`
 	}
 	if json.Unmarshal(body, &result) != nil {
 		return 0, 0, false
 	}
 
-	// P625: direct coordinate location on the entity itself
-	if claims, ok := result.Claims["P625"]; ok && len(claims) > 0 {
-		var globe struct {
-			Latitude  float64 `json:"latitude"`
-			Longitude float64 `json:"longitude"`
-		}
-		if json.Unmarshal(claims[0].Mainsnak.Datavalue.Value, &globe) == nil && (globe.Latitude != 0 || globe.Longitude != 0) {
-			return globe.Latitude, globe.Longitude, true
+	for _, page := range result.Query.Pages {
+		if page.Extract != "" {
+			combinedText := enWikiTitle + ". " + page.Extract
+			return extractLocationNER(combinedText)
 		}
 	}
-
-	// P17/P131/P276/P159: resolve entity ID to known country/territory coordinates
-	for _, prop := range []string{"P17", "P131", "P276", "P159"} {
-		if claims, ok := result.Claims[prop]; ok && len(claims) > 0 {
-			if claims[0].Mainsnak.Datavalue.Type == "wikibase-entityid" {
-				var entRef struct {
-					ID string `json:"id"`
-				}
-				if json.Unmarshal(claims[0].Mainsnak.Datavalue.Value, &entRef) == nil && entRef.ID != "" {
-					if lat, lng, found := wikidataEntityCoords(entRef.ID); found {
-						return lat, lng, true
-					}
-				}
-			}
-		}
-	}
-
 	return 0, 0, false
 }
 
