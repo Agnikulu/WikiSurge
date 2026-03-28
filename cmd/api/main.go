@@ -209,6 +209,10 @@ func main() {
 		logger.Error().Err(err).Msg("HTTP server shutdown error")
 	}
 
+	// Stop API-internal resources (WebSocket hubs, edit relay) BEFORE
+	// closing the dependencies they use (Redis, ES, etc.).
+	_ = apiServer.Shutdown(shutdownCtx)
+
 	// Stop digest scheduler
 	if digestScheduler != nil {
 		digestScheduler.Stop()
@@ -237,8 +241,6 @@ func main() {
 	if esClient != nil {
 		esClient.Stop()
 	}
-
-	_ = apiServer.Shutdown(shutdownCtx)
 
 	logger.Info().Msg("WikiSurge API Server stopped")
 }

@@ -39,6 +39,7 @@ type APIServer struct {
 	version        string
 
 	// Edit relay cancellation
+	editRelayMu     sync.Mutex
 	editRelayCancel context.CancelFunc
 
 	// Stats cache
@@ -225,11 +226,13 @@ func (s *APIServer) StartEditRelay(redisClient *redis.Client) {
 
 func (s *APIServer) startEditRelayWithRestart(redisClient *redis.Client, restartCount int) {
 	// Cancel previous relay context if any to avoid leaking old subscriptions.
+	s.editRelayMu.Lock()
 	if s.editRelayCancel != nil {
 		s.editRelayCancel()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.editRelayCancel = cancel
+	s.editRelayMu.Unlock()
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -261,9 +264,11 @@ func (s *APIServer) startEditRelayWithRestart(redisClient *redis.Client, restart
 // Shutdown performs graceful shutdown of API-specific resources.
 func (s *APIServer) Shutdown(ctx context.Context) error {
 	s.logger.Info().Msg("API server shutting down")
+	s.editRelayMu.Lock()
 	if s.editRelayCancel != nil {
 		s.editRelayCancel()
 	}
+	s.editRelayMu.Unlock()
 	if s.wsHub != nil {
 		s.wsHub.Stop()
 	}

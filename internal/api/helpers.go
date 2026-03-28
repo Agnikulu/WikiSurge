@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -109,7 +110,7 @@ type GeoHotspot struct {
 	Edits1h        int     `json:"edits_1h"`
 	Lat            float64 `json:"lat"`
 	Lng            float64 `json:"lng"`
-	LocationSource string  `json:"location_source"` // "article", "semantic", or "wiki_centroid"
+	LocationSource string  `json:"location_source"` // "article", "wikidata", "semantic", or "wiki_centroid"
 	Language       string  `json:"language,omitempty"`
 	ServerURL      string  `json:"server_url,omitempty"`
 	Rank           int     `json:"rank"`
@@ -124,7 +125,7 @@ type GeoWar struct {
 	RevertCount    int         `json:"revert_count"`
 	Lat            float64     `json:"lat"`
 	Lng            float64     `json:"lng"`
-	LocationSource string      `json:"location_source"` // "article" or "wiki_centroid"
+	LocationSource string      `json:"location_source"` // "article", "wikidata", "semantic", or "wiki_centroid"
 	SummarySnippet string      `json:"summary_snippet,omitempty"`
 	StartTime      string      `json:"start_time,omitempty"`
 	Active         bool        `json:"active"`
@@ -265,6 +266,14 @@ var placeKeywords = []placeCoord{
 	{"Netherlands", 52.3676, 4.9041},
 	{"Sweden", 59.3293, 18.0686},
 	{"Norway", 59.9139, 10.7522},
+	{"Switzerland", 46.9480, 7.4474},
+	{"Austria", 48.2082, 16.3738},
+	{"Belgium", 50.8503, 4.3517},
+	{"Portugal", 38.7223, -9.1393},
+	{"Greece", 37.9838, 23.7275},
+	{"Czech Republic", 50.0755, 14.4378},
+	{"Ireland", 53.3498, -6.2603},
+	{"New Zealand", -41.2865, 174.7762},
 
 	// Adjective forms ("Russian", "American", "Chinese" etc.)
 	{"American", 38.9072, -77.0369},
@@ -290,16 +299,145 @@ var placeKeywords = []placeCoord{
 	{"Saudi", 24.7136, 46.6753},
 	{"German", 52.5200, 13.4050},
 	{"French", 48.8566, 2.3522},
+	{"Swiss", 46.9480, 7.4474},
+	{"Austrian", 48.2082, 16.3738},
+	{"Belgian", 50.8503, 4.3517},
+	{"Portuguese", 38.7223, -9.1393},
+	{"Greek", 37.9838, 23.7275},
 }
 
 // semanticGeocode attempts to extract a geographic location from an article
 // title by matching known place/country keywords. Returns the coordinates of
-// the first (most specific) match.
+// the first (most specific) match. Kept as a lightweight fallback within
+// extractLocationNER.
 func semanticGeocode(title string) (float64, float64, bool) {
 	lower := strings.ToLower(title)
 	for _, pc := range placeKeywords {
 		if strings.Contains(lower, strings.ToLower(pc.Keyword)) {
 			return pc.Lat, pc.Lng, true
+		}
+	}
+	return 0, 0, false
+}
+
+// ---------------------------------------------------------------------------
+// Rule-based NER location extractor
+// ---------------------------------------------------------------------------
+// Instead of blind keyword matching, this extracts locations by recognising
+// natural-language patterns that indicate WHERE something is. This correctly
+// resolves "Forest Hill High School" (on de.wiki) to the United States because
+// the intro says "...is a public high school in Jackson, Mississippi".
+//
+// Strategy:
+//  1. Contextual patterns — scan for "in [Place], [Place]" / "located in" / etc.
+//     and resolve the captured place names to coordinates.
+//  2. US state detection — articles mentioning a US state name in context are
+//     placed there rather than falling through to wiki-language centroid.
+//  3. Keyword fallback — if no contextual pattern matches, fall back to the
+//     existing placeKeywords list (countries, regions, adjective forms).
+
+// locationPattern defines a regex + group index that captures location text.
+type locationPattern struct {
+	re       *regexp.Regexp
+	locGroup int // capture group index holding the location text
+}
+
+// locationPatterns are compiled once at init. Ordered by specificity.
+var locationPatterns = func() []locationPattern {
+	raw := []struct {
+		pattern  string
+		locGroup int
+	}{
+		// "in City, State, Country" / "in City, Country"
+		{`\bin\s+([A-Z][\w\s-]+(?:,\s*[A-Z][\w\s-]+){1,3})`, 1},
+		// "located in Place" / "situated in Place" / "based in Place"
+		{`(?:located|situated|based|headquartered)\s+in\s+([A-Z][\w\s,-]+)`, 1},
+		// "is a ... in Place, Place"
+		{`is\s+(?:a|an|the)\s+[\w\s]+?\bin\s+([A-Z][\w\s-]+(?:,\s*[A-Z][\w\s-]+){0,3})`, 1},
+		// "City, State" at sentence start (common in short descriptions)
+		{`^([A-Z][\w\s-]+,\s+[A-Z][\w\s-]+)`, 1},
+	}
+	pats := make([]locationPattern, 0, len(raw))
+	for _, r := range raw {
+		pats = append(pats, locationPattern{
+			re:       regexp.MustCompile(r.pattern),
+			locGroup: r.locGroup,
+		})
+	}
+	return pats
+}()
+
+// usStates maps US state names to approximate coordinates.
+var usStates = map[string][2]float64{
+	"alabama": {32.3182, -86.9023}, "alaska": {64.2008, -152.4937},
+	"arizona": {34.0489, -111.0937}, "arkansas": {34.7465, -92.2896},
+	"california": {36.7783, -119.4179}, "colorado": {39.5501, -105.7821},
+	"connecticut": {41.6032, -73.0877}, "delaware": {38.9108, -75.5277},
+	"florida": {27.6648, -81.5158}, "georgia": {33.7490, -84.3880},
+	"hawaii": {19.8968, -155.5828}, "idaho": {44.0682, -114.7420},
+	"illinois": {40.6331, -89.3985}, "indiana": {40.2672, -86.1349},
+	"iowa": {41.8780, -93.0977}, "kansas": {39.0119, -98.4842},
+	"kentucky": {37.8393, -84.2700}, "louisiana": {30.9843, -91.9623},
+	"maine": {45.2538, -69.4455}, "maryland": {39.0458, -76.6413},
+	"massachusetts": {42.4072, -71.3824}, "michigan": {44.3148, -85.6024},
+	"minnesota": {46.7296, -94.6859}, "mississippi": {32.3547, -89.3985},
+	"missouri": {37.9643, -91.8318}, "montana": {46.8797, -110.3626},
+	"nebraska": {41.4925, -99.9018}, "nevada": {38.8026, -116.4194},
+	"new hampshire": {43.1939, -71.5724}, "new jersey": {40.0583, -74.4057},
+	"new mexico": {34.5199, -105.8701}, "new york": {40.7128, -74.0060},
+	"north carolina": {35.7596, -79.0193}, "north dakota": {47.5515, -101.0020},
+	"ohio": {40.4173, -82.9071}, "oklahoma": {35.4676, -97.5164},
+	"oregon": {43.8041, -120.5542}, "pennsylvania": {41.2033, -77.1945},
+	"rhode island": {41.5801, -71.4774}, "south carolina": {33.8361, -81.1637},
+	"south dakota": {43.9695, -99.9018}, "tennessee": {35.5175, -86.5804},
+	"texas": {31.9686, -99.9018}, "utah": {39.3210, -111.0937},
+	"vermont": {44.5588, -72.5778}, "virginia": {37.4316, -78.6569},
+	"washington": {47.7511, -120.7401}, "west virginia": {38.5976, -80.4549},
+	"wisconsin": {43.7844, -88.7879}, "wyoming": {43.0760, -107.2903},
+	"district of columbia": {38.9072, -77.0369},
+}
+
+// extractLocationNER uses rule-based NER to extract geographic locations from
+// combined title + extract text. Falls back to keyword matching.
+func extractLocationNER(text string) (float64, float64, bool) {
+	// Try contextual patterns first (most accurate)
+	for _, pat := range locationPatterns {
+		if m := pat.re.FindStringSubmatch(text); m != nil && pat.locGroup < len(m) {
+			locText := strings.TrimSpace(m[pat.locGroup])
+			// Strip trailing punctuation from the captured location
+			locText = strings.TrimRight(locText, ".,;:")
+			if lat, lng, ok := resolveLocationText(locText); ok {
+				return lat, lng, true
+			}
+		}
+	}
+
+	// Fall back to keyword matching on the full text
+	return semanticGeocode(text)
+}
+
+// resolveLocationText takes a captured location string like "Jackson, Mississippi"
+// or "Queens, New York, United States" and resolves it to coordinates.
+// It splits on commas and tries the most specific segment first (leftmost =
+// typically city/state), working rightward toward country.
+func resolveLocationText(locText string) (float64, float64, bool) {
+	parts := strings.Split(locText, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+
+	// Try left-to-right: most specific (city/state) before least specific (country)
+	for _, seg := range parts {
+		if seg == "" {
+			continue
+		}
+		// Check US states first (handles "Mississippi", "New York")
+		if coords, ok := usStates[strings.ToLower(seg)]; ok {
+			return coords[0], coords[1], true
+		}
+		// Check country/region keywords
+		if lat, lng, ok := semanticGeocode(seg); ok {
+			return lat, lng, true
 		}
 	}
 	return 0, 0, false

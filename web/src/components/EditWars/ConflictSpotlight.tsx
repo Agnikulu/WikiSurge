@@ -143,9 +143,9 @@ export const ConflictSpotlight = memo(function ConflictSpotlight({
                   Active
                 </span>
               )}
-              {war.location_source === 'article' && (
+              {(war.location_source === 'article' || war.location_source === 'wikidata') && (
                 <span className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{ background: 'rgba(0,221,255,0.08)', color: 'rgba(0,221,255,0.5)', border: '1px solid rgba(0,221,255,0.15)' }}>
-                  📍 Geolocated
+                  {war.location_source === 'wikidata' ? '🔗 Wikidata' : '📍 Geolocated'}
                 </span>
               )}
             </div>

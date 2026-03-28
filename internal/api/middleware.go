@@ -374,6 +374,10 @@ func GzipMiddleware(next http.Handler) http.Handler {
 // ETag / conditional GET middleware  (Task 17.7)
 // ---------------------------------------------------------------------------
 
+// etagMaxBodySize is the maximum response body size that ETag middleware will
+// buffer. Larger responses skip ETag computation to avoid memory pressure.
+const etagMaxBodySize = 64 * 1024 // 64 KB
+
 // ETagMiddleware adds ETag headers and handles If-None-Match for GET requests.
 func ETagMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -391,6 +395,13 @@ func ETagMiddleware(next http.Handler) http.Handler {
 
 		rec := &etagRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(rec, r)
+
+		// Skip ETag for large responses to avoid memory pressure.
+		if len(rec.body) > etagMaxBodySize {
+			w.WriteHeader(rec.statusCode)
+			_, _ = w.Write(rec.body)
+			return
+		}
 
 		// Only ETag 200 responses.
 		if rec.statusCode != http.StatusOK || len(rec.body) == 0 {

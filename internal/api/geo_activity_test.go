@@ -311,6 +311,87 @@ func TestSemanticGeocode_CaseInsensitive(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// NER location extraction tests
+// ---------------------------------------------------------------------------
+
+func TestExtractLocationNER_SchoolInMississippi(t *testing.T) {
+	// The "Forest Hill High School on German wiki" scenario
+	text := "Forest Hill High School. Forest Hill High School is a public high school in Jackson, Mississippi, United States."
+	lat, lng, ok := extractLocationNER(text)
+	assert.True(t, ok)
+	// Should resolve to Mississippi, not Germany
+	assert.InDelta(t, 32.35, lat, 1.0)
+	assert.InDelta(t, -89.4, lng, 1.0)
+}
+
+func TestExtractLocationNER_LocatedInPattern(t *testing.T) {
+	text := "CERN. The European Organization for Nuclear Research is a research organization located in Geneva, Switzerland."
+	lat, lng, ok := extractLocationNER(text)
+	assert.True(t, ok)
+	// Should resolve to Switzerland
+	assert.InDelta(t, 46.9, lat, 2.0)
+	assert.InDelta(t, 7.5, lng, 2.0)
+}
+
+func TestExtractLocationNER_IsAInPattern(t *testing.T) {
+	text := "Statue of Liberty. The Statue of Liberty is a colossal neoclassical sculpture in New York, United States."
+	lat, lng, ok := extractLocationNER(text)
+	assert.True(t, ok)
+	assert.InDelta(t, 40.7, lat, 1.0)
+	assert.InDelta(t, -74.0, lng, 2.0)
+}
+
+func TestExtractLocationNER_FallbackToKeywords(t *testing.T) {
+	// No contextual pattern, falls back to keyword matching
+	lat, lng, ok := extractLocationNER("2024 United States presidential election")
+	assert.True(t, ok)
+	assert.InDelta(t, 38.9, lat, 1.0)
+	assert.InDelta(t, -77.0, lng, 1.0)
+}
+
+func TestExtractLocationNER_NoMatch(t *testing.T) {
+	_, _, ok := extractLocationNER("Quantum mechanics interpretation debate")
+	assert.False(t, ok)
+}
+
+func TestResolveLocationText_USState(t *testing.T) {
+	lat, lng, ok := resolveLocationText("Jackson, Mississippi")
+	assert.True(t, ok)
+	assert.InDelta(t, 32.35, lat, 1.0)
+	assert.InDelta(t, -89.4, lng, 1.0)
+}
+
+func TestResolveLocationText_CountryComma(t *testing.T) {
+	lat, lng, ok := resolveLocationText("Berlin, Germany")
+	assert.True(t, ok)
+	assert.InDelta(t, 52.5, lat, 1.0)
+	assert.InDelta(t, 13.4, lng, 1.0)
+}
+
+// ---------------------------------------------------------------------------
+// Wikidata entity coord lookup tests
+// ---------------------------------------------------------------------------
+
+func TestWikidataEntityCoords_KnownCountry(t *testing.T) {
+	lat, lng, ok := wikidataEntityCoords("Q30") // United States
+	assert.True(t, ok)
+	assert.InDelta(t, 38.9, lat, 1.0)
+	assert.InDelta(t, -77.0, lng, 1.0)
+}
+
+func TestWikidataEntityCoords_Unknown(t *testing.T) {
+	_, _, ok := wikidataEntityCoords("Q99999999")
+	assert.False(t, ok)
+}
+
+func TestWikidataEntityCoords_USState(t *testing.T) {
+	lat, lng, ok := wikidataEntityCoords("Q1408") // New York state
+	assert.True(t, ok)
+	assert.InDelta(t, 40.7, lat, 1.0)
+	assert.InDelta(t, -74.0, lng, 1.0)
+}
+
+// ---------------------------------------------------------------------------
 // Jitter tests
 // ---------------------------------------------------------------------------
 

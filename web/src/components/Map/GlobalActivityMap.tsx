@@ -51,7 +51,7 @@ export const GlobalActivityMap = memo(function GlobalActivityMap({
   const [data, setData] = useState<GeoActivityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const { tooltip, showHotspotTooltip, showWarTooltip, hideTooltip } = useMapTooltip();
+  const { tooltip, showHotspotTooltip, showWarTooltip, hideTooltip, onPaneMouseEnter, onPaneMouseLeave } = useMapTooltip();
 
   const fetchData = useCallback(async () => {
     try {
@@ -253,6 +253,8 @@ export const GlobalActivityMap = memo(function GlobalActivityMap({
           hotspot={tooltip.hotspot}
           war={tooltip.war}
           onViewAnalysis={onWarClick}
+          onPaneMouseEnter={onPaneMouseEnter}
+          onPaneMouseLeave={onPaneMouseLeave}
         />
       )}
     </div>

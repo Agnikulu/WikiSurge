@@ -28,6 +28,15 @@ func (s *APIServer) WebSocketAlerts(w http.ResponseWriter, r *http.Request) {
 
 	// Subscribe to the shared alert hub (no extra Redis connection).
 	alertCh := s.alertHub.Subscribe()
+	if alertCh == nil {
+		s.logger.Warn().Msg("Alert subscriber limit reached, rejecting WebSocket")
+		_ = conn.WriteMessage(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "too many alert subscribers"),
+		)
+		conn.Close()
+		return
+	}
 
 	done := make(chan struct{})
 

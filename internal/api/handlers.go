@@ -1259,8 +1259,9 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 	respondJSON(w, http.StatusOK, resp)
 }
 
-// lookupArticleCoordinates checks Redis cache then Wikipedia's API for article
-// coordinates. Only called for active edit wars (~2-10 at a time), so very cheap.
+// lookupArticleCoordinates resolves geographic coordinates for an article.
+// Priority: article coords (P625) → Wikidata location claims → NER on extract → keyword fallback.
+// Only called for active edit wars / hotspots (~2-20 at a time), so very cheap.
 func (s *APIServer) lookupArticleCoordinates(ctx context.Context, pageTitle, serverURL string) (float64, float64, string, bool) {
 	// Check Redis cache first
 	coordKey := fmt.Sprintf("editwar:coords:%s", pageTitle)
@@ -1289,19 +1290,23 @@ func (s *APIServer) lookupArticleCoordinates(ctx context.Context, pageTitle, ser
 	}
 	apiBase := fmt.Sprintf("https://%s.wikipedia.org/w/api.php", url.PathEscape(lang))
 
-	// Call Wikipedia action API: action=query&prop=coordinates
-	reqURL := fmt.Sprintf("%s?action=query&prop=coordinates&titles=%s&format=json",
+	// Single Wikipedia API call: fetch coordinates, wikidata item ID, and plain-text extract
+	reqURL := fmt.Sprintf(
+		"%s?action=query&prop=coordinates|pageprops|extracts&ppprop=wikibase_item&exintro=1&explaintext=1&exsentences=3&titles=%s&format=json",
 		apiBase, url.QueryEscape(pageTitle))
 
 	httpCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+
+	var wikidataID string
+	var extractText string
 
 	req, err := http.NewRequestWithContext(httpCtx, http.MethodGet, reqURL, nil)
 	if err == nil {
 		req.Header.Set("User-Agent", "WikiSurge/1.0 (https://github.com/Agnikulu/WikiSurge)")
 		if resp, doErr := http.DefaultClient.Do(req); doErr == nil {
 			defer resp.Body.Close()
-			if body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024)); readErr == nil {
+			if body, readErr := io.ReadAll(io.LimitReader(resp.Body, 128*1024)); readErr == nil {
 				var result struct {
 					Query struct {
 						Pages map[string]struct {
@@ -1309,33 +1314,218 @@ func (s *APIServer) lookupArticleCoordinates(ctx context.Context, pageTitle, ser
 								Lat float64 `json:"lat"`
 								Lon float64 `json:"lon"`
 							} `json:"coordinates"`
+							Pageprops struct {
+								WikibaseItem string `json:"wikibase_item"`
+							} `json:"pageprops"`
+							Extract string `json:"extract"`
 						} `json:"pages"`
 					} `json:"query"`
 				}
 				if json.Unmarshal(body, &result) == nil {
 					for _, page := range result.Query.Pages {
+						// 1. Direct article coordinates (most precise)
 						if len(page.Coordinates) > 0 {
 							lat := page.Coordinates[0].Lat
 							lng := page.Coordinates[0].Lon
-							coordData, _ := json.Marshal(map[string]interface{}{"lat": lat, "lng": lng, "source": "article"})
-							_ = s.redis.Set(ctx, coordKey, string(coordData), 24*time.Hour).Err()
+							s.cacheCoords(ctx, coordKey, lat, lng, "article")
 							return lat, lng, "article", true
 						}
+						wikidataID = page.Pageprops.WikibaseItem
+						extractText = page.Extract
+						break // single title query, only one page
 					}
 				}
 			}
 		}
 	}
 
-	// Fallback: try semantic geocoding from article title keywords
-	if lat, lng, ok := semanticGeocode(pageTitle); ok {
-		coordData, _ := json.Marshal(map[string]interface{}{"lat": lat, "lng": lng, "source": "semantic"})
-		_ = s.redis.Set(ctx, coordKey, string(coordData), 24*time.Hour).Err()
+	// 2. Wikidata structured location (P625 / P17 / P131 / P276 / P159)
+	if wikidataID != "" {
+		if lat, lng, ok := s.wikidataLocationLookup(ctx, wikidataID); ok {
+			s.cacheCoords(ctx, coordKey, lat, lng, "wikidata")
+			return lat, lng, "wikidata", true
+		}
+	}
+
+	// 3. NER-style location extraction from title + intro extract
+	combinedText := pageTitle
+	if extractText != "" {
+		combinedText = pageTitle + ". " + extractText
+	}
+	if lat, lng, ok := extractLocationNER(combinedText); ok {
+		s.cacheCoords(ctx, coordKey, lat, lng, "semantic")
 		return lat, lng, "semantic", true
 	}
 
 	s.cacheNegativeCoords(ctx, coordKey)
 	return 0, 0, "", false
+}
+
+// cacheCoords stores a positive coordinate result in Redis.
+func (s *APIServer) cacheCoords(ctx context.Context, coordKey string, lat, lng float64, source string) {
+	coordData, _ := json.Marshal(map[string]interface{}{"lat": lat, "lng": lng, "source": source})
+	_ = s.redis.Set(ctx, coordKey, string(coordData), 24*time.Hour).Err()
+}
+
+// wikidataLocationLookup queries the Wikidata API for location properties.
+// It checks P625 (coordinate location), then P17 (country), P131 (admin territory),
+// P276 (location), P159 (HQ location) — resolving entity IDs to coordinates.
+func (s *APIServer) wikidataLocationLookup(ctx context.Context, wikidataID string) (float64, float64, bool) {
+	// Validate wikidata ID format (Q followed by digits)
+	if len(wikidataID) < 2 || wikidataID[0] != 'Q' {
+		return 0, 0, false
+	}
+	for _, c := range wikidataID[1:] {
+		if c < '0' || c > '9' {
+			return 0, 0, false
+		}
+	}
+
+	reqURL := fmt.Sprintf(
+		"https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=%s&property=P625|P17|P131|P276|P159&format=json",
+		url.PathEscape(wikidataID))
+
+	httpCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(httpCtx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return 0, 0, false
+	}
+	req.Header.Set("User-Agent", "WikiSurge/1.0 (https://github.com/Agnikulu/WikiSurge)")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, 0, false
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
+	if err != nil {
+		return 0, 0, false
+	}
+
+	// Parse the claims response
+	var result struct {
+		Claims map[string][]struct {
+			Mainsnak struct {
+				Datavalue struct {
+					Type  string          `json:"type"`
+					Value json.RawMessage `json:"value"`
+				} `json:"datavalue"`
+			} `json:"mainsnak"`
+		} `json:"claims"`
+	}
+	if json.Unmarshal(body, &result) != nil {
+		return 0, 0, false
+	}
+
+	// P625: direct coordinate location on the entity itself
+	if claims, ok := result.Claims["P625"]; ok && len(claims) > 0 {
+		var globe struct {
+			Latitude  float64 `json:"latitude"`
+			Longitude float64 `json:"longitude"`
+		}
+		if json.Unmarshal(claims[0].Mainsnak.Datavalue.Value, &globe) == nil && (globe.Latitude != 0 || globe.Longitude != 0) {
+			return globe.Latitude, globe.Longitude, true
+		}
+	}
+
+	// P17/P131/P276/P159: resolve entity ID to known country/territory coordinates
+	for _, prop := range []string{"P17", "P131", "P276", "P159"} {
+		if claims, ok := result.Claims[prop]; ok && len(claims) > 0 {
+			if claims[0].Mainsnak.Datavalue.Type == "wikibase-entityid" {
+				var entRef struct {
+					ID string `json:"id"`
+				}
+				if json.Unmarshal(claims[0].Mainsnak.Datavalue.Value, &entRef) == nil && entRef.ID != "" {
+					if lat, lng, found := wikidataEntityCoords(entRef.ID); found {
+						return lat, lng, true
+					}
+				}
+			}
+		}
+	}
+
+	return 0, 0, false
+}
+
+// wikidataEntityCoords maps common Wikidata entity IDs (countries, territories)
+// to their capital/centroid coordinates. This avoids recursive API calls.
+var wikidataEntityToCoords = map[string][2]float64{
+	// Major countries by Wikidata Q-ID
+	"Q30":    {38.9072, -77.0369},   // United States
+	"Q145":   {51.5074, -0.1278},    // United Kingdom
+	"Q183":   {52.5200, 13.4050},    // Germany
+	"Q142":   {48.8566, 2.3522},     // France
+	"Q17":    {35.6762, 139.6503},   // Japan
+	"Q148":   {39.9042, 116.4074},   // China
+	"Q668":   {28.6139, 77.2090},    // India
+	"Q159":   {55.7558, 37.6173},    // Russia
+	"Q155":   {-15.7975, -47.8919},  // Brazil
+	"Q38":    {41.9028, 12.4964},    // Italy
+	"Q29":    {40.4168, -3.7038},    // Spain
+	"Q16":    {45.4215, -75.6972},   // Canada
+	"Q408":   {-35.2809, 149.1300},  // Australia
+	"Q36":    {52.2297, 21.0122},    // Poland
+	"Q55":    {52.3676, 4.9041},     // Netherlands
+	"Q212":   {48.3794, 31.1656},    // Ukraine
+	"Q884":   {37.5665, 126.9780},   // South Korea
+	"Q423":   {39.0392, 125.7625},   // North Korea
+	"Q869":   {13.7563, 100.5018},   // Thailand
+	"Q252":   {-6.2088, 106.8456},   // Indonesia
+	"Q928":   {14.5995, 120.9842},   // Philippines
+	"Q881":   {21.0285, 105.8542},   // Vietnam
+	"Q794":   {35.6892, 51.3890},    // Iran
+	"Q796":   {33.3152, 44.3661},    // Iraq
+	"Q858":   {33.5138, 36.2765},    // Syria
+	"Q801":   {31.7683, 35.2137},    // Israel
+	"Q219":   {42.6977, 23.3219},    // Bulgaria
+	"Q218":   {45.9432, 24.9668},    // Romania
+	"Q28":    {47.1625, 19.5033},    // Hungary
+	"Q213":   {49.8175, 15.4730},    // Czech Republic
+	"Q34":    {59.3293, 18.0686},    // Sweden
+	"Q20":    {59.9139, 10.7522},    // Norway
+	"Q35":    {56.2639, 9.5018},     // Denmark
+	"Q33":    {61.9241, 25.7482},    // Finland
+	"Q39":    {46.9480, 7.4474},     // Switzerland
+	"Q40":    {48.2082, 16.3738},    // Austria
+	"Q41":    {39.0742, 21.8243},    // Greece
+	"Q43":    {39.9334, 32.8597},    // Turkey
+	"Q79":    {30.0444, 31.2357},    // Egypt
+	"Q1028":  {9.0579, 7.4951},     // Nigeria
+	"Q114":   {-1.2921, 36.8219},    // Kenya
+	"Q115":   {9.0250, 38.7469},     // Ethiopia
+	"Q258":   {-25.7479, 28.2293},   // South Africa
+	"Q851":   {24.7136, 46.6753},    // Saudi Arabia
+	"Q889":   {34.5553, 69.2075},    // Afghanistan
+	"Q836":   {19.7633, 96.0785},    // Myanmar
+	"Q96":    {19.4326, -99.1332},   // Mexico
+	"Q414":   {-34.6037, -58.3816},  // Argentina
+	"Q739":   {4.7110, -74.0721},    // Colombia
+	"Q717":   {10.4806, -66.9036},   // Venezuela
+	"Q241":   {23.1136, -82.3666},   // Cuba
+	"Q843":   {33.6844, 73.0479},    // Pakistan
+	"Q833":   {4.2105, 101.9758},    // Malaysia
+	"Q865":   {23.6978, 120.9605},   // Taiwan
+	"Q8646":  {22.3193, 114.1694},   // Hong Kong
+	"Q219060":{31.9466, 35.3027},    // State of Palestine
+
+	// US states (common in edit wars)
+	"Q1408":  {40.7128, -74.0060},   // New York (state)
+	"Q99":    {34.0522, -118.2437},  // California
+	"Q1439":  {30.2672, -97.7431},   // Texas
+	"Q812":   {25.7617, -80.1918},   // Florida
+	"Q1581":  {41.8781, -87.6298},   // Illinois
+	"Q1400":  {39.9612, -82.9988},   // Ohio
+	"Q1391":  {33.7490, -84.3880},   // Georgia
+}
+
+func wikidataEntityCoords(entityID string) (float64, float64, bool) {
+	if coords, ok := wikidataEntityToCoords[entityID]; ok {
+		return coords[0], coords[1], true
+	}
+	return 0, 0, false
 }
 
 // cacheNegativeCoords stores a "no coordinates" result to avoid re-querying Wikipedia.

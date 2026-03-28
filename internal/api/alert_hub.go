@@ -12,6 +12,10 @@ import (
 // AlertHub manages a single Redis alert subscription and fans out alerts
 // to all connected WebSocket clients.  This avoids the N-blocking-XRead
 // problem where each WS client holds its own Redis connection.
+// maxAlertSubscribers caps the number of concurrent alert WebSocket clients
+// to prevent unbounded channel allocation under heavy load.
+const maxAlertSubscribers = 100
+
 type AlertHub struct {
 	mu          sync.RWMutex
 	subscribers map[chan storage.Alert]struct{}
@@ -108,8 +112,13 @@ func (h *AlertHub) Stop() {
 // Subscribe returns a channel that receives alerts.  The caller MUST call
 // Unsubscribe when done to avoid leaks.
 func (h *AlertHub) Subscribe() chan storage.Alert {
-	ch := make(chan storage.Alert, 128) // Increased buffer from 64 to 128
 	h.mu.Lock()
+	if len(h.subscribers) >= maxAlertSubscribers {
+		h.mu.Unlock()
+		h.logger.Warn().Int("max", maxAlertSubscribers).Msg("Alert subscriber limit reached")
+		return nil
+	}
+	ch := make(chan storage.Alert, 128)
 	h.subscribers[ch] = struct{}{}
 	total := len(h.subscribers)
 	h.mu.Unlock()

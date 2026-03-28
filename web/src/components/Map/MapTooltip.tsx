@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, useRef, memo } from 'react';
 import type { GeoHotspot, GeoWar } from '../../types';
 
 interface MapTooltipProps {
@@ -7,9 +7,11 @@ interface MapTooltipProps {
   hotspot?: GeoHotspot;
   war?: GeoWar;
   onViewAnalysis?: (war: GeoWar) => void;
+  onPaneMouseEnter?: () => void;
+  onPaneMouseLeave?: () => void;
 }
 
-export const MapTooltip = memo(function MapTooltip({ x, y, hotspot, war, onViewAnalysis }: MapTooltipProps) {
+export const MapTooltip = memo(function MapTooltip({ x, y, hotspot, war, onViewAnalysis, onPaneMouseEnter, onPaneMouseLeave }: MapTooltipProps) {
   if (!hotspot && !war) return null;
 
   const severity = war?.severity?.toLowerCase() ?? '';
@@ -27,8 +29,10 @@ export const MapTooltip = memo(function MapTooltip({ x, y, hotspot, war, onViewA
 
   return (
     <div
-      className={`${isMobile ? 'fixed z-[100]' : 'fixed z-[100] pointer-events-none'} animate-fade-in`}
+      className={`fixed z-[100] animate-fade-in`}
       style={positionStyle}
+      onMouseEnter={onPaneMouseEnter}
+      onMouseLeave={onPaneMouseLeave}
     >
       <div
         className={`${isMobile ? 'rounded-t-xl px-4 py-3' : 'rounded-lg px-3 py-2'} text-xs font-mono shadow-xl pointer-events-auto`}
@@ -60,7 +64,7 @@ export const MapTooltip = memo(function MapTooltip({ x, y, hotspot, war, onViewA
               </div>
               {hotspot.language && (
                 <div className="text-[9px]" style={{ color: 'rgba(0,255,136,0.4)' }}>
-                  {hotspot.language}wiki · {hotspot.location_source === 'semantic' ? '🧠 Semantic' : hotspot.location_source === 'article' ? '📍 Article' : '🌐 Wiki region'}
+                  {hotspot.language}wiki · {hotspot.location_source === 'article' ? '📍 Article' : hotspot.location_source === 'wikidata' ? '🔗 Wikidata' : hotspot.location_source === 'semantic' ? '🧠 Semantic' : '🌐 Wiki region'}
                 </div>
               )}
             </div>
@@ -94,7 +98,7 @@ export const MapTooltip = memo(function MapTooltip({ x, y, hotspot, war, onViewA
               )}
               <div className="mt-1 flex items-center gap-1" style={{ color: '#00ddff' }}>
                 <span className="text-[9px]">
-                  {war.location_source === 'article' ? '📍 Article coords' : war.location_source === 'semantic' ? '🧠 Semantic location' : '🌐 Wiki region'}
+                  {war.location_source === 'article' ? '📍 Article coords' : war.location_source === 'wikidata' ? '🔗 Wikidata location' : war.location_source === 'semantic' ? '🧠 Semantic NER' : '🌐 Wiki region'}
                 </span>
               </div>
               {onViewAnalysis && (
@@ -114,7 +118,7 @@ export const MapTooltip = memo(function MapTooltip({ x, y, hotspot, war, onViewA
   );
 });
 
-// Hook for managing tooltip state
+// Hook for managing tooltip state with delayed hide so hovering the pane keeps it open.
 export function useMapTooltip() {
   const [tooltip, setTooltip] = useState<{
     x: number;
@@ -123,17 +127,43 @@ export function useMapTooltip() {
     war?: GeoWar;
   } | null>(null);
 
-  const showHotspotTooltip = useCallback((e: React.MouseEvent, hotspot: GeoHotspot) => {
-    setTooltip({ x: e.clientX, y: e.clientY, hotspot });
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelHide = useCallback(() => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
   }, []);
+
+  const showHotspotTooltip = useCallback((e: React.MouseEvent, hotspot: GeoHotspot) => {
+    cancelHide();
+    setTooltip({ x: e.clientX, y: e.clientY, hotspot });
+  }, [cancelHide]);
 
   const showWarTooltip = useCallback((e: React.MouseEvent, war: GeoWar) => {
+    cancelHide();
     setTooltip({ x: e.clientX, y: e.clientY, war });
-  }, []);
+  }, [cancelHide]);
 
+  // Delayed hide: gives user time to move mouse from marker to pane
   const hideTooltip = useCallback(() => {
-    setTooltip(null);
-  }, []);
+    cancelHide();
+    hideTimer.current = setTimeout(() => {
+      setTooltip(null);
+      hideTimer.current = null;
+    }, 150);
+  }, [cancelHide]);
 
-  return { tooltip, showHotspotTooltip, showWarTooltip, hideTooltip };
+  // Called when mouse enters the tooltip pane — cancels pending hide
+  const onPaneMouseEnter = useCallback(() => {
+    cancelHide();
+  }, [cancelHide]);
+
+  // Called when mouse leaves the tooltip pane — start hide timer
+  const onPaneMouseLeave = useCallback(() => {
+    hideTooltip();
+  }, [hideTooltip]);
+
+  return { tooltip, showHotspotTooltip, showWarTooltip, hideTooltip, onPaneMouseEnter, onPaneMouseLeave };
 }

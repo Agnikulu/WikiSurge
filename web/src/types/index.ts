@@ -217,7 +217,7 @@ export interface GeoHotspot {
   edits_1h: number;
   lat: number;
   lng: number;
-  location_source: 'article' | 'semantic' | 'wiki_centroid';
+  location_source: 'article' | 'wikidata' | 'semantic' | 'wiki_centroid';
   language?: string;
   server_url?: string;
   rank: number;
@@ -231,7 +231,7 @@ export interface GeoWar {
   revert_count: number;
   lat: number;
   lng: number;
-  location_source: 'article' | 'semantic' | 'wiki_centroid';
+  location_source: 'article' | 'wikidata' | 'semantic' | 'wiki_centroid';
   summary_snippet?: string;
   start_time?: string;
   active: boolean;
