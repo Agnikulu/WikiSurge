@@ -348,12 +348,12 @@ func (rm *ResourceMonitor) checkES() {
 }
 
 // -----------------------------------------------------------------------
-// Kafka monitoring (every 15s)
+// Kafka monitoring (every 60s)
 // -----------------------------------------------------------------------
 
 func (rm *ResourceMonitor) monitorKafka() {
 	defer rm.wg.Done()
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
 	rm.checkKafka()
@@ -397,12 +397,22 @@ func (rm *ResourceMonitor) checkKafka() int64 {
 		return 0
 	}
 
-	conn, err := kafka.Dial("tcp", rm.kafkaCfg.Brokers[0])
+	// Use a dialer with a timeout to prevent connection hangs from
+	// accumulating goroutines and file descriptors over time.
+	dialer := &kafka.Dialer{
+		Timeout:   10 * time.Second,
+		DualStack: true,
+	}
+
+	conn, err := dialer.DialContext(rm.ctx, "tcp", rm.kafkaCfg.Brokers[0])
 	if err != nil {
 		rm.logger.Error().Err(err).Msg("Failed to connect to Kafka broker")
 		return 0
 	}
 	defer conn.Close()
+
+	// Set a deadline on the metadata connection to prevent indefinite hangs.
+	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 
 	partitions, err := conn.ReadPartitions("wikipedia.edits")
 	if err != nil {
@@ -412,10 +422,11 @@ func (rm *ResourceMonitor) checkKafka() int64 {
 
 	var totalLag int64
 	for _, p := range partitions {
-		pConn, err := kafka.DialLeader(rm.ctx, "tcp", rm.kafkaCfg.Brokers[0], p.Topic, p.ID)
+		pConn, err := dialer.DialLeader(rm.ctx, "tcp", rm.kafkaCfg.Brokers[0], p.Topic, p.ID)
 		if err != nil {
 			continue
 		}
+		_ = pConn.SetDeadline(time.Now().Add(5 * time.Second))
 		first, last, err := pConn.ReadOffsets()
 		pConn.Close()
 		if err != nil {

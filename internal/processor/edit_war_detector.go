@@ -25,6 +25,17 @@ var (
 	sharedEditWarMetrics *EditWarMetrics
 )
 
+// maxCooldownEntries caps the cooldown map to prevent unbounded memory
+// growth. Go maps never shrink their backing array, so even after delete()
+// the memory stays allocated. This limit ensures the map is periodically
+// rebuilt from scratch when it grows too large.
+const maxEditWarCooldownEntries = 2000
+
+// maxConcurrentAnalyses limits how many LLM analysis goroutines can run
+// simultaneously. Without this cap, slow/hanging LLM calls accumulate
+// goroutines indefinitely (~8KB stack each), eventually causing OOM.
+const maxConcurrentAnalyses = 5
+
 // EditWarDetector detects ongoing editorial conflicts in real-time
 type EditWarDetector struct {
 	redis            *redis.Client
@@ -42,6 +53,7 @@ type EditWarDetector struct {
 	cooldowns        map[string]time.Time // page -> last alert time
 	cooldownDuration time.Duration
 	reanalyzeEvery   int // re-run LLM analysis every N edits on active wars (0=disabled)
+	analysisSem      chan struct{} // semaphore bounding concurrent LLM goroutines
 }
 
 // EditWarAlert represents a detected edit war event
@@ -128,6 +140,7 @@ func NewEditWarDetector(hotPages *storage.HotPageTracker, redisClient *redis.Cli
 		cooldowns:        make(map[string]time.Time),
 		cooldownDuration: 5 * time.Minute, // Suppress duplicate alerts for 5 minutes per page
 		reanalyzeEvery:   cfg.LLM.ReanalyzeEvery,
+		analysisSem:      make(chan struct{}, maxConcurrentAnalyses),
 	}
 }
 
@@ -246,14 +259,27 @@ func (ewd *EditWarDetector) ProcessEdit(ctx context.Context, edit *models.Wikipe
 				return nil // Still in cooldown, suppress duplicate
 			}
 			ewd.cooldowns[edit.Title] = time.Now()
-			// Clean up expired cooldowns periodically
-			if len(ewd.cooldowns) > 500 {
+			// Clean up expired cooldowns every 100 entries, and hard-cap the
+			// map to maxEditWarCooldownEntries. When the cap is hit we rebuild
+			// the map from scratch so Go releases the old backing array —
+			// plain delete() never shrinks the internal hash table.
+			if len(ewd.cooldowns) > 100 {
 				now := time.Now()
 				for page, t := range ewd.cooldowns {
 					if now.Sub(t) > ewd.cooldownDuration {
 						delete(ewd.cooldowns, page)
 					}
 				}
+			}
+			if len(ewd.cooldowns) > maxEditWarCooldownEntries {
+				newMap := make(map[string]time.Time, len(ewd.cooldowns)/2)
+				now := time.Now()
+				for page, t := range ewd.cooldowns {
+					if now.Sub(t) <= ewd.cooldownDuration {
+						newMap[page] = t
+					}
+				}
+				ewd.cooldowns = newMap
 			}
 			ewd.mu.Unlock()
 
@@ -542,16 +568,24 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 
 	// Trigger LLM analysis in the background when a new edit war is detected.
 	// The result is cached in Redis so the API can serve it immediately.
+	// Uses a semaphore to bound concurrent goroutines and prevent accumulation
+	// when the LLM service is slow or unresponsive.
 	if ewd.analysisService != nil {
-		go func(page string) {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if _, err := ewd.analysisService.Analyze(ctx, page); err != nil {
-				ewd.logger.Warn().Err(err).Str("page", page).Msg("Auto-analysis failed for new edit war")
-			} else {
-				ewd.logger.Info().Str("page", page).Msg("Auto-analysis completed for edit war")
-			}
-		}(alert.PageTitle)
+		select {
+		case ewd.analysisSem <- struct{}{}:
+			go func(page string) {
+				defer func() { <-ewd.analysisSem }()
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if _, err := ewd.analysisService.Analyze(ctx, page); err != nil {
+					ewd.logger.Warn().Err(err).Str("page", page).Msg("Auto-analysis failed for new edit war")
+				} else {
+					ewd.logger.Info().Str("page", page).Msg("Auto-analysis completed for edit war")
+				}
+			}(alert.PageTitle)
+		default:
+			ewd.logger.Warn().Str("page", alert.PageTitle).Msg("Skipping auto-analysis: too many concurrent analyses")
+		}
 	}
 
 	return nil
@@ -579,15 +613,21 @@ func (ewd *EditWarDetector) maybeReanalyze(ctx context.Context, pageTitle string
 		return
 	}
 
-	go func(page string) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if _, err := ewd.analysisService.Reanalyze(ctx, page); err != nil {
-			ewd.logger.Warn().Err(err).Str("page", page).Msg("Periodic re-analysis failed")
-		} else {
-			ewd.logger.Info().Str("page", page).Int64("edit_num", count).Msg("Periodic re-analysis completed")
-		}
-	}(pageTitle)
+	select {
+	case ewd.analysisSem <- struct{}{}:
+		go func(page string) {
+			defer func() { <-ewd.analysisSem }()
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if _, err := ewd.analysisService.Reanalyze(ctx, page); err != nil {
+				ewd.logger.Warn().Err(err).Str("page", page).Msg("Periodic re-analysis failed")
+			} else {
+				ewd.logger.Info().Str("page", page).Int64("edit_num", count).Msg("Periodic re-analysis completed")
+			}
+		}(pageTitle)
+	default:
+		ewd.logger.Warn().Str("page", pageTitle).Msg("Skipping re-analysis: too many concurrent analyses")
+	}
 }
 
 // StartDeactivationSweeper launches a background goroutine that periodically

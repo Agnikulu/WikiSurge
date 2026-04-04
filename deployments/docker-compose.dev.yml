@@ -161,7 +161,7 @@ services:
       - LOG_LEVEL=info
       - LOG_FORMAT=json
       - GOGC=50
-      - GOMEMLIMIT=90MiB
+      - GOMEMLIMIT=70MiB
     networks:
       - wikisurge
     deploy:
@@ -196,15 +196,15 @@ services:
       - LOG_LEVEL=info
       - LOG_FORMAT=json
       - GOGC=50
-      - GOMEMLIMIT=140MiB
+      - GOMEMLIMIT=180MiB
     networks:
       - wikisurge
     deploy:
       resources:
         limits:
-          memory: 150M
+          memory: 250M
         reservations:
-          memory: 80M
+          memory: 100M
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
