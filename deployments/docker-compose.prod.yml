@@ -31,7 +31,7 @@ services:
   # Kafka (Redpanda) - Message Broker
   # ---------------------------------------------------------------------------
   kafka:
-    image: docker.redpanda.com/redpandadata/redpanda:latest
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.18
     container_name: wikisurge-kafka
     restart: unless-stopped
     command:
@@ -50,8 +50,6 @@ services:
       - --overprovisioned
       - --node-id 0
       - --check=false
-      - --set partition_autobalancing_mode=node_add
-      - --set core_balancing_continuous=false
       # Production: fsync enabled (safe default — omitting --unsafe-bypass-fsync)
     volumes:
       - kafka-data:/var/lib/redpanda/data
