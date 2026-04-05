@@ -52,6 +52,8 @@ services:
       - --overprovisioned
       - --node-id 0
       - --check=false
+      - --set partition_autobalancing_mode=node_add
+      - --set core_balancing_continuous=false
       - --set redpanda.log_retention_ms=10800000
       - --set redpanda.log_segment_size=16777216
     volumes:
