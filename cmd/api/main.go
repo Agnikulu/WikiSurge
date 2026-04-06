@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -58,6 +59,49 @@ func main() {
 	level, _ := zerolog.ParseLevel(cfg.Logging.Level)
 	logger := zerolog.New(os.Stdout).With().Timestamp().Str("service", "wikisurge-api").Logger().Level(level)
 	logger.Info().Str("config", cfgPath).Int("port", cfg.API.Port).Msg("Starting WikiSurge API Server")
+
+	// Log runtime info for post-mortem diagnosis
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	logger.Info().
+		Str("go_version", runtime.Version()).
+		Int("gomaxprocs", runtime.GOMAXPROCS(0)).
+		Str("gomemlimit", os.Getenv("GOMEMLIMIT")).
+		Uint64("sys_bytes", memStats.Sys).
+		Msg("Runtime info")
+
+	// Top-level panic recovery — logs the panic before the process exits
+	defer func() {
+		if r := recover(); r != nil {
+			buf := make([]byte, 4096)
+			n := runtime.Stack(buf, false)
+			runtime.ReadMemStats(&memStats)
+			logger.Error().
+				Interface("panic", r).
+				Str("stack", string(buf[:n])).
+				Uint64("heap_alloc", memStats.HeapAlloc).
+				Uint64("sys_bytes", memStats.Sys).
+				Msg("FATAL PANIC — process crashing")
+			os.Exit(2)
+		}
+	}()
+
+	// Periodic memory usage logging (every 5 min) for OOM forensics
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			var ms runtime.MemStats
+			runtime.ReadMemStats(&ms)
+			logger.Info().
+				Uint64("heap_alloc_mb", ms.HeapAlloc/1024/1024).
+				Uint64("sys_mb", ms.Sys/1024/1024).
+				Uint64("heap_objects", ms.HeapObjects).
+				Uint32("num_gc", ms.NumGC).
+				Int("goroutines", runtime.NumGoroutine()).
+				Msg("Memory snapshot")
+		}
+	}()
 
 	// ---- Metrics ----
 	metrics.InitMetrics()
@@ -199,6 +243,14 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-sigChan
 	logger.Info().Str("signal", sig.String()).Msg("Shutdown signal received")
+
+	// Log memory state at shutdown for OOM forensics
+	runtime.ReadMemStats(&memStats)
+	logger.Info().
+		Uint64("heap_alloc_mb", memStats.HeapAlloc/1024/1024).
+		Uint64("sys_mb", memStats.Sys/1024/1024).
+		Int("goroutines", runtime.NumGoroutine()).
+		Msg("Memory at shutdown")
 
 	// ---- Graceful shutdown ----
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)

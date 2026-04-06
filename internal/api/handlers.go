@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Agnikulu/WikiSurge/internal/metrics"
@@ -982,12 +983,14 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 	ck := cacheKey("geo-activity")
 	if cached, ok := s.cache.Get(ck); ok {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("Cache-Control", "max-age=15, stale-while-revalidate=5")
+		w.Header().Set("Cache-Control", "max-age=30, stale-while-revalidate=15")
 		w.Write(cached)
 		return
 	}
 
-	ctx := r.Context()
+	// Hard request-level timeout to prevent gateway timeouts
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
 	resp := GeoActivityResponse{
 		Regions:  []GeoRegion{},
 		Wars:     []GeoWar{},
@@ -1040,13 +1043,14 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// --- Wars: active edit wars with coordinates ---
+	// --- Wars: active edit wars with coordinates (parallelized lookups) ---
 	if s.alerts != nil {
 		activeWars, err := s.alerts.GetActiveEditWars(ctx, 20)
 		if err == nil {
+			// Build war structs first (cheap field extraction)
+			wars := make([]GeoWar, 0, len(activeWars))
 			for _, aw := range activeWars {
 				gw := GeoWar{Active: true}
-
 				if pt, ok := aw["page_title"].(string); ok {
 					gw.PageTitle = pt
 				}
@@ -1068,16 +1072,29 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 				if su, ok := aw["server_url"].(string); ok {
 					gw.ServerURL = su
 				}
+				wars = append(wars, gw)
+			}
 
-				// Try to get real article coordinates from Wikipedia API / semantic geocoding
-				if gw.PageTitle != "" {
+			// Parallel coordinate + analysis enrichment (bounded concurrency)
+			var wg sync.WaitGroup
+			sem := make(chan struct{}, 8) // max 8 concurrent lookups
+			for i := range wars {
+				if wars[i].PageTitle == "" {
+					continue
+				}
+				wg.Add(1)
+				go func(idx int) {
+					defer wg.Done()
+					sem <- struct{}{}
+					defer func() { <-sem }()
+
+					gw := &wars[idx]
 					lat, lng, src, found := s.lookupArticleCoordinates(ctx, gw.PageTitle, gw.ServerURL)
 					if found {
 						gw.Lat = lat
 						gw.Lng = lng
 						gw.LocationSource = src
 					} else {
-						// Fallback to wiki centroid
 						lang := extractLanguageFromURL(gw.ServerURL)
 						if lang == "" {
 							lang = "en"
@@ -1088,17 +1105,14 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 							gw.LocationSource = "wiki_centroid"
 						}
 					}
-				}
 
-				// Embed cached analysis snippet
-				if gw.PageTitle != "" {
-					cacheKey := fmt.Sprintf("editwar:analysis:%s", gw.PageTitle)
-					if cached, cErr := s.redis.Get(ctx, cacheKey).Result(); cErr == nil && cached != "" {
+					// Embed cached analysis snippet
+					ck := fmt.Sprintf("editwar:analysis:%s", gw.PageTitle)
+					if cached, cErr := s.redis.Get(ctx, ck).Result(); cErr == nil && cached != "" {
 						var analysis map[string]interface{}
 						if json.Unmarshal([]byte(cached), &analysis) == nil {
 							gw.Analysis = analysis
 							if summary, ok := analysis["summary"].(string); ok {
-								// Truncate summary for map tooltip
 								if len(summary) > 150 {
 									gw.SummarySnippet = summary[:147] + "..."
 								} else {
@@ -1107,10 +1121,10 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 							}
 						}
 					}
-				}
-
-				resp.Wars = append(resp.Wars, gw)
+				}(i)
 			}
+			wg.Wait()
+			resp.Wars = wars
 		}
 	}
 
@@ -1189,7 +1203,7 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 	// Wars at the same (or very close) coordinates get spread in a spiral.
 	resp.Wars = jitterOverlappingWars(resp.Wars)
 
-	// --- Hotspots: trending pages geolocated by article semantics ---
+	// --- Hotspots: trending pages geolocated by article semantics (parallelized) ---
 	if s.trending != nil {
 		trending, err := s.trending.GetTopTrending(20)
 		if err == nil {
@@ -1199,9 +1213,11 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 				warTitles[w.PageTitle] = true
 			}
 
+			// Build hotspot structs first (cheap)
+			hotspots := make([]GeoHotspot, 0, len(trending))
 			for i, entry := range trending {
 				if warTitles[entry.PageTitle] {
-					continue // Already shown as a war marker
+					continue
 				}
 
 				lang := extractLanguageFromURL(entry.ServerURL)
@@ -1209,7 +1225,6 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 					lang = extractLanguage(entry.PageTitle)
 				}
 
-				// Enrich with hourly edits from hot page tracker
 				var edits1h int64
 				if s.hotPages != nil {
 					if stats, hErr := s.hotPages.GetPageStats(ctx, entry.PageTitle); hErr == nil && stats != nil {
@@ -1217,38 +1232,60 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 					}
 				}
 
-				hs := GeoHotspot{
+				hotspots = append(hotspots, GeoHotspot{
 					PageTitle: entry.PageTitle,
 					Score:     entry.CurrentScore,
 					Edits1h:   int(edits1h),
 					Language:  lang,
 					ServerURL: entry.ServerURL,
 					Rank:      i + 1,
-				}
+				})
+			}
 
-				// Semantic geocoding first, then article coords, then wiki centroid fallback
-				if lat, lng, src, found := s.lookupArticleCoordinates(ctx, entry.PageTitle, entry.ServerURL); found {
-					hs.Lat = lat
-					hs.Lng = lng
-					hs.LocationSource = src
-				} else {
-					// Wiki centroid fallback
-					fallbackLang := lang
-					if fallbackLang == "" {
-						fallbackLang = "en"
-					}
-					if lat, lng, ok := GetWikiCentroid(fallbackLang); ok {
+			// Parallel coordinate enrichment (bounded concurrency)
+			var wg sync.WaitGroup
+			sem := make(chan struct{}, 8)
+			var mu sync.Mutex
+			validHotspots := make([]GeoHotspot, 0, len(hotspots))
+
+			for i := range hotspots {
+				wg.Add(1)
+				go func(idx int) {
+					defer wg.Done()
+					sem <- struct{}{}
+					defer func() { <-sem }()
+
+					hs := hotspots[idx]
+					if lat, lng, src, found := s.lookupArticleCoordinates(ctx, hs.PageTitle, hs.ServerURL); found {
 						hs.Lat = lat
 						hs.Lng = lng
-						hs.LocationSource = "wiki_centroid"
+						hs.LocationSource = src
 					} else {
-						// Unknown language with no centroid — skip to avoid (0,0) markers
-						continue
+						fallbackLang := hs.Language
+						if fallbackLang == "" {
+							fallbackLang = "en"
+						}
+						if lat, lng, ok := GetWikiCentroid(fallbackLang); ok {
+							hs.Lat = lat
+							hs.Lng = lng
+							hs.LocationSource = "wiki_centroid"
+						} else {
+							return // skip (0,0) markers
+						}
 					}
-				}
 
-				resp.Hotspots = append(resp.Hotspots, hs)
+					mu.Lock()
+					validHotspots = append(validHotspots, hs)
+					mu.Unlock()
+				}(i)
 			}
+			wg.Wait()
+
+			// Sort by rank to preserve original ordering
+			sort.Slice(validHotspots, func(i, j int) bool {
+				return validHotspots[i].Rank < validHotspots[j].Rank
+			})
+			resp.Hotspots = validHotspots
 
 			// Jitter overlapping hotspots
 			resp.Hotspots = jitterOverlappingHotspots(resp.Hotspots)
@@ -1256,9 +1293,9 @@ func (s *APIServer) handleGetGeoActivity(w http.ResponseWriter, r *http.Request)
 	}
 
 	if encoded, err := json.Marshal(resp); err == nil {
-		s.cache.Set(ck, encoded, 15*time.Second)
+		s.cache.Set(ck, encoded, 30*time.Second)
 	}
-	w.Header().Set("Cache-Control", "max-age=15, stale-while-revalidate=5")
+	w.Header().Set("Cache-Control", "max-age=30, stale-while-revalidate=15")
 	respondJSON(w, http.StatusOK, resp)
 }
 
