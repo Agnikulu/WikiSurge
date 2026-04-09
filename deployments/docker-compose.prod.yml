@@ -238,13 +238,7 @@ services:
       - "traefik.http.routers.api.tls=true"
       - "traefik.http.routers.api.tls.certresolver=letsencrypt"
       - "traefik.http.services.api.loadbalancer.server.port=8081"
-      # Prevent 504 gateway timeouts on slow endpoints (geo-activity, etc.)
       - "traefik.http.services.api.loadbalancer.responseforwarding.flushinterval=100ms"
-      - "traefik.http.middlewares.api-timeout.buffering.retryExpression=IsNetworkError() && Attempts() < 2"
-      - "traefik.http.routers.api.middlewares=api-timeout@docker"
-      - "traefik.http.serversTransports.api-transport.respondingTimeouts.readTimeout=120s"
-      - "traefik.http.serversTransports.api-transport.respondingTimeouts.writeTimeout=120s"
-      - "traefik.http.serversTransports.api-transport.respondingTimeouts.idleTimeout=90s"
     deploy:
       resources:
         limits:
@@ -279,7 +273,6 @@ services:
       - "traefik.http.routers.frontend.tls=true"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
-      - "traefik.http.services.frontend.loadbalancer.responseforwarding.flushinterval=100ms"
     deploy:
       resources:
         limits:
