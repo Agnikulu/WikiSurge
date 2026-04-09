@@ -14,7 +14,7 @@
 
 **A high-performance streaming pipeline that ingests every Wikipedia edit on Earth in real-time,<br/>detects anomalies, identifies edit wars, and explains conflicts using AI.**
 
-[Dashboard](#-dashboard) · [How It Works](#-how-it-works) · [Architecture](#-architecture) · [Technical Decisions](#-technical-decisions) · [Docs](#-documentation)
+[Dashboard](#-dashboard) · [How It Works](#-how-it-works) · [Architecture](#-architecture) · [Technical Decisions](#-technical-decisions) · [API](#-api-endpoints) · [Docs](#-documentation)
 
 </div>
 
@@ -25,7 +25,7 @@
 <img src="docs/assets/dashboard_img.png" alt="WikiSurge Dashboard" width="800"/>
 </a>
 <br/>
-<sub><b>Live dashboard</b> — real-time edits monitor, language distribution, spike alerts, trending pages, full-text search, and WebSocket-powered live feed · <i>click to expand</i></sub>
+<sub><b>Live dashboard</b> — real-time edits monitor, geographic activity map, language distribution, spike alerts, trending pages, full-text search, and WebSocket-powered live feed · <i>click to expand</i></sub>
 </div>
 
 ---
@@ -40,6 +40,8 @@ This isn't a toy project with a single API call. It's a distributed system with:
 - **Real-time spike detection** using sliding window statistics with Z-score thresholds
 - **Edit war detection** with revert tracking, byte-delta analysis, and timeline reconstruction
 - **AI-powered conflict analysis** that fetches Wikipedia diffs and explains both sides
+- **Geographic activity map** plotting real-time edit hotspots and conflicts worldwide
+- **Resilient architecture** with circuit breakers, graceful degradation, and automatic recovery
 - **Sub-second WebSocket delivery** from Wikipedia edit → user's browser
 - **Deployed on a single 4GB Hetzner VPS** with aggressive memory budgeting
 
@@ -56,6 +58,7 @@ This isn't a toy project with a single API call. It's a distributed system with:
 - Edits/second gauge with historical graph
 - Language distribution across 300+ wikis
 - Hot page tracking with promotion/demotion
+- Global activity map with geographic hotspots
 
 </td>
 <td width="50%">
@@ -65,6 +68,7 @@ This isn't a toy project with a single API call. It's a distributed system with:
 - Edit war detection with revert ratio tracking
 - AI analysis explaining what editors fight about
 - Severity classification (LOW / MEDIUM / HIGH / CRITICAL)
+- Conflict spotlight carousel with auto-rotation
 
 </td>
 </tr>
@@ -73,9 +77,10 @@ This isn't a toy project with a single API call. It's a distributed system with:
 
 **Search & Discovery**
 - Full-text search powered by Elasticsearch
+- Advanced filters: date range, language, username, byte change
+- Autocomplete search suggestions with debounced fetch
 - Trending pages scored by recency-weighted edits
-- Filter by severity, type, language, time range
-- CSV export for further analysis
+- CSV export (search results, edit wars, timelines)
 
 </td>
 <td width="50%">
@@ -84,7 +89,30 @@ This isn't a toy project with a single API call. It's a distributed system with:
 - JWT authentication with bcrypt password hashing
 - Personalized watchlists (track specific pages)
 - Daily/weekly email digests via Resend API
+- Configurable digest content & spike thresholds
 - Admin panel for user management
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Edit War Visualization**
+- Sides matchup with color-coded position display
+- Editor conflict graph with per-editor stats
+- Historical edit wars browser with filtering & pagination
+- Full edit timeline reconstruction
+- Direct links to Wikipedia editor profiles
+
+</td>
+<td width="50%">
+
+**Resilience & Performance**
+- Circuit breaker pattern (open → half-open → closed)
+- Graceful degradation manager (3 levels)
+- Redis-backed sliding window rate limiting (per-endpoint)
+- In-memory response cache with TTL (10K entry cap)
+- Object pool reuse to reduce GC pressure
 
 </td>
 </tr>
@@ -99,6 +127,18 @@ This isn't a toy project with a single API call. It's a distributed system with:
 <br/>
 <sub>LLM identifies opposing sides, editor roles, content area, severity, and explains the conflict in plain English · <i>click to expand</i></sub>
 </div>
+
+### Geographic Activity Map
+
+The dashboard includes an interactive world map (`react-simple-maps`) that visualizes editing activity in real-time:
+
+- **Hotspots** (green) — regions with high edit activity, sized by volume
+- **Edit war markers** (orange/red) — active conflicts plotted by geographic origin, colored by severity
+- **Click-to-navigate** — clicking a war marker scrolls to the Edit Wars tab with that conflict highlighted
+- **Auto-refresh** — polls the `/api/geo-activity` endpoint every 15 seconds
+- **Responsive** — adapts to desktop, tablet, and mobile viewports with zoom (1×–8×) and pan
+
+The backend maps Wikipedia language editions to geographic centroids and returns hotspot/war coordinates with 30-second response caching.
 
 ---
 
@@ -218,8 +258,10 @@ graph LR
 - **Vite** — build tooling
 - **Tailwind CSS** — cyberpunk UI
 - **Recharts** — real-time graphs
-- **Zustand** — state management
+- **react-simple-maps** — geographic visualization
+- **Zustand** — state management (persisted)
 - **WebSocket** — live data feeds
+- **Lazy loading** — code-split per tab
 
 </td>
 </tr>
@@ -238,8 +280,10 @@ graph LR
 ### Auth & Security
 - **JWT** (HMAC-SHA256) — stateless auth
 - **bcrypt** — password hashing
-- **Rate limiting** — per-IP token bucket
-- **CORS / Helmet** — security headers
+- **Rate limiting** — per-IP sliding window
+- **CORS / CSP / HSTS** — security headers
+- **Request validation** — SQL injection detection
+- **Body limits** — 1 MiB max request size
 
 </td>
 <td valign="top" width="33%">
@@ -324,6 +368,41 @@ WikiSurge uses two different real-time delivery patterns:
 
 Pub/Sub for the feed because missing a few edits is fine — there are ~100/second. Streams for alerts because missing a spike notification is not acceptable.
 
+### Alert Hub — Single-Subscription Fan-Out
+
+A naive approach would have each WebSocket client run its own blocking Redis `XREAD`. With 100 clients, that's 100 blocking calls. Instead, the **Alert Hub** runs a single shared Redis Streams subscription and fans out to all connected clients:
+
+- One goroutine subscribes to both `spikes` and `editwars` streams
+- Alerts are distributed to up to **100 concurrent WebSocket clients** via buffered channels (128 slots)
+- Overflow messages are dropped (not blocked) to prevent a slow client from stalling the fan-out loop
+- Auto-reconnects with exponential backoff; panic recovery with max 5 automatic restarts
+
+### Resilience & Graceful Degradation
+
+The system is designed to keep running even when non-critical components fail:
+
+- **Circuit Breaker** — wraps external calls (Redis, Elasticsearch, LLM). After 5 consecutive failures → circuit opens for 30s → half-open probe → reset. Prevents cascade failures.
+- **Degradation Manager** — monitors component health and automatically adjusts feature flags across three levels:
+  - **None** — all features enabled
+  - **Partial** — disables Elasticsearch indexing and LLM analysis; core pipeline continues
+  - **Severe** — minimal operation, only essential data flows
+- **Retry with Jitter** — exponential backoff with randomized jitter for transient failures
+- Integrated with Prometheus metrics for observability
+
+### Rate Limiting with Per-Endpoint Budgets
+
+Not a single global limit — each endpoint gets a budget matched to its cost:
+
+| Endpoint | Limit | Rationale |
+|----------|-------|-----------|
+| `/api/search` | 100 req/min | Elasticsearch query (expensive) |
+| `/api/trending` | 500 req/min | Redis sorted set read |
+| `/api/stats` | 1000 req/min | Cached, near-zero cost |
+| `/api/alerts` | 500 req/min | Redis stream read |
+| `/api/edit-wars` | 500 req/min | Redis hash + list read |
+
+Implemented as a **Redis-backed sliding window** using sorted sets. Supports IP whitelisting (CIDR + individual), falls open on Redis failure (logs but allows through), and returns `429 Too Many Requests` with proper `Retry-After` headers.
+
 ---
 
 ## Project Structure
@@ -333,29 +412,137 @@ WikiSurge/
 ├── cmd/                          # Service entry points
 │   ├── api/main.go               #   → REST + WebSocket server
 │   ├── ingestor/main.go          #   → SSE consumer + Kafka producer
-│   └── processor/main.go         #   → Kafka consumer + analysis
+│   ├── processor/main.go         #   → Kafka consumer + analysis
+│   ├── demo/main.go              #   → Metrics simulation for testing
+│   └── preview-email/main.go     #   → Email digest HTML preview server
 ├── internal/                     # Core logic (not importable)
-│   ├── api/                      #   HTTP handlers, middleware, WebSocket
+│   ├── api/                      #   HTTP handlers, middleware, WebSocket, Alert Hub
 │   ├── auth/                     #   JWT + bcrypt + middleware
 │   ├── config/                   #   YAML config + feature flags
 │   ├── digest/                   #   Email collection, rendering, scheduling
 │   ├── email/                    #   Resend / SMTP / Log senders
 │   ├── ingestor/                 #   SSE client, filtering, Kafka production
 │   ├── kafka/                    #   Producer, consumer, dead letter queue
-│   ├── llm/                      #   Multi-provider LLM client + analysis
+│   ├── llm/                      #   Multi-provider LLM client + diff fetcher
 │   ├── models/                   #   Edit, User, Document models
 │   ├── monitoring/               #   Prometheus metrics registration
 │   ├── processor/                #   Spike/trending/edit-war/indexer/forwarder
-│   ├── resilience/               #   Circuit breaker, retry, backoff
+│   ├── resilience/               #   Circuit breaker, retry, degradation manager
 │   └── storage/                  #   Redis (hot pages, trending, alerts), ES
 ├── web/                          # React 19 + TypeScript + Tailwind frontend
+│   └── src/components/           #   40+ components organized by feature
+│       ├── Map/                  #     GlobalActivityMap, MapTooltip
+│       ├── EditWars/             #     SidesMatchup, ConflictSpotlight, EditorConflictGraph
+│       ├── Search/               #     AdvancedSearch, SearchSuggestions, Pagination
+│       ├── Alerts/               #     AlertCard, AlertsPanel, SeverityBadge
+│       └── ...                   #     Stats, Trending, LiveFeed, Auth, Settings
 ├── deployments/                  # Dockerfiles + docker-compose (dev & prod)
-├── monitoring/                   # Prometheus, Grafana, Loki configs
-├── scripts/                      # Infrastructure, validation, testing
-├── test/                         # Integration, load, chaos, benchmark tests
-├── configs/                      # Dev + prod YAML configs
+├── monitoring/                   # Prometheus, Grafana dashboards, Loki, Promtail
+├── scripts/                      # Infrastructure, validation, chaos testing
+├── test/                         # Integration, load, chaos, benchmark, resource tests
+├── configs/                      # Dev + prod YAML configs with feature flags
 └── docs/                         # Comprehensive documentation
 ```
+
+---
+
+## API Endpoints
+
+<details>
+<summary><b>Click to expand full API reference</b></summary>
+
+### Health
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Detailed component health (Redis, ES, Kafka) |
+| `GET` | `/health/live` | Kubernetes liveness probe |
+| `GET` | `/health/ready` | Kubernetes readiness probe |
+
+### Data
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/trending` | Trending pages (supports `limit`, `language` filters) |
+| `GET` | `/api/stats` | Platform-wide statistics |
+| `GET` | `/api/alerts` | Spike & edit-war alerts (`limit`, `offset`, `since`, `severity`, `type`) |
+| `GET` | `/api/edit-wars` | Active and resolved edit wars (`limit`, `active`) |
+| `GET` | `/api/edit-wars/analysis` | LLM-generated conflict analysis for a specific war |
+| `GET` | `/api/edit-wars/timeline` | Raw edit timeline for a specific war |
+| `GET` | `/api/timeline` | Historical edits timeline (`duration` parameter) |
+| `GET` | `/api/search` | Full-text search (`q`, `limit`, `offset`, `from`, `to`, `language`, `bot`) |
+| `GET` | `/api/geo-activity` | Geographic activity map data (hotspots + edit wars) |
+
+### WebSocket
+
+| Endpoint | Pattern | Description |
+|----------|---------|-------------|
+| `/ws/feed` | Redis Pub/Sub | Live edit stream with client-side filters |
+| `/ws/alerts` | Redis Streams | Guaranteed alert delivery with resume support |
+
+### Auth & User
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/auth/register` | — | Create account |
+| `POST` | `/api/auth/login` | — | Get JWT token |
+| `GET` | `/api/user/profile` | JWT | User info |
+| `GET` | `/api/user/preferences` | JWT | Digest settings |
+| `PUT` | `/api/user/preferences` | JWT | Update digest settings |
+| `GET` | `/api/user/watchlist` | JWT | Tracked pages |
+| `PUT` | `/api/user/watchlist` | JWT | Update watchlist (max 100 pages) |
+| `GET` | `/api/digest/unsubscribe` | Token | One-click email unsubscribe |
+
+### Admin
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/admin/users` | Admin | List all users |
+| `DELETE` | `/api/admin/users/{id}` | Admin | Delete user |
+
+</details>
+
+---
+
+## Dashboard Layout
+
+The frontend is organized as a tab-based single-page application:
+
+| Tab | Components |
+|-----|------------|
+| **Dashboard** | Stats overview · Geographic activity map · Conflict spotlight carousel · Edits timeline chart · Trending list · Alerts panel |
+| **Edit Wars** | Active wars list · Historical wars browser · Sides matchup · Editor conflict graph · Timeline view · CSV export |
+| **Trending** | Trending pages with recency-weighted scores |
+| **Alerts** | Spike and edit-war alerts with severity filtering |
+| **Search** | Full-text search · Advanced filters modal · Autocomplete suggestions · Pagination · CSV export |
+| **Settings** | User preferences · Digest configuration · Admin panel |
+
+Each tab is lazy-loaded with Suspense boundaries and skeleton loading states. WebSocket connection status and API health are always visible in the header.
+
+---
+
+## Accessibility
+
+- **Skip-to-content link** for keyboard users
+- **ARIA labels** on all interactive elements (buttons, modals, dropdowns)
+- **Keyboard navigation** — tab switching, carousel control (arrow keys), modal dismiss (Escape)
+- **Semantic HTML** — `<header>`, `<main>`, `<nav>`, `<footer>`, `<section>`, `<article>`
+- **`aria-live="polite"`** on status indicators (connection state, loading)
+- **Error boundaries** with `role="alert"` for accessible error states
+
+---
+
+## Testing
+
+| Category | Location | What It Covers |
+|----------|----------|---------------|
+| **Unit** | `internal/*/…_test.go` | API handlers, rate limiter, alert hub, resilience, optimizations |
+| **Integration** | `test/integration/` | End-to-end spike detection, processor pipeline validation |
+| **Load** | `test/load/` | WebSocket connection scaling, Kafka sustained throughput, SSE simulation |
+| **Chaos** | `test/chaos/` | Failure injection — Redis/ES/Kafka outage recovery |
+| **Benchmark** | `test/benchmark/` | Performance benchmarks for hot paths |
+| **Resource** | `test/resource/` | Memory limits, stale data cleanup, resource constraint behavior |
+| **Scripts** | `scripts/validate-*.sh` | Hot page tracking, spike detection, trending algorithm validation |
 
 ---
 
@@ -376,7 +563,7 @@ WikiSurge/
 
 ## License
 
-Copyright © 2025 Agnik. All Rights Reserved. See [LICENSE](LICENSE) for details.
+Copyright © 2025–2026 Agnik. All Rights Reserved. See [LICENSE](LICENSE) for details.
 
 Wikipedia content accessed through the APIs remains under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
