@@ -239,6 +239,7 @@ services:
       - "traefik.http.routers.api.tls.certresolver=letsencrypt"
       - "traefik.http.services.api.loadbalancer.server.port=8081"
       - "traefik.http.services.api.loadbalancer.responseforwarding.flushinterval=100ms"
+      - "traefik.docker.network=y4w4c0scsg00wkg0cwgo448w"
     deploy:
       resources:
         limits:
@@ -273,6 +274,7 @@ services:
       - "traefik.http.routers.frontend.tls=true"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      - "traefik.docker.network=y4w4c0scsg00wkg0cwgo448w"
     deploy:
       resources:
         limits:
