@@ -1052,6 +1052,63 @@ elasticsearch:
   retention_days: 7         # Shorter retention
 ```
 
+### Resilience & Rate Limiting Configuration
+
+WikiSurge includes built-in resilience features. Here's how to configure them for different deployment scenarios:
+
+**Rate Limiting:**
+```yaml
+api:
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100     # Default limit for unlisted endpoints
+    burst: 20                    # Burst allowance
+    whitelist:                   # IPs exempt from rate limiting
+      - "10.0.0.0/8"            # Internal network
+      - "127.0.0.1"             # Localhost
+```
+
+Per-endpoint limits are hardcoded in `internal/api/rate_limiter.go` for safety:
+
+| Endpoint | Limit/min | Reason |
+|----------|----------|--------|
+| `/api/search` | 100 | Hits Elasticsearch — expensive |
+| `/api/trending` | 500 | Redis read — moderate |
+| `/api/stats` | 1000 | Lightweight computation |
+| `/api/alerts` | 500 | Redis read — moderate |
+| `/api/edit-wars` | 500 | Redis read — moderate |
+
+**Circuit Breaker Defaults (hardcoded for reliability):**
+
+| Setting | Value | Meaning |
+|---------|-------|---------|
+| Failure threshold | 5 | Trip after 5 consecutive failures |
+| Reset timeout | 30s | Wait 30s before probing a failed service |
+| Half-open max calls | 1 | Allow 1 test request when probing |
+
+**Graceful Degradation** is automatic — no configuration needed. The
+`DegradationManager` monitors component health and adjusts features at runtime.
+Check current status via:
+
+```bash
+# View current degradation level and component health
+curl http://localhost:8080/health | jq '{status, degradation_level, components}'
+```
+
+**Response Cache Tuning:**
+
+The in-memory cache uses fixed TTLs (not configurable, to prevent misconfiguration):
+- Alerts: 5s, Search: 10s, Geo-activity: 30s
+- Max entries: 10,000 (hardcoded in `cache.go`)
+
+**Object Pools** require no configuration — they are zero-config `sync.Pool`
+instances that automatically scale based on workload.
+
+**Budget Deployment Resilience Note:** On ultra-budget deployments (2-4GB RAM),
+the degradation manager becomes critical. With Elasticsearch disabled, the
+system automatically stays at degradation level 0 (healthy) and only uses
+Kafka + Redis, which together need <500MB RAM.
+
 ### Secrets Management
 
 **Development:** `.env` file (not committed)

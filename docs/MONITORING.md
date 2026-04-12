@@ -20,9 +20,14 @@
 | API Latency (p95) | <200ms | 200-500ms | >1s | 95th percentile response time |
 | Error Rate | <0.1% | 0.1-1% | >1% | HTTP 5xx errors |
 | Hot Pages Tracked | 200-800 | 800-950 | >950 | Active hot pages |
-| WebSocket Clients | 0-1000 | 1000-1500 | >1500 | Connected WSclients |
+| WebSocket Clients | 0-1000 | 1000-1500 | >1500 | Connected WS clients |
 | Memory Usage | <60% | 60-80% | >85% | RAM utilization |
 | Disk Usage | <70% | 70-85% | >90% | Storage utilization |
+| Degradation Level | 0 (none) | 1 (partial) | 2 (severe) | Graceful degradation state |
+| Circuit Breakers | All closed (0) | Any half-open (2) | Any open (1) | Dependency circuit breaker states |
+| Rate Limit Rejections | <1/s | 1-10/s | >10/s | Requests rejected by rate limiter |
+| Cache Hit Rate | >80% | 50-80% | <50% | In-memory response cache effectiveness |
+| GC Pause (max) | <1ms | 1-5ms | >5ms | Worst-case garbage collection pause |
 
 ### Prometheus Metrics
 
@@ -96,6 +101,37 @@ websocket_clients_total
 - `websocket_clients_total` - Active WebSocket clients (gauge)
 - `cache_hits_total` - Cache hit rate (counter)
 - `rate_limit_exceeded_total` - Rate-limited requests (counter)
+
+#### Resilience Metrics
+
+```promql
+# Circuit breaker state (0=closed, 1=open, 2=half-open)
+circuit_breaker_state{breaker="elasticsearch"}
+
+# Circuit breaker failure/success/rejection counters
+rate(circuit_breaker_failures_total[1m]) by (breaker)
+rate(circuit_breaker_successes_total[1m]) by (breaker)
+rate(circuit_breaker_rejections_total[1m]) by (breaker)
+
+# Graceful degradation level (0=none, 1=partial, 2=severe)
+system_degradation_level
+
+# Degradation actions taken
+rate(degradation_actions_total[5m])
+
+# GC metrics (object pool effectiveness)
+go_gc_duration_seconds
+go_memstats_heap_objects
+rate(go_memstats_alloc_bytes_total[1m])
+```
+
+**Key metrics:**
+- `circuit_breaker_state{breaker}` - Current breaker state per dependency (gauge)
+- `circuit_breaker_rejections_total{breaker}` - Fast-failed requests (counter)
+- `system_degradation_level` - Overall system degradation (gauge: 0/1/2)
+- `degradation_actions_total` - Automatic actions taken (counter)
+- `go_gc_duration_seconds` - GC pause duration (summary)
+- `go_memstats_heap_objects` - Live heap objects (gauge, lower = pools working)
 
 #### Infrastructure Metrics
 
@@ -354,6 +390,87 @@ elasticsearch_filesystem_data_size_bytes - elasticsearch_filesystem_data_free_by
 
 ---
 
+### Resilience Dashboard
+
+**Purpose:** Monitor circuit breakers, degradation levels, rate limiting, caching, and object pool health.
+
+**Panels:**
+
+1. **System Degradation Level (Stat + Time series)**
+   ```promql
+   system_degradation_level
+   ```
+   - Thresholds: 0=green (none), 1=yellow (partial), 2=red (severe)
+   - Time series shows degradation history
+
+2. **Degradation Actions (Counter)**
+   ```promql
+   rate(degradation_actions_total[5m])
+   ```
+   - Spikes indicate automated feature toggling
+
+3. **Circuit Breaker States (Stat panels, one per breaker)**
+   ```promql
+   circuit_breaker_state{breaker="elasticsearch"}
+   circuit_breaker_state{breaker="redis"}
+   circuit_breaker_state{breaker="kafka"}
+   ```
+   - 0=Closed (green), 1=Open (red), 2=Half-Open (yellow)
+
+4. **Circuit Breaker Failure Rate (Time series)**
+   ```promql
+   rate(circuit_breaker_failures_total[1m]) by (breaker)
+   ```
+   - Shows failure streaks approaching threshold
+
+5. **Circuit Breaker Rejections (Time series)**
+   ```promql
+   rate(circuit_breaker_rejections_total[1m]) by (breaker)
+   ```
+   - High values = breaker is open, fast-failing requests
+
+6. **Rate Limit Hits per Endpoint (Time series)**
+   ```promql
+   rate(rate_limit_exceeded_total[1m]) by (endpoint)
+   ```
+   - Shows which endpoints are hitting limits
+
+7. **Rate Limit Keys Active (Gauge)**
+   ```promql
+   # Via Redis exporter
+   redis_keyspace_keys{db="db0"} 
+   ```
+   - Approximate count of active rate limit windows
+
+8. **Response Cache Hit Rate (Gauge)**
+   ```promql
+   rate(cache_hits_total[1m]) / (rate(cache_hits_total[1m]) + rate(cache_misses_total[1m])) * 100
+   ```
+   - Target: >80% on trending, >50% on search
+
+9. **GC Pause Duration (Heatmap)**
+   ```promql
+   rate(go_gc_duration_seconds_bucket[5m])
+   ```
+   - Shows GC pause distribution — should be mostly <1ms
+
+10. **Heap Objects (Time series)**
+    ```promql
+    go_memstats_heap_objects
+    ```
+    - Should be relatively stable if object pools are working
+    - Growing trend indicates pool bypass or leak
+
+11. **Memory Allocation Rate (Time series)**
+    ```promql
+    rate(go_memstats_alloc_bytes_total[1m])
+    ```
+    - Lower is better — pools reduce this
+
+**Access:** `http://grafana:3000/d/resilience`
+
+---
+
 ## Alerts
 
 ### Alert Definitions
@@ -421,6 +538,63 @@ groups:
     annotations:
       summary: "Hot page circuit breaker near limit"
       description: "Tracking {{ $value }} hot pages (limit: 1000)"
+
+- name: wikisurge_resilience
+  interval: 30s
+  rules:
+  - alert: CircuitBreakerOpen
+    expr: circuit_breaker_state > 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Circuit breaker {{ $labels.breaker }} is {{ if eq $value 1.0 }}OPEN{{ else }}HALF-OPEN{{ end }}"
+      description: "Requests to {{ $labels.breaker }} are being rejected. Check the dependency service."
+
+  - alert: SystemDegraded
+    expr: system_degradation_level == 1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "System in partial degradation"
+      description: "One component is unhealthy. Non-critical features have been auto-disabled. Check /health for details."
+
+  - alert: SystemSeverelyDegraded
+    expr: system_degradation_level >= 2
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "System in severe degradation"
+      description: "Multiple components unhealthy. Only core features operational. Immediate attention required."
+
+  - alert: HighRateLimitRejections
+    expr: rate(rate_limit_exceeded_total[5m]) > 10
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High rate of rate-limited requests"
+      description: "{{ $value | humanize }} requests/sec being rate-limited. Possible abuse or misconfigured client."
+
+  - alert: CircuitBreakerFlapping
+    expr: changes(circuit_breaker_state[30m]) > 4
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Circuit breaker {{ $labels.breaker }} is flapping"
+      description: "Breaker changed state {{ $value }} times in 30 minutes. Service may be intermittently failing."
+
+  - alert: HighGCPause
+    expr: go_gc_duration_seconds{quantile="1"} > 0.005
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High GC pause duration"
+      description: "Max GC pause is {{ $value | humanizeDuration }}. Object pools may not be effective."
 ```
 
 ### Alert Severity Levels

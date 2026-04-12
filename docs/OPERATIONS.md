@@ -514,6 +514,190 @@ docker exec kafka kafka-topics.sh \
 
 ---
 
+## Resilience Operations
+
+### Checking System Degradation Status
+
+WikiSurge automatically degrades when components fail. The `/health` endpoint shows current state:
+
+```bash
+# Check degradation level and component health
+curl -s http://localhost:8080/health | jq '{status, degradation_level, components, recent_actions}'
+```
+
+**Expected outputs:**
+
+```json
+// Healthy system (Level 0)
+{
+  "status": "healthy",
+  "degradation_level": "none",
+  "components": {
+    "elasticsearch": { "healthy": true },
+    "redis": { "healthy": true },
+    "kafka": { "healthy": true }
+  }
+}
+
+// Partially degraded (Level 1 — e.g., ES down)
+{
+  "status": "degraded",
+  "degradation_level": "partial",
+  "components": {
+    "elasticsearch": { "healthy": false, "message": "connection refused" },
+    "redis": { "healthy": true },
+    "kafka": { "healthy": true }
+  },
+  "recent_actions": [
+    { "timestamp": "...", "component": "elasticsearch", "action": "disabled indexing", "reason": "connection refused" }
+  ]
+}
+```
+
+**What to do at each level:**
+
+| Level | Status | Action |
+|-------|--------|--------|
+| 0 (None) | All healthy | No action needed |
+| 1 (Partial) | One component down | Investigate the unhealthy component; non-critical features auto-disabled |
+| 2 (Severe) | Multiple failures | Immediate attention — only core features running |
+
+---
+
+### Circuit Breaker Troubleshooting
+
+**Symptom:** API returning fast errors for search/ES-backed endpoints.
+
+**Check circuit breaker state via Prometheus:**
+```bash
+# Query circuit breaker metrics
+curl -s http://localhost:2112/metrics | grep circuit_breaker
+
+# Expected output when tripped:
+# circuit_breaker_state{breaker="elasticsearch"} 1    ← 1 = OPEN
+# circuit_breaker_failures_total{breaker="elasticsearch"} 12
+# circuit_breaker_rejections_total{breaker="elasticsearch"} 847
+```
+
+**Check via Grafana:**
+Navigate to the API Dashboard → Circuit Breaker panel.
+
+**Resolution steps:**
+1. Fix the underlying service (e.g., restart Elasticsearch)
+2. The breaker will automatically probe after 30 seconds
+3. If the probe succeeds, the breaker closes and traffic resumes
+4. No manual intervention needed — just fix the root cause
+
+**If breaker won't recover (stuck open):** This means the probe call is still
+failing. Check the dependency service:
+```bash
+# Direct health check bypassing the API
+curl -s http://localhost:9200/_cluster/health | jq .status
+redis-cli PING
+```
+
+---
+
+### Rate Limiting Operations
+
+**Symptom:** Users receiving 429 Too Many Requests.
+
+**Check rate limit metrics:**
+```bash
+# Check current rate limit hits
+curl -s http://localhost:2112/metrics | grep rate_limit
+# rate_limit_exceeded_total 42
+
+# Check a specific client's remaining budget
+curl -sI http://localhost:8080/api/trending | grep X-RateLimit
+# X-RateLimit-Limit: 500
+# X-RateLimit-Remaining: 347
+# X-RateLimit-Reset: 1708800060
+```
+
+**Check Redis rate limit keys:**
+```bash
+# See all active rate limit keys
+redis-cli --scan --pattern "ratelimit:*" | head -20
+
+# Check a specific client's request count
+redis-cli ZCARD "ratelimit:/api/search:1.2.3.4"
+
+# See request timestamps in the window
+redis-cli ZRANGE "ratelimit:/api/search:1.2.3.4" 0 -1 WITHSCORES
+```
+
+**Whitelist an IP (temporary — bypasses rate limits):**
+```bash
+# Add to config whitelist (requires restart):
+# api.rate_limiting.whitelist: ["10.0.0.0/8", "1.2.3.4"]
+
+# Or update config and restart:
+docker-compose restart api
+```
+
+**Clear a client's rate limit (emergency):**
+```bash
+# Remove rate limit entries for a specific IP
+redis-cli DEL "ratelimit:/api/search:1.2.3.4"
+redis-cli DEL "ratelimit:/api/trending:1.2.3.4"
+```
+
+---
+
+### Response Cache Operations
+
+**Check cache effectiveness:**
+```bash
+# Make a request and check cache header
+curl -sI http://localhost:8080/api/trending | grep X-Cache
+# X-Cache: MISS    ← First request, computed fresh
+# X-Cache: HIT     ← Subsequent request, served from cache
+```
+
+**If stale data is showing:**
+The cache has short TTLs (5-30s), so waiting is usually sufficient. If you need
+to force-refresh immediately, restart the API server:
+
+```bash
+docker-compose restart api
+# The in-memory cache is cleared on restart
+```
+
+Note: There is no way to selectively clear the in-memory cache without a
+restart. This is by design — the short TTLs make manual cache busting unnecessary.
+
+---
+
+### Object Pool & GC Monitoring
+
+**Check GC pressure via Go pprof:**
+```bash
+# Heap profile
+go tool pprof http://localhost:6060/debug/pprof/heap
+
+# GC stats
+curl -s http://localhost:6060/debug/vars | jq '.memstats | {
+  num_gc: .NumGC,
+  pause_total_ns: .PauseTotalNs,
+  last_gc_pause_ns: .PauseNs[0],
+  alloc_bytes: .Alloc,
+  heap_objects: .HeapObjects
+}'
+```
+
+**Healthy GC indicators:**
+- GC pause < 1ms per cycle
+- Heap objects relatively stable (not growing unboundedly)
+- `HeapInuse` stays below `GOMEMLIMIT`
+
+**If GC pauses are high (>5ms):**
+1. Check if buffer pool is working: large response sizes may bypass the 1MB pool cap
+2. Check language cache size: if it's being cleared too frequently, edits from many different pages are causing churn
+3. Consider tuning `GOGC` and `GOMEMLIMIT` environment variables
+
+---
+
 ## Troubleshooting
 
 ### Service Won't Start

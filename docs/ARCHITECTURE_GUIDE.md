@@ -17,7 +17,8 @@
 9. [Step 6 — WebSocket `/ws/feed`: Live Edit Stream](#9-step-6--websocket-wsfeed-live-edit-stream)
 10. [Step 7 — WebSocket `/ws/alerts`: Spike & Edit War Alerts](#10-step-7--websocket-wsalerts-spike--edit-war-alerts)
 11. [End-to-End: Tracing One Edit Through the Entire System](#11-end-to-end-tracing-one-edit-through-the-entire-system)
-12. [Glossary](#12-glossary)
+12. [Resilience & Performance — Protecting the Pipeline](#12-resilience--performance--protecting-the-pipeline)
+13. [Glossary](#13-glossary)
 
 ---
 
@@ -1042,7 +1043,359 @@ React frontend:
 
 ---
 
-## 12. Glossary
+## 12. Resilience & Performance — Protecting the Pipeline
+
+The data pipeline described above processes thousands of edits per second. What happens when things go wrong? A database crashes, a service slows down, or a sudden traffic spike hits the API. This section covers the five patterns WikiSurge uses to stay fast and stay up.
+
+### 12.1 Circuit Breaker Pattern (Open → Half-Open → Closed)
+
+**Code:** `internal/resilience/circuit_breaker.go`
+
+**What is it?** Think of an electrical circuit breaker in your house. When too much current flows through a wire (a short circuit), the breaker *trips* to prevent a fire. You have to go flip it back on manually. Software circuit breakers work the same way — they protect your system from repeatedly calling a failing service.
+
+**The problem it solves:** Imagine the Elasticsearch cluster goes down. Without a circuit breaker, every API request that involves search would:
+1. Try to contact Elasticsearch
+2. Wait for a timeout (say 30 seconds)
+3. Eventually return an error
+
+Meanwhile, your API has hundreds of requests stacked up, all waiting for Elasticsearch to respond. Your server's threads/goroutines are exhausted, and the *entire* API becomes unresponsive — not just search.
+
+**How the three states work:**
+
+```
+                    Failure count
+                    reaches threshold (5)
+         ┌──────────────────────────────────────┐
+         │                                      │
+         ▼                                      │
+   ┌──────────┐    Reset timeout     ┌──────────────┐
+   │          │    expires (30s)     │              │
+   │   OPEN   │ ──────────────────► │  HALF-OPEN   │
+   │          │                     │              │
+   │ (reject  │    Probe call       │ (allow 1     │
+   │  all     │ ◄── fails ──────── │  test call)  │
+   │  calls)  │                     │              │
+   └──────────┘                     └──────┬───────┘
+                                           │
+                                    Probe call succeeds
+                                           │
+                                           ▼
+                                    ┌──────────────┐
+                                    │              │
+                                    │   CLOSED     │
+                                    │              │
+                                    │ (normal —    │
+                                    │  all calls   │
+                                    │  flow through)│
+                                    └──────────────┘
+```
+
+**WikiSurge's configuration:**
+
+| Setting | Value | What it means |
+|---------|-------|---------------|
+| `FailureThreshold` | 5 | After 5 consecutive failures, trip the breaker |
+| `ResetTimeout` | 30 seconds | Wait 30s before trying again |
+| `HalfOpenMaxCalls` | 1 | Allow exactly 1 probe request in half-open state |
+
+**The `Call()` method — how requests flow through:**
+
+```go
+// In closed state: execute the function normally
+err := circuitBreaker.Call(func() error {
+    return elasticsearch.Search(query)  // the risky call
+})
+
+if err == resilience.ErrCircuitOpen {
+    // Breaker is open — don't even try, fail fast
+    return cachedResults, nil  // return stale data instead
+}
+```
+
+When `Call()` is invoked:
+1. **Closed:** Run the function. If it fails, increment the failure counter. After 5 consecutive failures → switch to **Open**.
+2. **Open:** Return `ErrCircuitOpen` immediately — no waiting, no wasted resources. After 30 seconds → switch to **Half-Open**.
+3. **Half-Open:** Allow exactly 1 test request. If it succeeds → back to **Closed** (reset failure count). If it fails → back to **Open** (restart the 30s timer).
+
+**Registry pattern:** WikiSurge manages multiple circuit breakers through a `CircuitBreakerRegistry` — one breaker for each external dependency (Elasticsearch, Redis memory, Kafka). Each breaker operates independently.
+
+**Prometheus metrics exported:**
+- `circuit_breaker_state{breaker="elasticsearch"}` — current state (0=closed, 1=open, 2=half-open)
+- `circuit_breaker_failures_total{breaker="elasticsearch"}` — total failure count
+- `circuit_breaker_rejections_total{breaker="elasticsearch"}` — how many calls were fast-failed
+
+### 12.2 Graceful Degradation Manager (3 Levels)
+
+**Code:** `internal/resilience/degradation.go`
+
+**What is it?** Instead of crashing when a component fails, the system progressively disables non-essential features to keep the core pipeline alive. It's like a car that loses air conditioning and radio during extreme heat — the engine still runs, you still get where you're going.
+
+**Three degradation levels:**
+
+| Level | Name | What it means | Example |
+|-------|------|---------------|---------|
+| 0 | **None** | Everything operational — all features enabled | Normal operation |
+| 1 | **Partial** | One component unhealthy — non-critical features disabled | ES down → search disabled, but live feed + alerts still work |
+| 2 | **Severe** | Multiple components unhealthy — only core processing | ES + Redis memory critical → only basic edit forwarding works |
+
+**Three scenarios the manager handles:**
+
+```
+Scenario 1: Elasticsearch Unavailable
+────────────────────────────────────────
+Trigger:  ES health check fails
+Action:   Disable ES indexing (search temporarily unavailable)
+          Trending + alerts + live feed continue normally
+Recovery: Re-enable indexing when ES responds again
+
+Scenario 2: Redis Memory Pressure
+────────────────────────────────────────
+Stage A:  Memory > 80% → reduce hot page limit (1000 → 100)
+Stage B:  Memory > 95% → disable trending tracking entirely
+Recovery: Restore normal limits when memory drops
+
+Scenario 3: High Kafka Consumer Lag
+────────────────────────────────────────
+Trigger:  Consumer lag > 60 seconds behind real-time
+Action:   Pause ES indexing to let processor catch up
+          (real-time alerts get priority over historical search)
+Recovery: Resume indexing when lag < 5 seconds
+```
+
+**How levels are calculated:** The manager tracks each component's health. The level is simply the number of unhealthy components:
+
+```go
+switch {
+case unhealthy == 0:  dm.level = DegradationNone     // Level 0
+case unhealthy == 1:  dm.level = DegradationPartial   // Level 1
+default:              dm.level = DegradationSevere    // Level 2
+}
+```
+
+**Audit trail:** Every degradation action is recorded with a timestamp and reason. The last 50 actions are kept in memory and exposed via the `/health` endpoint — so you can see exactly what the system did and why:
+
+```json
+{
+  "status": "degraded",
+  "degradation_level": "partial",
+  "components": {
+    "elasticsearch": { "healthy": false, "message": "connection refused" },
+    "redis": { "healthy": true },
+    "kafka": { "healthy": true }
+  },
+  "recent_actions": [
+    { "timestamp": "...", "component": "elasticsearch", "action": "disabled indexing", "reason": "connection refused" }
+  ]
+}
+```
+
+### 12.3 Redis-Backed Sliding Window Rate Limiting (Per-Endpoint)
+
+**Code:** `internal/api/rate_limiter.go`
+
+**What is it?** A system that limits how many API requests each client can make in a rolling 60-second window. Different endpoints get different limits because some operations are expensive and some are cheap.
+
+**Why Redis-backed?** If you stored rate limit counters in memory, each API server instance would have its own counter. A user could make 100 requests to server A *and* 100 to server B, effectively doubling their limit. Redis is shared across all instances, so the limit is enforced globally.
+
+**Per-endpoint limits:**
+
+| Endpoint | Limit (per minute) | Why |
+|----------|-------------------|-----|
+| `/api/search` | 100 | Hits Elasticsearch — expensive |
+| `/api/trending` | 500 | Redis read — moderate |
+| `/api/stats` | 1000 | Light computation — cheap |
+| `/api/alerts` | 500 | Redis read — moderate |
+| `/api/edit-wars` | 500 | Redis read — moderate |
+
+**Sliding window vs fixed window — why it matters:**
+
+```
+Fixed Window (flawed):
+─────────────────────────────────────────────
+Window 1 (00:00-01:00)    Window 2 (01:00-02:00)
+                      ▲
+          100 requests│100 requests
+           at 00:59   │ at 01:01
+                      │
+          = 200 requests in 2 seconds!  ← burst at window boundary
+
+Sliding Window (what WikiSurge uses):
+─────────────────────────────────────────────
+At any moment, count requests in the LAST 60 seconds.
+  00:59 → look back to 23:59 → count = 100 → BLOCKED
+No boundary burst possible.
+```
+
+**How the Redis sorted set algorithm works:**
+
+Each request is stored as a member of a Redis sorted set, with the current nanosecond timestamp as the score:
+
+```
+1. ZREMRANGEBYSCORE key -inf (now - 60s)    ← Remove entries older than window
+2. ZCARD key                                 ← Count remaining entries
+3. If count < limit:
+     ZADD key {timestamp} {unique-request-id} ← Add this request
+     EXPIRE key 70s                           ← Auto-cleanup safety net
+4. If count >= limit:
+     Return 429 Too Many Requests
+```
+
+**Response headers on every request:**
+```
+X-RateLimit-Limit: 500        ← Your limit for this endpoint
+X-RateLimit-Remaining: 347    ← How many you have left
+X-RateLimit-Reset: 1708800060 ← Unix timestamp when window resets
+Retry-After: 42               ← (only on 429) seconds to wait
+```
+
+**Fail-open design:** If Redis itself is down, the rate limiter *allows* the request through rather than blocking everyone. The error is logged, but user experience is preserved. You'll see this pattern throughout WikiSurge: **when in doubt, degrade gracefully rather than fail completely.**
+
+**Whitelist:** Trusted IPs (internal monitoring, health checkers) bypass rate limits entirely. Supports both single IPs and CIDR ranges.
+
+### 12.4 In-Memory Response Cache with TTL (10K Entry Cap)
+
+**Code:** `internal/api/cache.go`
+
+**What is it?** A fast, in-memory store that remembers recent API responses so the same expensive computation isn't repeated for every request. Think of it as a notebook where you write down answers — if someone asks the same question within a few seconds, you read from the notebook instead of solving the problem again.
+
+**Why not Redis for this?** Redis is fast (sub-millisecond), but in-memory is *instant* (nanoseconds). For high-frequency reads like "get trending pages" (called hundreds of times per second), even Redis network round-trips add up. The in-memory cache eliminates network overhead entirely.
+
+**Cache TTLs (how long each response is considered fresh):**
+
+| Response Type | TTL | Why |
+|---------------|-----|-----|
+| Alerts | 5 seconds | Users expect near-real-time alerts |
+| Search results | 10 seconds | Search is expensive, slight staleness is acceptable |
+| Geo activity | 30 seconds | Geographic aggregation changes slowly |
+| Stats | In-memory (separate) | Platform stats are polled frequently |
+
+**The 10,000 entry cap — what happens when it's full:**
+
+The cache has a hard limit of `responseCacheMaxEntries = 10_000`. When the cache reaches capacity, new entries are simply *not cached* — existing entries are left alone until they expire naturally. This prevents unbounded memory growth:
+
+```go
+func (c *responseCache) Set(key string, data []byte, ttl time.Duration) {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    if len(c.entries) >= responseCacheMaxEntries {
+        return  // At capacity — skip caching, don't evict
+    }
+    c.entries[key] = &cacheEntry{data: data, expiresAt: time.Now().Add(ttl)}
+}
+```
+
+**Background cleanup:** Every 30 seconds, a goroutine sweeps the entire cache and deletes expired entries. This is cheap because it only runs every 30 seconds and the map is small (≤10K entries).
+
+**Cache key generation:** Keys are SHA-256 hashes of the request parameters (endpoint + query string), truncated to 32 hex characters. This ensures identical requests always hit the same cache entry.
+
+**Cache headers:** Responses include `X-Cache: HIT` or `X-Cache: MISS` so you can tell whether a response came from cache or was freshly computed.
+
+### 12.5 Object Pool Reuse to Reduce GC Pressure
+
+**Code:** `internal/api/optimizations.go`
+
+**What is it?** Instead of creating new objects for every request and letting Go's garbage collector clean them up, we keep a "pool" of reusable objects that get borrowed and returned — like library books.
+
+**Why does this matter?** Go's garbage collector (GC) automatically frees memory that's no longer used. But GC has a cost:
+- It pauses your program briefly while scanning memory
+- More garbage created → more frequent scans → more pauses
+- On a server handling 1000+ requests/sec, these pauses add up to real latency
+
+**WikiSurge's three pools:**
+
+**1. Buffer Pool** — for JSON serialization:
+```go
+var bufferPool = sync.Pool{
+    New: func() interface{} {
+        return new(bytes.Buffer)
+    },
+}
+```
+
+Every API response needs a `bytes.Buffer` to serialize JSON. Without pooling, that's 1000+ buffer allocations per second, each becoming garbage immediately after the response is sent. With pooling, the same ~100 buffers are reused endlessly.
+
+Safety check: buffers larger than 1 MB are *not* returned to the pool (they might have been used for an unusually large response and would waste memory sitting idle).
+
+**2. Trending Slice Pool** — for trending page results:
+```go
+var trendingResponsePool = sync.Pool{
+    New: func() interface{} {
+        s := make([]TrendingPageResponse, 0, 100)
+        return &s
+    },
+}
+```
+
+The `/api/trending` endpoint is one of the most frequently called. Each call builds a slice of trending pages. Pre-allocating slices with capacity 100 avoids repeated grow-and-copy cycles during slice append operations.
+
+**3. Language Cache** — avoids re-extracting language codes:
+```go
+var languageCache sync.Map  // page title → language code
+```
+
+Extracting the language from a page title (e.g., `"en"` from a URL) is string parsing. The language cache remembers results so the same title is only parsed once. When the cache exceeds 100,000 entries, it's cleared entirely (language codes are cheap to recompute).
+
+**Optimized JSON encoding:**
+
+```go
+func respondJSONPooled(...) {
+    buf := getBuffer()           // Borrow buffer from pool
+    defer putBuffer(buf)         // Return to pool when done
+
+    enc := json.NewEncoder(buf)
+    enc.SetEscapeHTML(false)     // Skip HTML escaping (5-10% faster)
+    enc.Encode(data)
+    w.Write(buf.Bytes())
+}
+```
+
+`SetEscapeHTML(false)` is a small but meaningful optimization — Go's JSON encoder normally escapes `<`, `>`, and `&` characters for HTML safety. Since API responses aren't rendered as HTML, this escaping wastes CPU cycles.
+
+### 12.6 How These Patterns Work Together
+
+These five features form a layered defense. Here's what happens when a request arrives at the API:
+
+```
+Incoming HTTP Request
+        │
+        ▼
+┌───────────────────┐
+│  Rate Limiter     │ ← Redis sliding window check
+│  (per endpoint)   │   Over limit? → 429 + Retry-After header
+└────────┬──────────┘
+         │ Allowed
+         ▼
+┌───────────────────┐
+│  Response Cache   │ ← In-memory TTL lookup
+│  (10K entries)    │   Cache hit? → Return instantly (X-Cache: HIT)
+└────────┬──────────┘
+         │ Cache miss
+         ▼
+┌───────────────────┐
+│  Handler logic    │ ← Uses object pools for JSON serialization
+│  (object pools)   │   Borrows buffer → encodes → returns buffer
+└────────┬──────────┘
+         │ Needs external data
+         ▼
+┌───────────────────┐
+│  Circuit Breaker  │ ← Wraps calls to Redis/ES/Kafka
+│  (per dependency) │   Breaker open? → Return degraded response
+└────────┬──────────┘
+         │ Dependency available
+         ▼
+┌───────────────────┐
+│  Degradation Mgr  │ ← Checks if feature is currently enabled
+│  (3 levels)       │   Feature disabled? → Skip or use fallback
+└────────┬──────────┘
+         │ All good
+         ▼
+    Normal response
+    (cached for next request)
+```
+
+---
+
+## 13. Glossary
 
 | Term | Definition |
 |------|-----------|
@@ -1072,8 +1425,15 @@ React frontend:
 | **Sliding window** | A technique that only considers data within a moving time range (e.g., "last 5 minutes") |
 | **TTL** | Time To Live — how long a Redis key exists before auto-deletion |
 | **Snappy** | A fast compression algorithm used for Kafka messages |
+| **Circuit Breaker** | A pattern that stops calling a failing service after too many errors, preventing cascade failures. Named after electrical circuit breakers |
+| **Graceful Degradation** | Progressively disabling non-essential features under stress to keep core functionality alive |
+| **Rate Limiting** | Restricting how many requests a client can make in a time window to prevent abuse and overload |
+| **Object Pool** | A collection of reusable objects (buffers, slices) that are borrowed and returned instead of created and garbage-collected |
+| **sync.Pool** | Go's built-in object pool implementation — thread-safe, automatically shrinks during GC |
+| **GC (Garbage Collection)** | Automatic memory management that frees unused objects. Frequent GC causes brief pauses |
+| **Fail-open** | A design choice where, if a safety check fails (e.g., Redis down), the system allows the request through rather than blocking everyone |
 
 ---
 
 > **Architecture document generated from WikiSurge source code.**  
-> **Files referenced:** `internal/ingestor/client.go`, `internal/kafka/producer.go`, `internal/kafka/consumer.go`, `internal/kafka/dead_letter.go`, `internal/processor/detector.go`, `internal/processor/aggregator.go`, `internal/processor/edit_war_detector.go`, `internal/processor/indexer.go`, `internal/processor/ws_forwarder.go`, `internal/storage/redis_hot_pages.go`, `internal/storage/redis_trending.go`, `internal/storage/redis_alerts.go`, `internal/storage/storage_strategy.go`, `internal/api/websocket.go`, `internal/api/alert_hub.go`, `internal/api/websocket_alerts.go`, `internal/api/server.go`, `configs/config.dev.yaml`
+> **Files referenced:** `internal/ingestor/client.go`, `internal/kafka/producer.go`, `internal/kafka/consumer.go`, `internal/kafka/dead_letter.go`, `internal/processor/detector.go`, `internal/processor/aggregator.go`, `internal/processor/edit_war_detector.go`, `internal/processor/indexer.go`, `internal/processor/ws_forwarder.go`, `internal/storage/redis_hot_pages.go`, `internal/storage/redis_trending.go`, `internal/storage/redis_alerts.go`, `internal/storage/storage_strategy.go`, `internal/api/websocket.go`, `internal/api/alert_hub.go`, `internal/api/websocket_alerts.go`, `internal/api/server.go`, `internal/resilience/circuit_breaker.go`, `internal/resilience/degradation.go`, `internal/api/rate_limiter.go`, `internal/api/cache.go`, `internal/api/optimizations.go`, `configs/config.dev.yaml`
