@@ -133,6 +133,9 @@ func (s *APIServer) setupRoutes() {
 	s.router.HandleFunc("GET /api/search", s.handleSearch)
 	s.router.HandleFunc("GET /api/geo-activity", s.handleGetGeoActivity)
 
+	// Wikipedia autocomplete endpoint
+	s.router.HandleFunc("GET /api/wiki/autocomplete", s.handleWikiAutocomplete)
+
 	// Documentation routes
 	s.router.HandleFunc("GET /api/docs", s.handleAPIDocs)
 	s.router.HandleFunc("GET /api/docs/openapi.yaml", s.handleOpenAPISpec)

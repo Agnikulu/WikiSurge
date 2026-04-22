@@ -139,7 +139,7 @@ describe('SettingsPanel – watchlist autocomplete', () => {
 
   // ── Debounce: fires after 300ms ───────────────────────────────────────────
 
-  it('calls the Wikipedia OpenSearch API after 300ms debounce', async () => {
+  it('calls the backend autocomplete API after 300ms debounce', async () => {
     vi.mocked(global.fetch).mockReturnValue(wikiResponse(['Bitcoin', 'Bitcoin Cash']) as never);
     setupStore();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -152,9 +152,9 @@ describe('SettingsPanel – watchlist autocomplete', () => {
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
 
     const url = vi.mocked(global.fetch).mock.calls[0][0] as string;
-    expect(url).toContain('wikipedia.org/w/api.php');
-    expect(url).toContain('action=opensearch');
-    expect(url).toContain('Bit');
+    expect(url).toContain('/api/wiki/autocomplete');
+    expect(url).toContain('q=Bit');
+    expect(url).toContain('lang=en');
   });
 
   it('resets the debounce timer on each keystroke', async () => {
@@ -521,7 +521,7 @@ describe('SettingsPanel – watchlist autocomplete', () => {
 
   // ── Wikipedia URL construction ────────────────────────────────────────────
 
-  it('URL-encodes the search query in the Wikipedia API call', async () => {
+  it('URL-encodes the search query in the backend autocomplete call', async () => {
     vi.mocked(global.fetch).mockReturnValue(wikiResponse(['Taylor Swift']) as never);
     setupStore();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -532,12 +532,12 @@ describe('SettingsPanel – watchlist autocomplete', () => {
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
 
     const url = vi.mocked(global.fetch).mock.calls[0][0] as string;
-    expect(url).toContain('Taylor%20Swift');
-    expect(url).toContain('origin=*');
-    expect(url).toContain('limit=6');
+    expect(url).toContain('/api/wiki/autocomplete');
+    expect(url).toContain('q=Taylor%20Swift');
+    expect(url).toContain('lang=en');
   });
 
-  it('requests exactly 6 suggestions from the API', async () => {
+  it('uses the backend autocomplete endpoint', async () => {
     vi.mocked(global.fetch).mockReturnValue(wikiResponse(['A', 'B', 'C', 'D', 'E', 'F', 'G']) as never);
     setupStore();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -548,7 +548,7 @@ describe('SettingsPanel – watchlist autocomplete', () => {
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
 
     const url = vi.mocked(global.fetch).mock.calls[0][0] as string;
-    expect(url).toContain('limit=6');
+    expect(url).toContain('/api/wiki/autocomplete');
   });
 
   // ── Null / loading guard ──────────────────────────────────────────────────

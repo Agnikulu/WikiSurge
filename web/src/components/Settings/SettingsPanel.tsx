@@ -73,10 +73,14 @@ export function SettingsPanel() {
     debounceRef.current = setTimeout(async () => {
       setSuggestionsLoading(true);
       try {
-        const url = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=6&format=json&origin=*`;
+        const url = `/api/wiki/autocomplete?q=${encodeURIComponent(query)}&lang=en`;
         const res = await fetch(url);
         const data = await res.json();
-        const titles: string[] = data[1] ?? [];
+        const titles: string[] = Array.isArray(data?.suggestions)
+          ? data.suggestions
+          : Array.isArray(data?.[1])
+            ? data[1]
+            : [];
         setSuggestions(titles);
         setShowSuggestions(titles.length > 0);
         setActiveSuggestion(-1);
