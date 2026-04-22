@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Settings,
   Mail,
@@ -26,6 +26,12 @@ export function SettingsPanel() {
   const [threshold, setThreshold] = useState(user?.spike_threshold ?? 3.0);
   const [watchlist, setWatchlist] = useState<string[]>(user?.watchlist ?? []);
   const [newPage, setNewPage] = useState('');
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const suggestionsContainerRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saved, setSaved] = useState(false);
   const [watchlistSaved, setWatchlistSaved] = useState(false);
 
@@ -55,13 +61,71 @@ export function SettingsPanel() {
     }
   }, [frequency, content, threshold, updatePreferences, clearError]);
 
+  // Fetch Wikipedia suggestions with 300ms debounce
+  useEffect(() => {
+    const query = newPage.trim();
+    if (query.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setSuggestionsLoading(true);
+      try {
+        const url = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=6&format=json&origin=*`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const titles: string[] = data[1] ?? [];
+        setSuggestions(titles);
+        setShowSuggestions(titles.length > 0);
+        setActiveSuggestion(-1);
+      } catch {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [newPage]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (suggestionsContainerRef.current && !suggestionsContainerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectSuggestion = useCallback((title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed || watchlist.includes(trimmed) || watchlist.length >= 100) return;
+    setWatchlist((prev) => [...prev, trimmed]);
+    setNewPage('');
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setActiveSuggestion(-1);
+  }, [watchlist]);
+
   const handleAddPage = useCallback(() => {
+    if (activeSuggestion >= 0 && suggestions[activeSuggestion]) {
+      handleSelectSuggestion(suggestions[activeSuggestion]);
+      return;
+    }
     const title = newPage.trim();
     if (!title || watchlist.includes(title)) return;
     if (watchlist.length >= 100) return;
     setWatchlist([...watchlist, title]);
     setNewPage('');
-  }, [newPage, watchlist]);
+    setSuggestions([]);
+    setShowSuggestions(false);
+  }, [newPage, watchlist, activeSuggestion, suggestions, handleSelectSuggestion]);
 
   const handleRemovePage = useCallback(
     (title: string) => {
@@ -305,32 +369,80 @@ export function SettingsPanel() {
         </h3>
 
         {/* Add page */}
-        <div className="flex gap-2 mb-4">
-          <input
-            type="text"
-            value={newPage}
-            onChange={(e) => setNewPage(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddPage()}
-            placeholder="Wikipedia article title (e.g. Bitcoin)"
-            className="flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none"
-            style={{
-              background: 'rgba(0,255,136,0.05)',
-              border: '1px solid rgba(0,255,136,0.2)',
-              color: '#e2e8f0',
-            }}
-          />
-          <button
-            onClick={handleAddPage}
-            disabled={!newPage.trim() || watchlist.length >= 100}
-            className="px-3 py-2 rounded-lg text-xs font-mono font-bold transition-all disabled:opacity-30"
-            style={{
-              background: 'rgba(0,255,136,0.12)',
-              border: '1px solid rgba(0,255,136,0.3)',
-              color: '#00ff88',
-            }}
-          >
-            <Plus className="h-4 w-4" />
-          </button>
+        <div className="relative mb-4" ref={suggestionsContainerRef}>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newPage}
+              onChange={(e) => { setNewPage(e.target.value); }}
+              onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setActiveSuggestion((i) => Math.min(i + 1, suggestions.length - 1));
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setActiveSuggestion((i) => Math.max(i - 1, -1));
+                } else if (e.key === 'Escape') {
+                  setShowSuggestions(false);
+                } else if (e.key === 'Enter') {
+                  handleAddPage();
+                }
+              }}
+              placeholder="Search Wikipedia article title…"
+              className="flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none"
+              style={{
+                background: 'rgba(0,255,136,0.05)',
+                border: '1px solid rgba(0,255,136,0.2)',
+                color: '#e2e8f0',
+              }}
+            />
+            <button
+              onClick={handleAddPage}
+              disabled={!newPage.trim() || watchlist.length >= 100}
+              className="px-3 py-2 rounded-lg text-xs font-mono font-bold transition-all disabled:opacity-30"
+              style={{
+                background: 'rgba(0,255,136,0.12)',
+                border: '1px solid rgba(0,255,136,0.3)',
+                color: '#00ff88',
+              }}
+            >
+              {suggestionsLoading
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Plus className="h-4 w-4" />}
+            </button>
+          </div>
+          {/* Autocomplete dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <ul
+              className="absolute z-50 left-0 right-0 mt-1 rounded-lg overflow-hidden"
+              style={{
+                background: 'rgba(13,21,37,0.98)',
+                border: '1px solid rgba(0,255,136,0.25)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              }}
+            >
+              {suggestions.map((title, i) => (
+                <li
+                  key={title}
+                  onMouseDown={() => handleSelectSuggestion(title)}
+                  onMouseEnter={() => setActiveSuggestion(i)}
+                  className="flex items-center gap-2 px-3 py-2 cursor-pointer text-xs font-mono transition-colors"
+                  style={{
+                    background: i === activeSuggestion ? 'rgba(0,255,136,0.12)' : 'transparent',
+                    color: watchlist.includes(title) ? 'rgba(0,255,136,0.3)' : '#e2e8f0',
+                    borderBottom: i < suggestions.length - 1 ? '1px solid rgba(0,255,136,0.06)' : 'none',
+                  }}
+                >
+                  <Star className="h-3 w-3 flex-shrink-0" style={{ color: 'rgba(0,255,136,0.4)' }} />
+                  <span className="truncate">{title}</span>
+                  {watchlist.includes(title) && (
+                    <span className="ml-auto text-[10px]" style={{ color: 'rgba(0,255,136,0.4)' }}>already added</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Page list */}
