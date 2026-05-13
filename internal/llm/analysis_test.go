@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -313,7 +314,7 @@ func TestAnalysisService_BuildPrompt(t *testing.T) {
 	system, user := svc.buildPrompt("Climate_Change", entries, nil)
 
 	// System prompt should contain instructions
-	assert.Contains(t, system, "Wikipedia edit war analyst")
+	assert.Contains(t, system, "Wikipedia edit war")
 	assert.Contains(t, system, "JSON")
 
 	// User prompt should contain page title and all entries
@@ -348,7 +349,7 @@ func TestAnalysisService_BuildPrompt_WithDiffs(t *testing.T) {
 
 	assert.Contains(t, user, "A new paragraph about climate policy")
 	assert.Contains(t, user, "Diff:")
-	assert.Contains(t, user, "EXACT text that was added or removed")
+	assert.Contains(t, user, "exact text") // user prompt explains diffs show exact text
 }
 
 // ─── Response parsing tests ─────────────────────────────────────────────────
@@ -574,4 +575,300 @@ func TestAccuracy_MultiPartyConflict(t *testing.T) {
 	assert.Contains(t, analysis.ContentArea, "technolog")
 
 	t.Logf("Multi-party conflict: %s", analysis.Summary)
+}
+
+// ─── New field: Headline, WhatIsAtStake, EscalationTrend ────────────────────
+
+// TestHeuristicAnalysis_DramaticWar_NewFields verifies that a clearly dramatic
+// edit war (many edits, high revert rate, second half faster) produces
+// non-empty headline, what_is_at_stake, and a meaningful escalation_trend.
+func TestHeuristicAnalysis_DramaticWar_NewFields(t *testing.T) {
+	redisClient, _ := setupTestRedis(t)
+	defer redisClient.Close()
+
+	llmClient := NewClient(Config{Provider: ProviderOpenAI}, zerolog.Nop())
+	svc := NewAnalysisService(llmClient, redisClient, 5*time.Minute, zerolog.Nop())
+
+	pageTitle := "Ukraine_War_Casualties"
+	now := time.Now()
+
+	// 12 edits, second half twice as fast — should trigger "rising" escalation.
+	entries := []EditTimelineEntry{
+		{User: "Editor_A", Comment: "Updated UN casualty figures per OHCHR report", ByteChange: 900, Timestamp: now.Add(-60 * time.Minute).Unix()},
+		{User: "Editor_B", Comment: "Reverted - figures disputed by Russian MOD", ByteChange: -880, Timestamp: now.Add(-52 * time.Minute).Unix()},
+		{User: "Editor_A", Comment: "Restored OHCHR data, WP:RS policy applies", ByteChange: 910, Timestamp: now.Add(-44 * time.Minute).Unix()},
+		{User: "Editor_B", Comment: "Removed again, both sides should be presented", ByteChange: -895, Timestamp: now.Add(-36 * time.Minute).Unix()},
+		{User: "Editor_C", Comment: "Added compromise text citing both OHCHR and MOD", ByteChange: 950, Timestamp: now.Add(-28 * time.Minute).Unix()},
+		{User: "Editor_B", Comment: "Compromise rejected, reverted to last stable", ByteChange: -930, Timestamp: now.Add(-20 * time.Minute).Unix()},
+		// Second half much faster (roughly 2× pace)
+		{User: "Editor_A", Comment: "Re-added OHCHR section verbatim", ByteChange: 905, Timestamp: now.Add(-10 * time.Minute).Unix()},
+		{User: "Editor_B", Comment: "Reverted", ByteChange: -900, Timestamp: now.Add(-8 * time.Minute).Unix()},
+		{User: "Editor_A", Comment: "Not reverting — adding new sourced content", ByteChange: 915, Timestamp: now.Add(-6 * time.Minute).Unix()},
+		{User: "Editor_B", Comment: "Rv", ByteChange: -905, Timestamp: now.Add(-4 * time.Minute).Unix()},
+		{User: "Editor_C", Comment: "Tried mediation again, undone within 2 min", ByteChange: 960, Timestamp: now.Add(-2 * time.Minute).Unix()},
+		{User: "Editor_B", Comment: "Reverted mediation too - seek consensus first", ByteChange: -940, Timestamp: now.Add(-1 * time.Minute).Unix()},
+	}
+	seedTimeline(t, redisClient, pageTitle, entries)
+
+	analysis, err := svc.Analyze(context.Background(), pageTitle)
+	require.NoError(t, err)
+	require.NotNil(t, analysis)
+
+	// Headline must be populated and reference the page
+	assert.NotEmpty(t, analysis.Headline, "Headline should be set for a dramatic edit war")
+	assert.Contains(t, analysis.Headline, pageTitle,
+		"Headline should mention the article name")
+
+	// WhatIsAtStake must be a non-trivial sentence about the contested content
+	assert.NotEmpty(t, analysis.WhatIsAtStake,
+		"WhatIsAtStake should be populated for a dramatic edit war")
+	assert.Greater(t, len(analysis.WhatIsAtStake), 30,
+		"WhatIsAtStake should be a real sentence, not a placeholder")
+
+	// Escalation trend: second half edits are twice as fast → should be "rising"
+	assert.Equal(t, "rising", analysis.EscalationTrend,
+		"escalation_trend should be 'rising' when second half is faster")
+
+	// High revert count (10/12) → severity should be moderate or higher
+	assert.Contains(t, []string{"moderate", "high", "critical"}, analysis.Severity,
+		"dramatic edit war should not be rated 'low'")
+
+	// Summary should describe the pattern
+	assert.Contains(t, strings.ToLower(analysis.Summary), "revert",
+		"summary should mention the revert pattern")
+
+	t.Logf("Dramatic war: headline=%q  trend=%s  severity=%s",
+		analysis.Headline, analysis.EscalationTrend, analysis.Severity)
+}
+
+// TestHeuristicAnalysis_QuietPage_NoDramaFalsePositive verifies that a calm
+// page with only two slow, small, positive edits does not get flagged as
+// dramatic by the heuristic analysis.
+func TestHeuristicAnalysis_QuietPage_NoDramaFalsePositive(t *testing.T) {
+	redisClient, _ := setupTestRedis(t)
+	defer redisClient.Close()
+
+	llmClient := NewClient(Config{Provider: ProviderOpenAI}, zerolog.Nop())
+	svc := NewAnalysisService(llmClient, redisClient, 5*time.Minute, zerolog.Nop())
+
+	pageTitle := "Quiet_Article"
+	now := time.Now()
+
+	// Two editors making constructive additions, 45 minutes apart — not an edit war
+	entries := []EditTimelineEntry{
+		{User: "Ed1", Comment: "Added citation for population figure", ByteChange: 150, Timestamp: now.Add(-90 * time.Minute).Unix()},
+		{User: "Ed2", Comment: "Copyedit, fixed grammar", ByteChange: -20, Timestamp: now.Add(-45 * time.Minute).Unix()},
+		{User: "Ed1", Comment: "Expanded geography section", ByteChange: 320, Timestamp: now.Add(-10 * time.Minute).Unix()},
+	}
+	seedTimeline(t, redisClient, pageTitle, entries)
+
+	analysis, err := svc.Analyze(context.Background(), pageTitle)
+	require.NoError(t, err)
+	require.NotNil(t, analysis)
+
+	// Should be rated low — not a real edit war
+	assert.Equal(t, "low", analysis.Severity,
+		"slow collaborative editing should be rated 'low' severity")
+
+	// EscalationTrend should not be "rising"
+	assert.NotEqual(t, "rising", analysis.EscalationTrend,
+		"quiet page should not have rising escalation trend")
+
+	// Headline and WhatIsAtStake are still populated (heuristic always sets them)
+	assert.NotEmpty(t, analysis.Headline)
+	assert.NotEmpty(t, analysis.WhatIsAtStake)
+
+	t.Logf("Quiet page: headline=%q  trend=%s  severity=%s",
+		analysis.Headline, analysis.EscalationTrend, analysis.Severity)
+}
+
+// TestHeuristicAnalysis_CoolingWar verifies that when edit frequency drops
+// in the second half, the escalation trend is "cooling".
+func TestHeuristicAnalysis_CoolingWar(t *testing.T) {
+	redisClient, _ := setupTestRedis(t)
+	defer redisClient.Close()
+
+	llmClient := NewClient(Config{Provider: ProviderOpenAI}, zerolog.Nop())
+	svc := NewAnalysisService(llmClient, redisClient, 5*time.Minute, zerolog.Nop())
+
+	pageTitle := "Cooling_War_Page"
+	now := time.Now()
+
+	// First half: 4 edits over 8 minutes (very fast)
+	// Second half: 4 edits over 40 minutes (much slower — cooling down)
+	entries := []EditTimelineEntry{
+		{User: "Alpha", Comment: "Revert", ByteChange: -500, Timestamp: now.Add(-50 * time.Minute).Unix()},
+		{User: "Beta", Comment: "Revert", ByteChange: 490, Timestamp: now.Add(-48 * time.Minute).Unix()},
+		{User: "Alpha", Comment: "Revert", ByteChange: -495, Timestamp: now.Add(-46 * time.Minute).Unix()},
+		{User: "Beta", Comment: "Revert", ByteChange: 488, Timestamp: now.Add(-44 * time.Minute).Unix()},
+		// Long gap — dispute cooling
+		{User: "Alpha", Comment: "Restored with new source", ByteChange: -492, Timestamp: now.Add(-30 * time.Minute).Unix()},
+		{User: "Beta", Comment: "Adjusted wording", ByteChange: 100, Timestamp: now.Add(-20 * time.Minute).Unix()},
+		{User: "Alpha", Comment: "Minor tweak", ByteChange: 50, Timestamp: now.Add(-10 * time.Minute).Unix()},
+		{User: "Beta", Comment: "Accepted edit", ByteChange: 30, Timestamp: now.Add(-5 * time.Minute).Unix()},
+	}
+	seedTimeline(t, redisClient, pageTitle, entries)
+
+	analysis, err := svc.Analyze(context.Background(), pageTitle)
+	require.NoError(t, err)
+
+	assert.Equal(t, "cooling", analysis.EscalationTrend,
+		"edit war that slows down in the second half should be 'cooling'")
+	assert.NotEmpty(t, analysis.Headline)
+	t.Logf("Cooling war: trend=%s  severity=%s", analysis.EscalationTrend, analysis.Severity)
+}
+
+// TestLLMParsing_AllNewFields verifies that when the LLM returns a response
+// containing headline, what_is_at_stake, and escalation_trend, all three are
+// correctly extracted and set on the Analysis struct.
+func TestLLMParsing_AllNewFields(t *testing.T) {
+	redisClient, _ := setupTestRedis(t)
+	defer redisClient.Close()
+
+	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{
+					"message": map[string]interface{}{
+						"content": `{
+							"headline": "Editors dispute whether Elon Musk's 2022 Twitter acquisition should be called a 'hostile takeover' in the lead section.",
+							"what_is_at_stake": "If the first group wins, the article's lead will describe the acquisition as a hostile takeover with forced layoffs. If the second group wins, the article will use neutral language without characterizing intent.",
+							"summary": "An edit war over one phrase in the lead section has been running for 90 minutes. One editor repeatedly inserts 'hostile takeover' while another removes it, citing WP:NPOV.",
+							"sides": [
+								{
+									"position": "Describe acquisition as hostile takeover using sources from FT and NYT",
+									"editors": [{"user": "CriticalUser", "edit_count": 4, "role": "Has added 'hostile takeover' language four times, citing FT and NYT coverage."}]
+								},
+								{
+									"position": "Use neutral language; characterization of intent is not encyclopedic",
+									"editors": [{"user": "NeutralUser", "edit_count": 3, "role": "Has reverted the 'hostile takeover' phrase three times, citing WP:NPOV policy."}]
+								}
+							],
+							"content_area": "lead section characterization of business acquisition",
+							"severity": "high",
+							"recommendation": "Both editors should take this to the talk page. The phrase 'hostile takeover' is used in reliable sources, so mediation via WP:3O is appropriate.",
+							"escalation_trend": "rising"
+						}`,
+					},
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockLLM.Close()
+
+	llmClient := NewClient(Config{
+		Provider: ProviderOpenAI,
+		APIKey:   "test-key",
+		BaseURL:  mockLLM.URL,
+	}, zerolog.Nop())
+	svc := NewAnalysisService(llmClient, redisClient, 5*time.Minute, zerolog.Nop())
+
+	pageTitle := "Elon_Musk_Twitter"
+	now := time.Now()
+	entries := []EditTimelineEntry{
+		{User: "CriticalUser", Comment: "Added 'hostile takeover' per FT", ByteChange: 30, Timestamp: now.Add(-90 * time.Minute).Unix()},
+		{User: "NeutralUser", Comment: "Reverted NPOV violation", ByteChange: -28, Timestamp: now.Add(-85 * time.Minute).Unix()},
+		{User: "CriticalUser", Comment: "Restored sourced phrase", ByteChange: 30, Timestamp: now.Add(-70 * time.Minute).Unix()},
+		{User: "NeutralUser", Comment: "Removed again - not neutral", ByteChange: -28, Timestamp: now.Add(-60 * time.Minute).Unix()},
+		{User: "CriticalUser", Comment: "NYT also uses this term", ByteChange: 30, Timestamp: now.Add(-40 * time.Minute).Unix()},
+		{User: "NeutralUser", Comment: "Rv", ByteChange: -28, Timestamp: now.Add(-15 * time.Minute).Unix()},
+		{User: "CriticalUser", Comment: "Re-adding, will start 3O", ByteChange: 30, Timestamp: now.Add(-5 * time.Minute).Unix()},
+	}
+	seedTimeline(t, redisClient, pageTitle, entries)
+
+	analysis, err := svc.Analyze(context.Background(), pageTitle)
+	require.NoError(t, err)
+
+	// All three new fields must be populated from the LLM JSON
+	assert.Equal(t,
+		"Editors dispute whether Elon Musk's 2022 Twitter acquisition should be called a 'hostile takeover' in the lead section.",
+		analysis.Headline,
+		"Headline should be parsed from LLM JSON")
+
+	assert.Contains(t, analysis.WhatIsAtStake, "hostile takeover",
+		"WhatIsAtStake should be parsed from LLM JSON")
+
+	assert.Equal(t, "rising", analysis.EscalationTrend,
+		"EscalationTrend should be parsed from LLM JSON")
+
+	// Existing fields should still work
+	assert.Equal(t, "high", analysis.Severity)
+	assert.Contains(t, analysis.Summary, "edit war")
+	assert.Equal(t, 7, analysis.EditCount)
+	assert.Contains(t, analysis.ContentArea, "lead section")
+
+	// Role descriptions should be factual sentences, not nicknames
+	for _, side := range analysis.Sides {
+		for _, ed := range side.Editors {
+			assert.NotContains(t, strings.ToLower(ed.Role), "sniper",
+				"role should not contain creative nicknames")
+			assert.NotContains(t, strings.ToLower(ed.Role), "vigilante",
+				"role should not contain creative nicknames")
+		}
+	}
+
+	t.Logf("New fields — headline: %q", analysis.Headline)
+	t.Logf("             what_is_at_stake: %q", analysis.WhatIsAtStake)
+	t.Logf("             escalation_trend: %q", analysis.EscalationTrend)
+}
+
+// TestParseLLMResponse_NewFieldsInJSON verifies parseLLMResponse directly
+// extracts headline, what_is_at_stake, and escalation_trend from raw JSON.
+func TestParseLLMResponse_NewFieldsInJSON(t *testing.T) {
+	redisClient, _ := setupTestRedis(t)
+	defer redisClient.Close()
+
+	llmClient := NewClient(Config{}, zerolog.Nop())
+	svc := NewAnalysisService(llmClient, redisClient, 5*time.Minute, zerolog.Nop())
+
+	response := `{
+		"headline": "Three editors dispute whether a 2019 court ruling should be described as 'corruption' in the lead.",
+		"what_is_at_stake": "If Side A wins, the article will call the ruling corrupt. If Side B wins, it will describe the ruling neutrally without editorial characterization.",
+		"summary": "A dispute over the lead section of a political article.",
+		"sides": [
+			{"position": "Call the ruling corrupt", "editors": [{"user": "A", "edit_count": 3, "role": "Repeatedly adds the word 'corrupt' to the lead."}]},
+			{"position": "Keep neutral language", "editors": [{"user": "B", "edit_count": 2, "role": "Removes characterizations citing WP:NPOV."}]}
+		],
+		"content_area": "political article lead section",
+		"severity": "moderate",
+		"recommendation": "Request third opinion.",
+		"escalation_trend": "steady"
+	}`
+
+	analysis := svc.parseLLMResponse("Court_Ruling", response, 5)
+
+	assert.Equal(t, "Three editors dispute whether a 2019 court ruling should be described as 'corruption' in the lead.", analysis.Headline)
+	assert.Contains(t, analysis.WhatIsAtStake, "corrupt")
+	assert.Equal(t, "steady", analysis.EscalationTrend)
+	assert.Equal(t, "moderate", analysis.Severity)
+}
+
+// TestParseLLMResponse_NewFieldsMissing verifies that if the LLM omits the
+// new fields, the parser handles it gracefully (zero value, no panic).
+func TestParseLLMResponse_NewFieldsMissing(t *testing.T) {
+	redisClient, _ := setupTestRedis(t)
+	defer redisClient.Close()
+
+	llmClient := NewClient(Config{}, zerolog.Nop())
+	svc := NewAnalysisService(llmClient, redisClient, 5*time.Minute, zerolog.Nop())
+
+	// Old-style response without new fields
+	response := `{
+		"summary": "An edit war with no headline provided.",
+		"sides": [{"position": "Side A", "editors": [{"user": "X", "edit_count": 2, "role": "reverter"}]}],
+		"content_area": "unknown",
+		"severity": "low",
+		"recommendation": "Monitor the situation."
+	}`
+
+	analysis := svc.parseLLMResponse("Old_Format_Page", response, 3)
+
+	// Should not panic; fields default to empty strings
+	assert.Equal(t, "An edit war with no headline provided.", analysis.Summary)
+	assert.Equal(t, "low", analysis.Severity)
+	// New fields absent from JSON → empty string (no crash)
+	assert.IsType(t, "", analysis.Headline, "Headline should default to empty string")
+	assert.IsType(t, "", analysis.WhatIsAtStake, "WhatIsAtStake should default to empty string")
+	assert.IsType(t, "", analysis.EscalationTrend, "EscalationTrend should default to empty string")
 }

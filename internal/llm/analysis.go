@@ -37,15 +37,18 @@ type Side struct {
 
 // Analysis is the LLM-generated narrative returned to the frontend.
 type Analysis struct {
-	PageTitle      string      `json:"page_title"`
-	Summary        string      `json:"summary"`         // 2-3 sentence conflict explanation
-	Sides          []Side      `json:"sides"`            // opposing sides with grouped editors
-	ContentArea    string      `json:"content_area"`     // topic area of disagreement
-	Severity       string      `json:"severity"`         // "low", "moderate", "high", "critical"
-	Recommendation string      `json:"recommendation"`   // suggested resolution
-	EditCount      int         `json:"edit_count"`       // how many edits were analyzed
-	GeneratedAt    string      `json:"generated_at"`     // RFC3339
-	CacheHit       bool        `json:"cache_hit"`        // whether this came from cache
+	PageTitle       string `json:"page_title"`
+	Headline        string `json:"headline"`          // One-sentence accessible summary of the dispute
+	WhatIsAtStake   string `json:"what_is_at_stake"`  // Concrete: what changes if each side wins
+	Summary         string `json:"summary"`           // 3-4 sentence conflict narrative
+	Sides           []Side `json:"sides"`             // opposing sides with grouped editors
+	ContentArea     string `json:"content_area"`      // topic area of disagreement
+	Severity        string `json:"severity"`          // "low", "moderate", "high", "critical"
+	Recommendation  string `json:"recommendation"`    // suggested resolution
+	EscalationTrend string `json:"escalation_trend"`  // "rising", "steady", "cooling"
+	EditCount       int    `json:"edit_count"`        // how many edits were analyzed
+	GeneratedAt     string `json:"generated_at"`      // RFC3339
+	CacheHit        bool   `json:"cache_hit"`         // whether this came from cache
 }
 
 // AnalysisService builds prompts from edit war timeline data, calls the LLM,
@@ -300,53 +303,42 @@ func (s *AnalysisService) fetchDiffs(ctx context.Context, pageTitle string, entr
 
 // buildPrompt constructs the system + user prompts for the LLM.
 func (s *AnalysisService) buildPrompt(pageTitle string, entries []EditTimelineEntry, diffs map[int64]string) (string, string) {
-	systemPrompt := `You are a sharp, perceptive Wikipedia edit war analyst who uncovers the real story behind editing conflicts. Your job is to read between the lines and surface the most interesting dynamics at play — the human motivations, the tactical patterns, and the bigger picture of why people are fighting over this article right now.
+	systemPrompt := `You analyze Wikipedia edit wars and explain them clearly to any reader — not just Wikipedia insiders. Your job is to surface the real human drama: what people are actually fighting about, why it matters, and what the conflict pattern looks like. Be specific and grounded; every claim you make must be traceable to the data you're given.
 
 You are provided with two types of evidence:
 1. **Edit metadata**: who edited, when, byte changes, and edit summaries.
-2. **Actual diffs**: the text that was added or removed in each edit (when available). Diffs are the most important signal — they show you exactly what content is being fought over. The diff content may be in any language; analyze the substance regardless of language.
+2. **Actual diffs**: the exact text that was added or removed (when available). Diffs are the most important signal — they show you what content is being fought over. The diff content may be in any language; analyze the substance regardless of language.
 
-When given a sequence of edits, provide:
+Produce a JSON object with these fields:
 
-1. **Summary** (4-5 sentences): Tell the story of this conflict like a journalist would. Don't just list facts — explain what's actually happening and why it matters. Reference the SPECIFIC content being changed (quote key phrases from the diffs when possible). Highlight the most striking or unusual aspect of the dispute (e.g. is one editor on a crusade? Are the reverts escalating in a pattern? Is there a real-world event driving the conflict? Are editors talking past each other about different things?).
+"headline": A single clear sentence a non-Wikipedia reader would immediately understand. Model: "Dispute over whether [Person] was born in Russia or Ukraine has continued for two hours." Not tabloid-style; plain and factual.
 
-2. **Opposing sides**: Group every editor into a side. For each side, describe not just what they want, but WHY they seem to want it based on their edit patterns, comments, and the actual diff content. What motivates each side? Give each editor a vivid, specific role — not generic labels like "contributor" but something that captures their actual behavior (e.g. "persistent content restorer", "cleanup vigilante", "sourcing enforcer").
+"what_is_at_stake": 1-2 sentences stating concretely what the article would say differently depending on who wins. Example: "If the first group prevails, the article will describe the 2020 election results as disputed. If the second group prevails, those claims will be attributed to debunked sources and removed."
 
-3. **Content area**: What specific topic or section is being fought over? Be precise — use the actual text from the diffs to identify the exact subject matter, not vague labels like "content dispute".
+"summary": 3-4 sentences telling the story: what the dispute is about, how long it has been going on, what the edit pattern looks like (e.g., one editor keeps adding content, another keeps removing it), and any notable escalation. Reference specific content from the diffs when possible.
 
-4. **Severity** (low / moderate / high / critical): Based on edit frequency, editor count, revert ratio, and escalation patterns.
+"sides": An array of the opposing groups. For each side:
+  - "position": What they want the article to say, and why they seem to want it based on their edit behavior and comments. Reference actual content being added or defended.
+  - "editors": An array of editors on this side, each with:
+    - "user": exact username
+    - "edit_count": number of edits
+    - "role": A single factual sentence describing what they are actually doing. NEVER use creative nicknames, metaphors, or labels like "cleanup vigilante" or "citation sniper". ALWAYS describe behavior: e.g. "Has reverted the disputed casualty figure four times, citing TASS as a reliable source." or "Repeatedly removes the sourced election fraud claims, citing Wikipedia's verifiability policy."
 
-5. **Recommendation**: A clear, plain-language suggestion for what should happen next, written so anyone can understand it (e.g. "Both editors should stop editing the article and hash this out on the discussion page first", "An administrator should temporarily lock the page until tempers cool down").
+"content_area": The specific topic being contested, derived from the diff content. Be precise — not "content dispute" but e.g. "casualty figures in the 2024 Gaza conflict" or "nationality claim in the lead section."
 
-Dig into the data. Look for:
-- The ACTUAL CONTENT being added and removed (this is the most important signal)
-- Timing patterns (are edits happening within minutes of each other? that signals a live back-and-forth)
-- Byte-change patterns (are the same bytes being added and removed repeatedly?)
-- Edit comment tone (are editors getting more aggressive over time?)
-- Asymmetries (is one editor doing most of the reverting while the other keeps trying to add content?)
-- Whether this looks like a genuine content disagreement or something else (vandalism, POV pushing, territorial behavior)
+"severity": One of: low | moderate | high | critical — based on edit frequency, revert ratio, and escalation.
 
-Be specific, factual, and unbiased. Don't take sides — but don't be boring either. The best analysis makes the reader say "oh, that's what's really going on."
+"recommendation": A clear plain-language suggestion for what should happen next. Written so anyone can understand it.
 
-Respond in valid JSON with this exact schema:
-{
-  "summary": "4-5 sentence conflict narrative — make it compelling and insightful, referencing specific content from the diffs",
-  "sides": [
-    {
-      "position": "What this side wants and why they seem to want it — reference the actual content they are adding or defending",
-      "editors": [
-        {"user": "username", "edit_count": N, "role": "vivid specific role description"}
-      ]
-    }
-  ],
-  "content_area": "precise topic label derived from actual diff content",
-  "severity": "low | moderate | high | critical",
-  "recommendation": "Plain-language actionable next step"
-}`
+"escalation_trend": One of: rising | steady | cooling — based on whether the time gap between edits is shrinking, stable, or growing.
+
+Be specific and factual throughout. Do not invent details not in the data. If diffs are unavailable, base your analysis on the metadata alone and say so.
+
+Respond with valid JSON only — no markdown, no code fences, no commentary outside the JSON object.`
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Wikipedia page: \"%s\"\n\n", pageTitle))
-	sb.WriteString("Recent edit timeline (chronological order):\n\n")
+	sb.WriteString("Edit timeline (chronological):\n\n")
 
 	hasDiffs := false
 	for i, e := range entries {
@@ -359,7 +351,7 @@ Respond in valid JSON with this exact schema:
 		if comment == "" {
 			comment = "(no edit summary)"
 		}
-		sb.WriteString(fmt.Sprintf("%d. [%s] User \"%s\" (%s%d bytes): %s\n",
+		sb.WriteString(fmt.Sprintf("%d. [%s] %s (%s%d bytes): %s\n",
 			i+1, ts, e.User, sign, e.ByteChange, comment))
 
 		// Append the diff content for this revision if available.
@@ -376,12 +368,12 @@ Respond in valid JSON with this exact schema:
 	}
 
 	if hasDiffs {
-		sb.WriteString("\nThe diffs above show the EXACT text that was added or removed in each edit. Use this content to determine what the fight is actually about.\n")
+		sb.WriteString("\nThe diffs above show the exact text added or removed. Use this to determine what the dispute is concretely about.\n")
 	} else {
-		sb.WriteString("\nNote: Diff content was not available for these edits. Base your analysis on the metadata above.\n")
+		sb.WriteString("\nNote: Diff content was not available. Base your analysis on the metadata above and note this limitation in your summary.\n")
 	}
 
-	sb.WriteString("\nAnalyze this edit war. What's the real story here? What are the opposing sides fighting over, and what patterns do you see in how this conflict is playing out?")
+	sb.WriteString("\nAnalyze this edit war. What are these people actually fighting about, and what does the pattern of edits tell you about the conflict?")
 
 	return systemPrompt, sb.String()
 }
@@ -399,11 +391,14 @@ func (s *AnalysisService) parseLLMResponse(pageTitle, response string, editCount
 
 	// Try to parse as JSON first
 	var parsed struct {
-		Summary        string `json:"summary"`
-		Sides          []Side `json:"sides"`
-		ContentArea    string `json:"content_area"`
-		Severity       string `json:"severity"`
-		Recommendation string `json:"recommendation"`
+		Headline        string `json:"headline"`
+		WhatIsAtStake   string `json:"what_is_at_stake"`
+		Summary         string `json:"summary"`
+		Sides           []Side `json:"sides"`
+		ContentArea     string `json:"content_area"`
+		Severity        string `json:"severity"`
+		Recommendation  string `json:"recommendation"`
+		EscalationTrend string `json:"escalation_trend"`
 	}
 
 	// Try to extract JSON from the response (LLM might wrap it in markdown code blocks)
@@ -415,20 +410,26 @@ func (s *AnalysisService) parseLLMResponse(pageTitle, response string, editCount
 	}
 
 	if err := json.Unmarshal([]byte(jsonStr), &parsed); err == nil {
+		analysis.Headline = parsed.Headline
+		analysis.WhatIsAtStake = parsed.WhatIsAtStake
 		analysis.Summary = parsed.Summary
 		analysis.Sides = parsed.Sides
 		analysis.ContentArea = parsed.ContentArea
 		analysis.Severity = parsed.Severity
 		analysis.Recommendation = parsed.Recommendation
+		analysis.EscalationTrend = parsed.EscalationTrend
 	} else {
 		// JSON parse failed (likely truncated by max_tokens).
 		// Try to extract individual fields from the partial JSON via regex.
 		s.logger.Warn().Str("page", pageTitle).Err(err).Msg("JSON parse failed; attempting field extraction from partial response")
 
+		analysis.Headline = extractJSONStringField(jsonStr, "headline")
+		analysis.WhatIsAtStake = extractJSONStringField(jsonStr, "what_is_at_stake")
 		analysis.Summary = extractJSONStringField(jsonStr, "summary")
 		analysis.ContentArea = extractJSONStringField(jsonStr, "content_area")
 		analysis.Severity = extractJSONStringField(jsonStr, "severity")
 		analysis.Recommendation = extractJSONStringField(jsonStr, "recommendation")
+		analysis.EscalationTrend = extractJSONStringField(jsonStr, "escalation_trend")
 
 		// Default empty fields
 		if analysis.ContentArea == "" {
@@ -713,16 +714,39 @@ func (s *AnalysisService) heuristicAnalysis(pageTitle string, entries []EditTime
 		recommendation = "Encourage discussion on the talk page. Post a {{talkpage}} notice if not already present."
 	}
 
+	// Compute escalation trend from timing
+	escalationTrend := "steady"
+	if len(entries) >= 4 {
+		mid := len(entries) / 2
+		firstDur := float64(entries[mid-1].Timestamp - entries[0].Timestamp)
+		secondDur := float64(entries[len(entries)-1].Timestamp - entries[mid].Timestamp)
+		if firstDur > 0 && secondDur > 0 {
+			firstVel := float64(mid) / firstDur
+			secondVel := float64(len(entries)-mid) / secondDur
+			if secondVel > firstVel*1.25 {
+				escalationTrend = "rising"
+			} else if secondVel < firstVel*0.75 {
+				escalationTrend = "cooling"
+			}
+		}
+	}
+
+	// Build headline from available data
+	headline := fmt.Sprintf("Ongoing edit dispute on \"%s\" between %d editors.", pageTitle, len(userEdits))
+
 	return &Analysis{
-		PageTitle:      pageTitle,
-		Summary:        sb.String(),
-		Sides:          sides,
-		ContentArea:    contentArea,
-		Severity:       severity,
-		Recommendation: recommendation,
-		EditCount:      len(entries),
-		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
-		CacheHit:       false,
+		PageTitle:       pageTitle,
+		Headline:        headline,
+		WhatIsAtStake:   fmt.Sprintf("The article's content around %s is being actively contested.", contentArea),
+		Summary:         sb.String(),
+		Sides:           sides,
+		ContentArea:     contentArea,
+		Severity:        severity,
+		Recommendation:  recommendation,
+		EscalationTrend: escalationTrend,
+		EditCount:       len(entries),
+		GeneratedAt:     time.Now().UTC().Format(time.RFC3339),
+		CacheHit:        false,
 	}
 }
 

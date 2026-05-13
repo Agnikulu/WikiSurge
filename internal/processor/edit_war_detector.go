@@ -63,6 +63,7 @@ type EditWarAlert struct {
 	EditCount   int       `json:"edit_count"`
 	RevertCount int       `json:"revert_count"`
 	Severity    string    `json:"severity"`
+	DramaScore  int       `json:"drama_score"` // 0–100 heuristic drama/interestingness score
 	StartTime   time.Time `json:"start_time"`
 	Editors     []string  `json:"editors"`
 	ServerURL   string    `json:"server_url,omitempty"`
@@ -333,14 +334,12 @@ func (ewd *EditWarDetector) detectEditWar(ctx context.Context, pageTitle string)
 	}
 
 	// Count reverts using byte change pattern analysis
-	revertCount, err := ewd.countReverts(ctx, pageTitle)
+	revertCount, changes, err := ewd.countReverts(ctx, pageTitle)
 	if err != nil {
 		ewd.logger.Warn().Err(err).Str("page", pageTitle).Msg("Failed to count reverts, defaulting to 0")
 		revertCount = 0
+		changes = nil
 	}
-
-	// Also check edit comments for revert indicators
-	// (this is a simple heuristic complement)
 
 	if revertCount < ewd.minReverts {
 		ewd.logger.Debug().
@@ -360,12 +359,30 @@ func (ewd *EditWarDetector) detectEditWar(ctx context.Context, pageTitle string)
 	// This gives the real time the first edit occurred, not when we detected it.
 	startTime := time.Now().Add(-ewd.timeWindow) // fallback
 	timelineKey := fmt.Sprintf("editwar:timeline:%s", pageTitle)
-	if firstRaw, tlErr := ewd.redis.LIndex(ctx, timelineKey, 0).Result(); tlErr == nil && firstRaw != "" {
-		var firstEntry struct {
-			Timestamp int64 `json:"timestamp"`
+
+	// Fetch all timeline entries to extract timestamps for drama score calculation.
+	var timestamps []int64
+	if timelineRaw, tlErr := ewd.redis.LRange(ctx, timelineKey, 0, -1).Result(); tlErr == nil {
+		for _, raw := range timelineRaw {
+			var entry struct {
+				Timestamp int64 `json:"timestamp"`
+			}
+			if json.Unmarshal([]byte(raw), &entry) == nil && entry.Timestamp > 0 {
+				timestamps = append(timestamps, entry.Timestamp)
+			}
 		}
-		if json.Unmarshal([]byte(firstRaw), &firstEntry) == nil && firstEntry.Timestamp > 0 {
-			startTime = time.Unix(firstEntry.Timestamp, 0)
+		if len(timestamps) > 0 {
+			startTime = time.Unix(timestamps[0], 0)
+		}
+	} else {
+		// Fallback: read just the first entry for start time
+		if firstRaw, err2 := ewd.redis.LIndex(ctx, timelineKey, 0).Result(); err2 == nil && firstRaw != "" {
+			var firstEntry struct {
+				Timestamp int64 `json:"timestamp"`
+			}
+			if json.Unmarshal([]byte(firstRaw), &firstEntry) == nil && firstEntry.Timestamp > 0 {
+				startTime = time.Unix(firstEntry.Timestamp, 0)
+			}
 		}
 	}
 
@@ -380,12 +397,18 @@ func (ewd *EditWarDetector) detectEditWar(ctx context.Context, pageTitle string)
 		}
 	}
 
+	// Compute drama score — a 0–100 heuristic that captures interestingness.
+	// Also derive severity from it for consistency (overrides the simpler threshold approach).
+	dramaScore := computeDramaScore(totalEdits, uniqueEditors, revertCount, changes, timestamps)
+	severity = dramaScoreToSeverity(dramaScore)
+
 	alert := &EditWarAlert{
 		PageTitle:   pageTitle,
 		EditorCount: uniqueEditors,
 		EditCount:   totalEdits,
 		RevertCount: revertCount,
 		Severity:    severity,
+		DramaScore:  dramaScore,
 		StartTime:   startTime,
 		Editors:     editors,
 	}
@@ -393,18 +416,19 @@ func (ewd *EditWarDetector) detectEditWar(ctx context.Context, pageTitle string)
 	return alert, nil
 }
 
-// countReverts detects reversions in the edit sequence by analyzing byte change patterns
-func (ewd *EditWarDetector) countReverts(ctx context.Context, pageTitle string) (int, error) {
+// countReverts detects reversions in the edit sequence by analyzing byte change patterns.
+// Returns both the revert count and the parsed integer changes slice for reuse.
+func (ewd *EditWarDetector) countReverts(ctx context.Context, pageTitle string) (int, []int, error) {
 	changesKey := fmt.Sprintf("editwar:changes:%s", pageTitle)
 
 	// Get all byte changes in chronological order
 	changesStr, err := ewd.redis.LRange(ctx, changesKey, 0, -1).Result()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get byte changes: %w", err)
+		return 0, nil, fmt.Errorf("failed to get byte changes: %w", err)
 	}
 
 	if len(changesStr) < 2 {
-		return 0, nil
+		return 0, nil, nil
 	}
 
 	// Parse byte changes
@@ -418,7 +442,7 @@ func (ewd *EditWarDetector) countReverts(ctx context.Context, pageTitle string) 
 	}
 
 	if len(changes) < 2 {
-		return 0, nil
+		return 0, changes, nil
 	}
 
 	revertCount := 0
@@ -462,7 +486,7 @@ func (ewd *EditWarDetector) countReverts(ctx context.Context, pageTitle string) 
 		}
 	}
 
-	return revertCount, nil
+	return revertCount, changes, nil
 }
 
 // calculateEditWarSeverity determines severity based on edit patterns
@@ -478,6 +502,101 @@ func (ewd *EditWarDetector) calculateEditWarSeverity(editCount, editorCount, rev
 			return "medium"
 		}
 		return "low"
+	default:
+		return "low"
+	}
+}
+
+// computeDramaScore produces a 0–100 heuristic score capturing how dramatic
+// and interesting an edit war is. It uses purely structural signals derived
+// from the edit data — no keyword matching or LLM required.
+//
+// Signals and weights:
+//   - Revert ratio (reverts/edits):  30 pts max — the back-and-forth is the core drama signal
+//   - Edit velocity (edits/hr):       25 pts max — fast pace means heated, active conflict
+//   - Byte volatility (std-dev):      20 pts max — large swings mean real content is being fought over
+//   - Editor count:                   15 pts max — more participants = more complex / interesting
+//   - Escalation (2nd-half faster):   10 pts max — getting worse is more dramatic than steady state
+func computeDramaScore(totalEdits, uniqueEditors, revertCount int, changes []int, timestamps []int64) int {
+	score := 0.0
+
+	// 1. Revert ratio (30 pts max)
+	// At 75%+ revert ratio we award full points.
+	if totalEdits > 0 {
+		ratio := float64(revertCount) / float64(totalEdits)
+		score += math.Min(ratio/0.75*30, 30)
+	}
+
+	// 2. Edit velocity (25 pts max)
+	// Cap at 60 edits/hr for full score. Use first/last timestamp; if only one
+	// timestamp or span < 1 min, treat as maximum velocity.
+	if len(timestamps) >= 2 {
+		first, last := timestamps[0], timestamps[len(timestamps)-1]
+		elapsedHours := float64(last-first) / 3600.0
+		if elapsedHours < 1.0/60.0 {
+			elapsedHours = 1.0 / 60.0 // floor at 1 minute to avoid division explosion
+		}
+		velocity := float64(totalEdits) / elapsedHours
+		score += math.Min(velocity/60.0*25, 25)
+	} else if totalEdits > 0 {
+		// No timing info — give half velocity credit
+		score += 12.5
+	}
+
+	// 3. Byte volatility (20 pts max)
+	// Measures how large the back-and-forth swings are. Std-dev of abs(change).
+	// A std-dev ≥ 2000 bytes earns full points.
+	if len(changes) >= 2 {
+		sum := 0.0
+		for _, c := range changes {
+			sum += math.Abs(float64(c))
+		}
+		mean := sum / float64(len(changes))
+		variance := 0.0
+		for _, c := range changes {
+			d := math.Abs(float64(c)) - mean
+			variance += d * d
+		}
+		stddev := math.Sqrt(variance / float64(len(changes)))
+		score += math.Min(stddev/2000.0*20, 20)
+	}
+
+	// 4. Editor count (15 pts max)
+	// 2 editors (minimum) = 0 pts, 5+ editors = 15 pts.
+	editorPts := float64(uniqueEditors-2) / 3.0 * 15.0
+	score += math.Min(math.Max(editorPts, 0), 15)
+
+	// 5. Escalation (10 pts max)
+	// Compare edit velocity in the first half vs second half of the timeline.
+	// A 2× speedup earns full points.
+	if len(timestamps) >= 4 {
+		mid := len(timestamps) / 2
+		firstDur := float64(timestamps[mid-1] - timestamps[0])
+		secondDur := float64(timestamps[len(timestamps)-1] - timestamps[mid])
+		if firstDur > 0 && secondDur > 0 {
+			firstVel := float64(mid) / firstDur
+			secondVel := float64(len(timestamps)-mid) / secondDur
+			if secondVel > firstVel {
+				// (ratio - 1) / 1 → a 2× speedup earns full 10 pts
+				escalation := (secondVel/firstVel - 1.0)
+				score += math.Min(escalation*10, 10)
+			}
+		}
+	}
+
+	return int(math.Round(math.Min(score, 100)))
+}
+
+// dramaScoreToSeverity converts a numeric drama score to the legacy severity
+// string so callers that depend on severity strings keep working.
+func dramaScoreToSeverity(score int) string {
+	switch {
+	case score >= 80:
+		return "critical"
+	case score >= 60:
+		return "high"
+	case score >= 40:
+		return "medium"
 	default:
 		return "low"
 	}
@@ -547,6 +666,10 @@ func (ewd *EditWarDetector) publishEditWarAlert(ctx context.Context, alert *Edit
 	// LLM analysis data stays available as long as the war is active.
 	timelineKey := fmt.Sprintf("editwar:timeline:%s", alert.PageTitle)
 	_ = ewd.redis.Expire(ctx, timelineKey, 12*time.Hour).Err()
+
+	// Store drama score so the API layer can read it without recomputing.
+	dramaKey := fmt.Sprintf("editwar:drama:%s", alert.PageTitle)
+	_ = ewd.redis.Set(ctx, dramaKey, alert.DramaScore, 12*time.Hour).Err()
 
 	// Also extend editors and changes TTLs to 12h so counters survive
 	// gaps between edits (prevents the 1-edit/1-editor reset problem).
@@ -766,7 +889,7 @@ func (ewd *EditWarDetector) writeFinalSnapshot(ctx context.Context, pageTitle st
 	}
 
 	// --- Revert count ---
-	revertCount, _ := ewd.countReverts(ctx, pageTitle)
+	revertCount, _, _ := ewd.countReverts(ctx, pageTitle)
 
 	// --- Severity (recompute from final totals) ---
 	severity := ewd.calculateEditWarSeverity(totalEdits, len(editors), revertCount)
@@ -920,7 +1043,7 @@ func (ewd *EditWarDetector) GetActiveEditWars(ctx context.Context) ([]*EditWarAl
 				totalEdits += count
 			}
 
-			revertCount, _ := ewd.countReverts(ctx, pageTitle)
+			revertCount, _, _ := ewd.countReverts(ctx, pageTitle)
 
 			severity := ewd.calculateEditWarSeverity(totalEdits, len(editors), revertCount)
 

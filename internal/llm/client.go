@@ -104,6 +104,11 @@ func (c *Client) Enabled() bool {
 	}
 }
 
+// APIKey returns the configured API key (used by test tooling).
+func (c *Client) APIKey() string {
+	return c.cfg.APIKey
+}
+
 // ─── OpenAI / OpenAI-compatible ─────────────────────────────────────────────
 
 func (c *Client) completeOpenAI(ctx context.Context, systemPrompt, userPrompt string) (string, error) {

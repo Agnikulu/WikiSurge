@@ -283,7 +283,7 @@ func TestCountReverts(t *testing.T) {
 			redisClient.RPush(ctx, changesKey, c)
 		}
 
-		count, err := detector.countReverts(ctx, page)
+		count, _, err := detector.countReverts(ctx, page)
 		require.NoError(t, err)
 		assert.Equal(t, 4, count, "Expected 4 reverts in alternating pattern")
 	})
@@ -297,7 +297,7 @@ func TestCountReverts(t *testing.T) {
 			redisClient.RPush(ctx, changesKey, c)
 		}
 
-		count, err := detector.countReverts(ctx, page)
+		count, _, err := detector.countReverts(ctx, page)
 		require.NoError(t, err)
 		assert.Equal(t, 0, count, "Expected 0 reverts for all-positive changes")
 	})
@@ -312,7 +312,7 @@ func TestCountReverts(t *testing.T) {
 			redisClient.RPush(ctx, changesKey, c)
 		}
 
-		count, err := detector.countReverts(ctx, page)
+		count, _, err := detector.countReverts(ctx, page)
 		require.NoError(t, err)
 		assert.Equal(t, 0, count, "Expected 0 reverts for dissimilar magnitudes")
 	})

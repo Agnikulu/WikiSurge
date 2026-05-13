@@ -564,6 +564,13 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 
 			severity := classifyEditWarSeverity(len(editors), totalEdits, revertCount)
 
+			// Read the persisted drama score (computed by the processor at detection time).
+			dramaScore := 0
+			dramaKey := fmt.Sprintf("editwar:drama:%s", pageTitle)
+			if ds, dsErr := r.client.Get(ctx, dramaKey).Result(); dsErr == nil && ds != "" {
+				fmt.Sscanf(ds, "%d", &dramaScore)
+			}
+
 			// Retrieve persisted server URL for frontend wiki link building
 			serverURL := ""
 			urlKey := fmt.Sprintf("editwar:serverurl:%s", pageTitle)
@@ -596,6 +603,7 @@ func (r *RedisAlerts) GetActiveEditWars(ctx context.Context, limit int) ([]map[s
 				"edit_count":   totalEdits,
 				"revert_count": revertCount,
 				"severity":     severity,
+				"drama_score":  dramaScore,
 				"editors":      editors,
 				"active":       true,
 				"start_time":   startTime.UTC().Format(time.RFC3339),

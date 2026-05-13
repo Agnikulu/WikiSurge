@@ -76,17 +76,21 @@ type AlertEntry struct {
 
 // EditWarEntry is returned by GET /api/edit-wars.
 type EditWarEntry struct {
-	PageTitle   string      `json:"page_title"`
-	EditorCount int         `json:"editor_count"`
-	EditCount   int         `json:"edit_count"`
-	RevertCount int         `json:"revert_count"`
-	Severity    string      `json:"severity"`
-	StartTime   string      `json:"start_time,omitempty"`
-	LastEdit    string      `json:"last_edit,omitempty"`
-	Editors     []string    `json:"editors"`
-	Active      bool        `json:"active"`
-	ServerURL   string      `json:"server_url,omitempty"`
-	Analysis    interface{} `json:"analysis,omitempty"`
+	PageTitle       string      `json:"page_title"`
+	EditorCount     int         `json:"editor_count"`
+	EditCount       int         `json:"edit_count"`
+	RevertCount     int         `json:"revert_count"`
+	Severity        string      `json:"severity"`
+	DramaScore      int         `json:"drama_score"`                // 0–100 heuristic score
+	Headline        string      `json:"headline,omitempty"`         // LLM: one-sentence accessible summary
+	WhatIsAtStake   string      `json:"what_is_at_stake,omitempty"` // LLM: concrete stakes
+	EscalationTrend string      `json:"escalation_trend,omitempty"` // LLM: rising/steady/cooling
+	StartTime       string      `json:"start_time,omitempty"`
+	LastEdit        string      `json:"last_edit,omitempty"`
+	Editors         []string    `json:"editors"`
+	Active          bool        `json:"active"`
+	ServerURL       string      `json:"server_url,omitempty"`
+	Analysis        interface{} `json:"analysis,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

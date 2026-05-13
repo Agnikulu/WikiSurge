@@ -488,6 +488,19 @@ components:
           type: integer
         severity:
           type: string
+        drama_score:
+          type: integer
+          description: Heuristic 0–100 drama/interestingness score (higher = more dramatic)
+        headline:
+          type: string
+          description: One-sentence accessible summary of the dispute for non-Wikipedia readers
+        what_is_at_stake:
+          type: string
+          description: Concrete summary of what the article would say if each side wins
+        escalation_trend:
+          type: string
+          enum: [rising, steady, cooling]
+          description: Whether the edit war is intensifying, stable, or winding down
         start_time:
           type: string
           format: date-time

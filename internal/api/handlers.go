@@ -549,6 +549,9 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 			if sev, ok := w["severity"].(string); ok {
 				entry.Severity = sev
 			}
+			if ds, ok := w["drama_score"].(int); ok {
+				entry.DramaScore = ds
+			}
 			if eds, ok := w["editors"].([]string); ok {
 				entry.Editors = eds
 			}
@@ -562,8 +565,7 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 				entry.ServerURL = su
 			}
 
-			// Embed cached analysis if available (populated by the processor
-			// at war start, every N edits, and at war end).
+			// Embed cached analysis if available and extract top-level LLM fields.
 			if entry.PageTitle != "" {
 				cacheKey := fmt.Sprintf("editwar:analysis:%s", entry.PageTitle)
 				if cached, cErr := s.redis.Get(ctx, cacheKey).Result(); cErr == nil && cached != "" {
@@ -571,11 +573,27 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 					if json.Unmarshal([]byte(cached), &analysis) == nil {
 						entry.Analysis = analysis
 					}
+					// Also parse typed fields for top-level convenience
+					var typedAnalysis struct {
+						Headline        string `json:"headline"`
+						WhatIsAtStake   string `json:"what_is_at_stake"`
+						EscalationTrend string `json:"escalation_trend"`
+					}
+					if json.Unmarshal([]byte(cached), &typedAnalysis) == nil {
+						entry.Headline = typedAnalysis.Headline
+						entry.WhatIsAtStake = typedAnalysis.WhatIsAtStake
+						entry.EscalationTrend = typedAnalysis.EscalationTrend
+					}
 				}
 			}
 
 			results = append(results, entry)
 		}
+
+		// Sort by drama score descending so the most interesting wars appear first.
+		sort.Slice(results, func(i, j int) bool {
+			return results[i].DramaScore > results[j].DramaScore
+		})
 
 		respondJSON(w, http.StatusOK, results)
 		return
@@ -630,6 +648,9 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 		if sev, ok := w["severity"].(string); ok {
 			entry.Severity = sev
 		}
+		if ds, ok := w["drama_score"].(float64); ok {
+			entry.DramaScore = int(ds)
+		}
 		if ts, ok := w["start_time"].(string); ok {
 			entry.StartTime = ts
 		}
@@ -649,8 +670,7 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 			entry.ServerURL = su
 		}
 
-		// Embed cached analysis if available (populated by the processor
-		// at war start, every N edits, and at war end).
+		// Embed cached analysis and extract top-level LLM fields.
 		if entry.PageTitle != "" {
 			cacheKey := fmt.Sprintf("editwar:analysis:%s", entry.PageTitle)
 			if cached, cErr := s.redis.Get(ctx, cacheKey).Result(); cErr == nil && cached != "" {
@@ -658,16 +678,31 @@ func (s *APIServer) handleGetEditWars(w http.ResponseWriter, r *http.Request) {
 				if json.Unmarshal([]byte(cached), &analysis) == nil {
 					entry.Analysis = analysis
 				}
+				var typedAnalysis struct {
+					Headline        string `json:"headline"`
+					WhatIsAtStake   string `json:"what_is_at_stake"`
+					EscalationTrend string `json:"escalation_trend"`
+				}
+				if json.Unmarshal([]byte(cached), &typedAnalysis) == nil {
+					entry.Headline = typedAnalysis.Headline
+					entry.WhatIsAtStake = typedAnalysis.WhatIsAtStake
+					entry.EscalationTrend = typedAnalysis.EscalationTrend
+				}
 			}
 		}
 
 		results = append(results, entry)
-		
+
 		// Stop if we've reached the requested limit
 		if len(results) >= limit {
 			break
 		}
 	}
+
+	// Sort historical results by drama score descending.
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].DramaScore > results[j].DramaScore
+	})
 
 	respondJSON(w, http.StatusOK, results)
 }
