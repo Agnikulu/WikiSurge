@@ -872,3 +872,514 @@ func TestParseLLMResponse_NewFieldsMissing(t *testing.T) {
 	assert.IsType(t, "", analysis.WhatIsAtStake, "WhatIsAtStake should default to empty string")
 	assert.IsType(t, "", analysis.EscalationTrend, "EscalationTrend should default to empty string")
 }
+
+// ─── Digest archive tests ────────────────────────────────────────────────────
+
+// ─── Stats block injection tests ─────────────────────────────────────────────
+
+// TestBuildPrompt_StatsBlock_AppearsWithMultipleEntries verifies that when
+// ≥2 entries are provided the user prompt contains the computed stats header.
+func TestBuildPrompt_StatsBlock_AppearsWithMultipleEntries(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	now := time.Now()
+	entries := []EditTimelineEntry{
+		{User: "Alice", Comment: "Reverted", ByteChange: -500, Timestamp: now.Add(-30 * time.Minute).Unix()},
+		{User: "Bob", Comment: "Undid last edit", ByteChange: 490, Timestamp: now.Add(-20 * time.Minute).Unix()},
+		{User: "Alice", Comment: "Added back", ByteChange: -495, Timestamp: now.Add(-10 * time.Minute).Unix()},
+	}
+	_, user := svc.buildPrompt("Stats_Test", entries, nil)
+
+	assert.Contains(t, user, "Computed statistics")
+	assert.Contains(t, user, "Total edits:    3")
+	assert.Contains(t, user, "Unique editors: 2")
+	// "Reverted" and "Undid" should both count
+	assert.Contains(t, user, "Detected reverts (from edit summaries): 2")
+}
+
+// TestBuildPrompt_StatsBlock_SingleEntry_Absent verifies no stats block when
+// only 1 entry exists (need at least 2 to compute a meaningful time span).
+func TestBuildPrompt_StatsBlock_SingleEntry_Absent(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	entries := []EditTimelineEntry{
+		{User: "Alice", Comment: "Added info", ByteChange: 100, Timestamp: time.Now().Unix()},
+	}
+	_, user := svc.buildPrompt("Single_Entry", entries, nil)
+
+	assert.NotContains(t, user, "Computed statistics",
+		"stats block should be absent for a single-entry timeline")
+}
+
+// TestBuildPrompt_StatsBlock_ShowsMinutesForShortWar verifies the time span
+// is rendered as "N minutes" when the war spans < 60 minutes.
+func TestBuildPrompt_StatsBlock_ShowsMinutesForShortWar(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	now := time.Now()
+	entries := []EditTimelineEntry{
+		{User: "X", Comment: "Edit", ByteChange: 10, Timestamp: now.Add(-20 * time.Minute).Unix()},
+		{User: "Y", Comment: "Revert", ByteChange: -10, Timestamp: now.Unix()},
+	}
+	_, user := svc.buildPrompt("Short_War", entries, nil)
+
+	assert.Contains(t, user, "minutes", "short war should report time in minutes")
+	assert.NotContains(t, user, "hours", "short war should not report time in hours")
+}
+
+// TestBuildPrompt_StatsBlock_ShowsHoursForLongWar verifies the time span is
+// rendered as "N.N hours" when the war spans ≥ 60 minutes.
+func TestBuildPrompt_StatsBlock_ShowsHoursForLongWar(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	now := time.Now()
+	entries := []EditTimelineEntry{
+		{User: "X", Comment: "Edit", ByteChange: 10, Timestamp: now.Add(-3 * time.Hour).Unix()},
+		{User: "Y", Comment: "Revert", ByteChange: -10, Timestamp: now.Unix()},
+	}
+	_, user := svc.buildPrompt("Long_War", entries, nil)
+
+	assert.Contains(t, user, "hours", "long war should report time in hours")
+	assert.NotContains(t, user, "minutes", "long war should not report in minutes")
+}
+
+// TestBuildPrompt_StatsBlock_RevertKeywords verifies all revert-signal keywords
+// are counted: "revert", "reverted", "undid", "rvv".
+func TestBuildPrompt_StatsBlock_RevertKeywords(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	now := time.Now()
+	entries := []EditTimelineEntry{
+		{User: "A", Comment: "revert vandalism", ByteChange: -100, Timestamp: now.Add(-10 * time.Minute).Unix()},
+		{User: "B", Comment: "Undid revision 12345", ByteChange: 100, Timestamp: now.Add(-8 * time.Minute).Unix()},
+		{User: "C", Comment: "rvv", ByteChange: -100, Timestamp: now.Add(-6 * time.Minute).Unix()},
+		{User: "D", Comment: "Reverted per BLP", ByteChange: 100, Timestamp: now.Add(-4 * time.Minute).Unix()},
+		{User: "E", Comment: "Fixed typo", ByteChange: 5, Timestamp: now.Add(-2 * time.Minute).Unix()},
+	}
+	_, user := svc.buildPrompt("Revert_Keywords", entries, nil)
+
+	assert.Contains(t, user, "Detected reverts (from edit summaries): 4",
+		"all four revert-signal keywords should be counted")
+}
+
+// TestBuildPrompt_EditRate_Positive verifies the edit rate is included and
+// is a positive number.
+func TestBuildPrompt_EditRate_Positive(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	now := time.Now()
+	entries := []EditTimelineEntry{
+		{User: "A", Comment: "edit", ByteChange: 50, Timestamp: now.Add(-60 * time.Minute).Unix()},
+		{User: "B", Comment: "revert", ByteChange: -50, Timestamp: now.Unix()},
+	}
+	_, user := svc.buildPrompt("Rate_Test", entries, nil)
+
+	assert.Contains(t, user, "Edit rate:", "edit rate should appear in stats block")
+	assert.Contains(t, user, "edits/hour", "edit rate should include unit label")
+}
+
+// ─── System prompt content tests ─────────────────────────────────────────────
+
+// TestSystemPrompt_ContainsVandalismDetectionGuidance verifies the system
+// prompt explicitly instructs the LLM about the vandalism vs genuine dispute
+// distinction and the is_vandalism field.
+func TestSystemPrompt_ContainsVandalismDetectionGuidance(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	entries := []EditTimelineEntry{
+		{User: "A", Comment: "edit", ByteChange: 50, Timestamp: time.Now().Add(-5 * time.Minute).Unix()},
+		{User: "B", Comment: "revert", ByteChange: -50, Timestamp: time.Now().Unix()},
+	}
+	system, _ := svc.buildPrompt("Test_Page", entries, nil)
+
+	assert.Contains(t, system, "VANDALISM", "system prompt must mention vandalism detection")
+	assert.Contains(t, system, "is_vandalism", "system prompt must specify the is_vandalism JSON field")
+	assert.Contains(t, system, "genuine content dispute", "system prompt must distinguish dispute types")
+}
+
+// TestSystemPrompt_BannedHeadlineOpeners verifies the system prompt explicitly
+// lists the known-bad headline opener phrases the LLM must not use.
+func TestSystemPrompt_BannedHeadlineOpeners(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	entries := []EditTimelineEntry{
+		{User: "A", Comment: "edit", ByteChange: 50, Timestamp: time.Now().Add(-5 * time.Minute).Unix()},
+		{User: "B", Comment: "revert", ByteChange: -50, Timestamp: time.Now().Unix()},
+	}
+	system, _ := svc.buildPrompt("Test_Page", entries, nil)
+
+	assert.Contains(t, system, "BANNED OPENERS", "system prompt must call out the banned opener list")
+	assert.Contains(t, system, "Edit war over content", "must list the banned opener")
+	assert.Contains(t, system, "Dispute over the details", "must list the banned opener")
+}
+
+// TestSystemPrompt_RequiresDiffQuotingWhenAvailable verifies the system prompt
+// instructs the LLM to quote diff text in headline/stakes/summary.
+func TestSystemPrompt_RequiresDiffQuotingWhenAvailable(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	entries := []EditTimelineEntry{
+		{User: "A", Comment: "edit", ByteChange: 50, Timestamp: time.Now().Add(-5 * time.Minute).Unix(), RevisionID: 1},
+		{User: "B", Comment: "revert", ByteChange: -50, Timestamp: time.Now().Unix(), RevisionID: 2},
+	}
+	diffs := map[int64]string{1: "+ disputed text added here"}
+	system, user := svc.buildPrompt("Diff_Page", entries, diffs)
+
+	// System prompt should require quoting
+	assert.Contains(t, system, "QUOTE", "system prompt must instruct LLM to quote diff text")
+	// User prompt should also reinforce quoting instruction when diffs exist
+	assert.Contains(t, user, "QUOTE", "user prompt should reinforce quoting when diffs present")
+}
+
+// TestSystemPrompt_RequiresHardNumbers verifies the system prompt requires
+// the summary to contain concrete numbers (revert count, time span, etc.).
+func TestSystemPrompt_RequiresHardNumbers(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	entries := []EditTimelineEntry{
+		{User: "A", Comment: "edit", ByteChange: 50, Timestamp: time.Now().Add(-5 * time.Minute).Unix()},
+		{User: "B", Comment: "revert", ByteChange: -50, Timestamp: time.Now().Unix()},
+	}
+	system, _ := svc.buildPrompt("Numbers_Test", entries, nil)
+
+	// The prompt should require "hard numbers" or "exact numbers"
+	assert.True(t,
+		strings.Contains(strings.ToLower(system), "hard numbers") || strings.Contains(strings.ToLower(system), "exact numbers") ||
+			strings.Contains(strings.ToLower(system), "exact number"),
+		"system prompt must demand specific numeric values in the summary")
+}
+
+// ─── is_vandalism field parsing tests ────────────────────────────────────────
+
+// TestParseLLMResponse_IsVandalism_True verifies that is_vandalism:true in the
+// LLM JSON response is stored on the Analysis struct.
+func TestParseLLMResponse_IsVandalism_True(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	response := `{
+		"is_vandalism": true,
+		"headline": "Editors battle over whether 'Crystal Pite' should be replaced with 'Crystal from Beverly Hills Housewives'.",
+		"what_is_at_stake": "If the vandal wins, the article will misidentify the subject. If defenders win, her correct name is maintained.",
+		"summary": "A clear vandalism case: one editor inserted 'Crystal from Beverly Hills Housewives' 3 times in 4 minutes.",
+		"sides": [
+			{"position": "Keep the correct name", "editors": [{"user": "Tessaract2", "edit_count": 2, "role": "Reverted the name replacement twice."}]},
+			{"position": "Replace with joke name", "editors": [{"user": "Vandal99", "edit_count": 2, "role": "Inserted 'Crystal from Beverly Hills Housewives' twice."}]}
+		],
+		"content_area": "name replacement in biography",
+		"severity": "high",
+		"recommendation": "Report the vandal to WP:AIV.",
+		"escalation_trend": "rising"
+	}`
+
+	analysis := svc.parseLLMResponse("Crystal_Pite", response, 4)
+
+	assert.True(t, analysis.IsVandalism, "IsVandalism should be true when LLM reports is_vandalism:true")
+	assert.Contains(t, analysis.Headline, "Beverly Hills")
+	assert.Equal(t, "high", analysis.Severity)
+}
+
+// TestParseLLMResponse_IsVandalism_False verifies that is_vandalism:false is
+// correctly stored (not defaulting to true).
+func TestParseLLMResponse_IsVandalism_False(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	response := `{
+		"is_vandalism": false,
+		"headline": "Editors dispute whether the Gaza casualty figure should be from UNRWA or the Israeli MOD.",
+		"what_is_at_stake": "If Side A wins, the lead uses UNRWA's figure. If Side B wins, the article attributes the figure to the IDF.",
+		"summary": "A genuine sourcing dispute running for 40 minutes across 8 edits.",
+		"sides": [],
+		"content_area": "casualty figures in the Gaza conflict",
+		"severity": "high",
+		"recommendation": "Both sides should open a talk page discussion citing WP:RS.",
+		"escalation_trend": "steady"
+	}`
+
+	analysis := svc.parseLLMResponse("Gaza_Conflict", response, 8)
+
+	assert.False(t, analysis.IsVandalism, "IsVandalism should be false for a genuine content dispute")
+	assert.Contains(t, analysis.ContentArea, "Gaza")
+}
+
+// TestParseLLMResponse_IsVandalism_Absent_DefaultsFalse verifies that when the
+// is_vandalism field is absent from the JSON, IsVandalism defaults to false.
+func TestParseLLMResponse_IsVandalism_Absent_DefaultsFalse(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	// No is_vandalism field
+	response := `{
+		"headline": "Some dispute.",
+		"summary": "Old format response without is_vandalism field.",
+		"sides": [],
+		"content_area": "testing",
+		"severity": "low",
+		"recommendation": "Monitor.",
+		"escalation_trend": "cooling"
+	}`
+
+	analysis := svc.parseLLMResponse("Old_Format", response, 2)
+
+	assert.False(t, analysis.IsVandalism,
+		"absent is_vandalism should default to false (bool zero value)")
+}
+
+// ─── Mock LLM end-to-end vandalism/dispute tests ─────────────────────────────
+
+// TestE2E_VandalismFlag_TrueFlowsThroughAnalyze verifies that a mock LLM
+// returning is_vandalism:true produces an Analysis with IsVandalism==true.
+func TestE2E_VandalismFlag_TrueFlowsThroughAnalyze(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+
+	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]interface{}{"content": `{
+					"is_vandalism": true,
+					"headline": "An anonymous editor replaced 'Napoleon Bonaparte' with 'SpongeBob' in the biography lead.",
+					"what_is_at_stake": "If the vandal wins, Napoleon's article calls him 'SpongeBob'. If defenders win, the correct name is restored.",
+					"summary": "Vandalism: the editor replaced 'Napoleon Bonaparte' with 'SpongeBob' in the lead section twice in 3 minutes before being reverted.",
+					"sides": [
+						{"position": "Restore correct name", "editors": [{"user": "GuardianA", "edit_count": 2, "role": "Reverted 'SpongeBob' insertion twice."}]},
+						{"position": "Insert 'SpongeBob'", "editors": [{"user": "AnonVandal", "edit_count": 2, "role": "Replaced 'Napoleon Bonaparte' with 'SpongeBob' twice."}]}
+					],
+					"content_area": "lead section name in biography",
+					"severity": "high",
+					"recommendation": "Report AnonVandal to WP:AIV for persistent vandalism.",
+					"escalation_trend": "rising"
+				}`}},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockLLM.Close()
+
+	svc := NewAnalysisService(
+		NewClient(Config{Provider: ProviderOpenAI, APIKey: "k", BaseURL: mockLLM.URL}, zerolog.Nop()),
+		rdb, 5*time.Minute, zerolog.Nop(),
+	)
+
+	now := time.Now()
+	seedTimeline(t, rdb, "Napoleon_Bonaparte", []EditTimelineEntry{
+		{User: "AnonVandal", Comment: "edit", ByteChange: 0, Timestamp: now.Add(-5 * time.Minute).Unix()},
+		{User: "GuardianA", Comment: "Reverted", ByteChange: 0, Timestamp: now.Add(-4 * time.Minute).Unix()},
+		{User: "AnonVandal", Comment: "edit", ByteChange: 0, Timestamp: now.Add(-3 * time.Minute).Unix()},
+		{User: "GuardianA", Comment: "Reverted", ByteChange: 0, Timestamp: now.Add(-2 * time.Minute).Unix()},
+	})
+
+	analysis, err := svc.Analyze(context.Background(), "Napoleon_Bonaparte")
+	require.NoError(t, err)
+
+	assert.True(t, analysis.IsVandalism, "IsVandalism must be true when LLM returns is_vandalism:true")
+	assert.Contains(t, analysis.Headline, "SpongeBob")
+	assert.Equal(t, "high", analysis.Severity)
+	assert.Equal(t, 4, analysis.EditCount)
+	t.Logf("Vandalism E2E: is_vandalism=%v headline=%q", analysis.IsVandalism, analysis.Headline)
+}
+
+// TestE2E_GenuineDispute_IsVandalismFalse verifies a genuine content dispute
+// is correctly marked is_vandalism:false end-to-end.
+func TestE2E_GenuineDispute_IsVandalismFalse(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+
+	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Also verify the stats block is present in the user message.
+		var req map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&req)
+		messages := req["messages"].([]interface{})
+		userMsg := messages[1].(map[string]interface{})["content"].(string)
+		assert.Contains(t, userMsg, "Computed statistics",
+			"user prompt sent to LLM should contain the stats block")
+		assert.Contains(t, userMsg, "Total edits:", "stats block should include total edits")
+
+		resp := map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]interface{}{"content": `{
+					"is_vandalism": false,
+					"headline": "Editors have battled over whether Roe v. Wade should be described as 'controversial' in the opening sentence for 2 hours.",
+					"what_is_at_stake": "If Side A wins, the article's opening sentence will call the ruling 'controversial'. If Side B wins, the word will be removed as editorially loaded.",
+					"summary": "The dispute centers on the word 'controversial' in the first sentence, with 6 reverts over 2 hours. Side A cites multiple RS that use the word; Side B argues WP:NPOV forbids it.",
+					"sides": [
+						{"position": "Keep 'controversial'", "editors": [{"user": "CivEditor", "edit_count": 3, "role": "Re-added 'controversial' three times citing FT, NYT, and SCOTUS Blog."}]},
+						{"position": "Remove 'controversial'", "editors": [{"user": "NeutralEd", "edit_count": 3, "role": "Removed 'controversial' three times citing WP:NPOV and WP:EDITORIAL."}]}
+					],
+					"content_area": "characterization in lead sentence of Supreme Court case article",
+					"severity": "moderate",
+					"recommendation": "Both editors should open a WP:RfC on the talk page.",
+					"escalation_trend": "steady"
+				}`}},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockLLM.Close()
+
+	svc := NewAnalysisService(
+		NewClient(Config{Provider: ProviderOpenAI, APIKey: "k", BaseURL: mockLLM.URL}, zerolog.Nop()),
+		rdb, 5*time.Minute, zerolog.Nop(),
+	)
+
+	now := time.Now()
+	seedTimeline(t, rdb, "Roe_v_Wade", []EditTimelineEntry{
+		{User: "CivEditor", Comment: "Added 'controversial' per FT", ByteChange: 14, Timestamp: now.Add(-120 * time.Minute).Unix()},
+		{User: "NeutralEd", Comment: "Reverted NPOV violation", ByteChange: -14, Timestamp: now.Add(-110 * time.Minute).Unix()},
+		{User: "CivEditor", Comment: "Restored - sourced in NYT", ByteChange: 14, Timestamp: now.Add(-90 * time.Minute).Unix()},
+		{User: "NeutralEd", Comment: "Removed again", ByteChange: -14, Timestamp: now.Add(-70 * time.Minute).Unix()},
+		{User: "CivEditor", Comment: "SCOTUS Blog uses the term", ByteChange: 14, Timestamp: now.Add(-40 * time.Minute).Unix()},
+		{User: "NeutralEd", Comment: "Rv - WP:EDITORIAL", ByteChange: -14, Timestamp: now.Add(-20 * time.Minute).Unix()},
+	})
+
+	analysis, err := svc.Analyze(context.Background(), "Roe_v_Wade")
+	require.NoError(t, err)
+
+	assert.False(t, analysis.IsVandalism, "genuine content dispute should not be marked vandalism")
+	assert.Contains(t, analysis.Headline, "controversial")
+	assert.Equal(t, "moderate", analysis.Severity)
+	assert.Equal(t, "steady", analysis.EscalationTrend)
+	assert.Equal(t, 6, analysis.EditCount)
+	t.Logf("Genuine dispute E2E: is_vandalism=%v headline=%q", analysis.IsVandalism, analysis.Headline)
+}
+
+// TestE2E_PromptContainsStatsForLLM verifies that when calling Analyze with a
+// mock LLM, the stats block (time span, revert count, edit rate) from the user
+// prompt actually reaches the LLM payload.
+func TestE2E_PromptContainsStatsForLLM(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+
+	capturedUserMsg := ""
+	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&req)
+		messages := req["messages"].([]interface{})
+		capturedUserMsg = messages[1].(map[string]interface{})["content"].(string)
+
+		resp := map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]interface{}{"content": `{
+					"is_vandalism": false,
+					"headline": "Editors have been fighting over vaccine safety claims for 45 minutes.",
+					"what_is_at_stake": "If Side A wins, the article will include a 'Safety controversies' section. If Side B wins, that section will be removed.",
+					"summary": "8 edits in 45 minutes, 4 reverts. One editor adds a 'Safety controversies' section; another removes it as pseudoscience.",
+					"sides": [
+						{"position": "Include safety controversies section", "editors": [{"user": "VaxSkeptic", "edit_count": 4, "role": "Added the safety controversies section 4 times."}]},
+						{"position": "Remove pseudoscientific content", "editors": [{"user": "SciEditor", "edit_count": 4, "role": "Removed the safety controversies section 4 times citing WP:FRINGE."}]}
+					],
+					"content_area": "vaccine safety controversy section",
+					"severity": "high",
+					"recommendation": "Seek WP:MedRS guidance on the talk page.",
+					"escalation_trend": "rising"
+				}`}},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockLLM.Close()
+
+	svc := NewAnalysisService(
+		NewClient(Config{Provider: ProviderOpenAI, APIKey: "k", BaseURL: mockLLM.URL}, zerolog.Nop()),
+		rdb, 5*time.Minute, zerolog.Nop(),
+	)
+
+	now := time.Now()
+	seedTimeline(t, rdb, "COVID_Vaccine", []EditTimelineEntry{
+		{User: "VaxSkeptic", Comment: "Added safety controversies section", ByteChange: 600, Timestamp: now.Add(-45 * time.Minute).Unix()},
+		{User: "SciEditor", Comment: "Reverted - WP:FRINGE", ByteChange: -590, Timestamp: now.Add(-40 * time.Minute).Unix()},
+		{User: "VaxSkeptic", Comment: "Restored with sources", ByteChange: 605, Timestamp: now.Add(-30 * time.Minute).Unix()},
+		{User: "SciEditor", Comment: "Undid - pseudoscience not allowed", ByteChange: -600, Timestamp: now.Add(-20 * time.Minute).Unix()},
+		{User: "VaxSkeptic", Comment: "Added back with CDC citation", ByteChange: 610, Timestamp: now.Add(-15 * time.Minute).Unix()},
+		{User: "SciEditor", Comment: "Reverted again", ByteChange: -605, Timestamp: now.Add(-10 * time.Minute).Unix()},
+		{User: "VaxSkeptic", Comment: "re-adding", ByteChange: 600, Timestamp: now.Add(-5 * time.Minute).Unix()},
+		{User: "SciEditor", Comment: "rvv", ByteChange: -600, Timestamp: now.Unix()},
+	})
+
+	analysis, err := svc.Analyze(context.Background(), "COVID_Vaccine")
+	require.NoError(t, err)
+
+	// Verify stats block was sent to the LLM
+	assert.Contains(t, capturedUserMsg, "Computed statistics",
+		"stats block must be present in user prompt sent to LLM")
+	assert.Contains(t, capturedUserMsg, "Total edits:    8",
+		"stats block should report correct edit count")
+	assert.Contains(t, capturedUserMsg, "Unique editors: 2",
+		"stats block should report correct editor count")
+	// "Reverted", "Undid", "Reverted again", "Rv" = 4 revert signals
+	assert.Contains(t, capturedUserMsg, "Detected reverts (from edit summaries): 4",
+		"stats block should count revert keywords correctly")
+
+	// Output quality checks
+	assert.False(t, analysis.IsVandalism)
+	assert.Contains(t, analysis.Headline, "vaccine")
+	assert.Equal(t, "high", analysis.Severity)
+	assert.Equal(t, "rising", analysis.EscalationTrend)
+	assert.Equal(t, 8, analysis.EditCount)
+}
+
+// TestE2E_NonEnglishPageTitle verifies that a non-ASCII page title is handled
+// correctly through the analysis pipeline without panicking or encoding errors.
+func TestE2E_NonEnglishPageTitle(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+
+	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&req)
+		messages := req["messages"].([]interface{})
+		userMsg := messages[1].(map[string]interface{})["content"].(string)
+		// Page title should appear verbatim in the user prompt
+		assert.Contains(t, userMsg, "Roe対Wade判決",
+			"non-ASCII page title must appear verbatim in user prompt")
+
+		resp := map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]interface{}{"content": `{
+					"is_vandalism": false,
+					"headline": "Japanese editors dispute whether Roe v. Wade should be described as 'unpopular' in the lead.",
+					"what_is_at_stake": "If Side A wins, the article calls the ruling unpopular. If Side B wins, it uses neutral language.",
+					"summary": "4 reverts in 30 minutes over the word 'unpopular' in a Japanese Wikipedia article about Roe v. Wade.",
+					"sides": [
+						{"position": "Use 'unpopular'", "editors": [{"user": "EditorJA1", "edit_count": 2, "role": "Added '不人気' twice."}]},
+						{"position": "Neutral language", "editors": [{"user": "EditorJA2", "edit_count": 2, "role": "Removed '不人気' twice citing ja:WP:NPOV."}]}
+					],
+					"content_area": "characterization of Supreme Court ruling in Japanese Wikipedia",
+					"severity": "moderate",
+					"recommendation": "Use ja:WP:3O process for third opinion.",
+					"escalation_trend": "steady"
+				}`}},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockLLM.Close()
+
+	svc := NewAnalysisService(
+		NewClient(Config{Provider: ProviderOpenAI, APIKey: "k", BaseURL: mockLLM.URL}, zerolog.Nop()),
+		rdb, 5*time.Minute, zerolog.Nop(),
+	)
+
+	now := time.Now()
+	seedTimeline(t, rdb, "Roe対Wade判決", []EditTimelineEntry{
+		{User: "EditorJA1", Comment: "不人気を追加", ByteChange: 10, Timestamp: now.Add(-30 * time.Minute).Unix()},
+		{User: "EditorJA2", Comment: "Reverted", ByteChange: -10, Timestamp: now.Add(-20 * time.Minute).Unix()},
+		{User: "EditorJA1", Comment: "再追加", ByteChange: 10, Timestamp: now.Add(-10 * time.Minute).Unix()},
+		{User: "EditorJA2", Comment: "Reverted again", ByteChange: -10, Timestamp: now.Unix()},
+	})
+
+	analysis, err := svc.Analyze(context.Background(), "Roe対Wade判決")
+	require.NoError(t, err, "non-ASCII page title should not cause an error")
+
+	assert.Equal(t, "Roe対Wade判決", analysis.PageTitle)
+	assert.Equal(t, 4, analysis.EditCount)
+	assert.False(t, analysis.IsVandalism)
+	t.Logf("Non-English E2E: page=%q headline=%q", analysis.PageTitle, analysis.Headline)
+}

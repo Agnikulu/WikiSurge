@@ -308,7 +308,7 @@ func (s *AnalysisService) buildPrompt(pageTitle string, entries []EditTimelineEn
 
 You are given:
 1. **Edit metadata**: who edited, when, byte changes, edit summaries.
-2. **Diffs**: exact text added (+) or removed (-). THIS IS YOUR PRIMARY SOURCE. When diffs are present, quote specific phrases from them — do not speak in vague generalities.
+2. **Diffs**: exact text added (+) or removed (-). THIS IS YOUR PRIMARY SOURCE. When diffs are present, QUOTE specific phrases from them — do not speak in vague generalities.
 
 ─── DETECTING VANDALISM ───────────────────────────────────────────
 Before writing, decide: is this a genuine content dispute, or vandalism?
@@ -325,7 +325,7 @@ Produce a JSON object with EXACTLY these fields:
 "what_is_at_stake": 2 sentences using the IF/THEN format. Name actual content: "If [X] wins, the article will say [verbatim or near-verbatim claim from the diff]. If [Y] wins, [specific alternative]." This must reflect what the diffs actually show, not vague summaries.
 
 "summary": 4 sentences minimum. REQUIRED elements:
-  1. What the specific contested content IS (quote from diff if possible).
+  1. What the specific contested content IS (QUOTE from diff if possible).
   2. Hard numbers: how many reverts, over what time span (compute this from the timestamps).
   3. What pattern the edits show (e.g. one person adds, another immediately strips it; or two groups taking turns).
   4. Any escalation signal — are edits accelerating, or has it quieted?
