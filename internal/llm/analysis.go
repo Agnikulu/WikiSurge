@@ -38,6 +38,7 @@ type Side struct {
 // Analysis is the LLM-generated narrative returned to the frontend.
 type Analysis struct {
 	PageTitle       string `json:"page_title"`
+	IsVandalism     bool   `json:"is_vandalism"`      // true if this is vandalism rather than a genuine dispute
 	Headline        string `json:"headline"`          // One-sentence accessible summary of the dispute
 	WhatIsAtStake   string `json:"what_is_at_stake"`  // Concrete: what changes if each side wins
 	Summary         string `json:"summary"`           // 3-4 sentence conflict narrative
@@ -303,41 +304,86 @@ func (s *AnalysisService) fetchDiffs(ctx context.Context, pageTitle string, entr
 
 // buildPrompt constructs the system + user prompts for the LLM.
 func (s *AnalysisService) buildPrompt(pageTitle string, entries []EditTimelineEntry, diffs map[int64]string) (string, string) {
-	systemPrompt := `You analyze Wikipedia edit wars and explain them clearly to any reader — not just Wikipedia insiders. Your job is to surface the real human drama: what people are actually fighting about, why it matters, and what the conflict pattern looks like. Be specific and grounded; every claim you make must be traceable to the data you're given.
+	systemPrompt := `You analyze Wikipedia edit wars and explain them to a general audience — not Wikipedia insiders. Your job: surface the real human drama, name the specific thing being fought over, and make a reader care. Every claim must be traceable to the data provided.
 
-You are provided with two types of evidence:
-1. **Edit metadata**: who edited, when, byte changes, and edit summaries.
-2. **Actual diffs**: the exact text that was added or removed (when available). Diffs are the most important signal — they show you what content is being fought over. The diff content may be in any language; analyze the substance regardless of language.
+You are given:
+1. **Edit metadata**: who edited, when, byte changes, edit summaries.
+2. **Diffs**: exact text added (+) or removed (-). THIS IS YOUR PRIMARY SOURCE. When diffs are present, quote specific phrases from them — do not speak in vague generalities.
 
-Produce a JSON object with these fields:
+─── DETECTING VANDALISM ───────────────────────────────────────────
+Before writing, decide: is this a genuine content dispute, or vandalism?
+- VANDALISM: One editor inserts obviously false, nonsensical, or joke content (e.g. replacing a name with a celebrity, adding sexual content, gibberish). Others revert. There is no legitimate "other side." If this is vandalism, set "is_vandalism": true in your JSON and describe the vandal side honestly: "Inserted the text 'Crystal from Beverly Hills Housewives' in place of her real name."
+- GENUINE DISPUTE: Two or more editors have conflicting views on what factually or editorially belongs in the article.
+────────────────────────────────────────────────────────────────────
 
-"headline": A single clear sentence a non-Wikipedia reader would immediately understand. Model: "Dispute over whether [Person] was born in Russia or Ukraine has continued for two hours." Not tabloid-style; plain and factual.
+Produce a JSON object with EXACTLY these fields:
 
-"what_is_at_stake": 1-2 sentences stating concretely what the article would say differently depending on who wins. Example: "If the first group prevails, the article will describe the 2020 election results as disputed. If the second group prevails, those claims will be attributed to debunked sources and removed."
+"is_vandalism": true | false
 
-"summary": 3-4 sentences telling the story: what the dispute is about, how long it has been going on, what the edit pattern looks like (e.g., one editor keeps adding content, another keeps removing it), and any notable escalation. Reference specific content from the diffs when possible.
+"headline": One sentence naming the SPECIFIC contested claim or action — not the article, not "content related to X". Bad: "Dispute over content related to Manuela Zinsberger has escalated." Good: "Editors are battling over whether Manuela Zinsberger's same-sex engagement should appear in her Wikipedia bio." Include a concrete time element if notable (e.g. "for 3 hours", "across 29 edits today"). BANNED OPENERS (never start with these): "Edit war over content", "Dispute over the details", "Conflict regarding", "A disagreement about".
 
-"sides": An array of the opposing groups. For each side:
-  - "position": What they want the article to say, and why they seem to want it based on their edit behavior and comments. Reference actual content being added or defended.
-  - "editors": An array of editors on this side, each with:
+"what_is_at_stake": 2 sentences using the IF/THEN format. Name actual content: "If [X] wins, the article will say [verbatim or near-verbatim claim from the diff]. If [Y] wins, [specific alternative]." This must reflect what the diffs actually show, not vague summaries.
+
+"summary": 4 sentences minimum. REQUIRED elements:
+  1. What the specific contested content IS (quote from diff if possible).
+  2. Hard numbers: how many reverts, over what time span (compute this from the timestamps).
+  3. What pattern the edits show (e.g. one person adds, another immediately strips it; or two groups taking turns).
+  4. Any escalation signal — are edits accelerating, or has it quieted?
+
+"sides": Array of opposing groups. For genuine disputes use 2+ sides. For vandalism use 2 sides: defenders vs. the vandal. Each side:
+  - "position": What they concretely want in the article. Quote or paraphrase actual diff text.
+  - "editors": Array, each with:
     - "user": exact username
-    - "edit_count": number of edits
-    - "role": A single factual sentence describing what they are actually doing. NEVER use creative nicknames, metaphors, or labels like "cleanup vigilante" or "citation sniper". ALWAYS describe behavior: e.g. "Has reverted the disputed casualty figure four times, citing TASS as a reliable source." or "Repeatedly removes the sourced election fraud claims, citing Wikipedia's verifiability policy."
+    - "edit_count": number
+    - "role": One factual sentence describing EXACTLY what they did, with numbers. Include the specific text they added or removed if diffs show it. Example: "Reverted the removal of Zinsberger's engagement 6 times; the content reads 'Zinsberger got engaged to Madeleine in 2023'." NEVER use labels like "vigilante", "crusader", "sniper". NO vague phrases like "maintains article integrity".
 
-"content_area": The specific topic being contested, derived from the diff content. Be precise — not "content dispute" but e.g. "casualty figures in the 2024 Gaza conflict" or "nationality claim in the lead section."
+"content_area": Precise label from the diffs, not "content dispute". E.g. "same-sex engagement disclosure in athlete biography" or "casualty figures attributed to TASS in the Gaza war article".
 
-"severity": One of: low | moderate | high | critical — based on edit frequency, revert ratio, and escalation.
+"severity": low | moderate | high | critical
 
-"recommendation": A clear plain-language suggestion for what should happen next. Written so anyone can understand it.
+"recommendation": Plain-language next step. Be concrete: name who should do what. E.g. "The anonymous editor should open a talk-page thread explaining their source before making further changes; other editors should wait rather than keep reverting."
 
-"escalation_trend": One of: rising | steady | cooling — based on whether the time gap between edits is shrinking, stable, or growing.
+"escalation_trend": rising | steady | cooling
 
-Be specific and factual throughout. Do not invent details not in the data. If diffs are unavailable, base your analysis on the metadata alone and say so.
+Be specific and factual. Do not invent. If diffs are unavailable, state that limitation once in the summary and work from metadata.
 
-Respond with valid JSON only — no markdown, no code fences, no commentary outside the JSON object.`
+Respond with valid JSON only — no markdown, no code fences, no commentary.`
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Wikipedia page: \"%s\"\n\n", pageTitle))
+
+	// Pre-compute statistics so the LLM can reference them precisely.
+	if len(entries) >= 2 {
+		first := time.Unix(entries[0].Timestamp, 0).UTC()
+		last := time.Unix(entries[len(entries)-1].Timestamp, 0).UTC()
+		spanMins := last.Sub(first).Minutes()
+
+		revertCount := 0
+		uniqueEditors := map[string]struct{}{}
+		for _, e := range entries {
+			uniqueEditors[e.User] = struct{}{}
+			lc := strings.ToLower(e.Comment)
+			if strings.Contains(lc, "revert") || strings.Contains(lc, "rvv") ||
+				strings.Contains(lc, "undid") || strings.Contains(lc, "reverted") {
+				revertCount++
+			}
+		}
+
+		sb.WriteString("── Computed statistics (use these exact numbers in your analysis) ──\n")
+		if spanMins < 60 {
+			sb.WriteString(fmt.Sprintf("  Time span:      %.0f minutes\n", spanMins))
+		} else {
+			sb.WriteString(fmt.Sprintf("  Time span:      %.1f hours\n", spanMins/60))
+		}
+		sb.WriteString(fmt.Sprintf("  Total edits:    %d\n", len(entries)))
+		sb.WriteString(fmt.Sprintf("  Unique editors: %d\n", len(uniqueEditors)))
+		sb.WriteString(fmt.Sprintf("  Detected reverts (from edit summaries): %d\n", revertCount))
+		if spanMins > 0 {
+			sb.WriteString(fmt.Sprintf("  Edit rate:      %.1f edits/hour\n", float64(len(entries))/(spanMins/60)))
+		}
+		sb.WriteString("────────────────────────────────────────────────────────────────\n\n")
+	}
+
 	sb.WriteString("Edit timeline (chronological):\n\n")
 
 	hasDiffs := false
@@ -368,12 +414,12 @@ Respond with valid JSON only — no markdown, no code fences, no commentary outs
 	}
 
 	if hasDiffs {
-		sb.WriteString("\nThe diffs above show the exact text added or removed. Use this to determine what the dispute is concretely about.\n")
+		sb.WriteString("\nDiffs above show exact text added (+) or removed (-). QUOTE specific phrases from them in your headline, what_is_at_stake, and summary.\n")
 	} else {
-		sb.WriteString("\nNote: Diff content was not available. Base your analysis on the metadata above and note this limitation in your summary.\n")
+		sb.WriteString("\nNote: Diff content was unavailable. Acknowledge this once in the summary and work from metadata.\n")
 	}
 
-	sb.WriteString("\nAnalyze this edit war. What are these people actually fighting about, and what does the pattern of edits tell you about the conflict?")
+	sb.WriteString("\nNow produce the JSON analysis. Be specific — name the actual content being fought over, not just the article title.")
 
 	return systemPrompt, sb.String()
 }
@@ -391,6 +437,7 @@ func (s *AnalysisService) parseLLMResponse(pageTitle, response string, editCount
 
 	// Try to parse as JSON first
 	var parsed struct {
+		IsVandalism     bool   `json:"is_vandalism"`
 		Headline        string `json:"headline"`
 		WhatIsAtStake   string `json:"what_is_at_stake"`
 		Summary         string `json:"summary"`
@@ -410,6 +457,7 @@ func (s *AnalysisService) parseLLMResponse(pageTitle, response string, editCount
 	}
 
 	if err := json.Unmarshal([]byte(jsonStr), &parsed); err == nil {
+		analysis.IsVandalism = parsed.IsVandalism
 		analysis.Headline = parsed.Headline
 		analysis.WhatIsAtStake = parsed.WhatIsAtStake
 		analysis.Summary = parsed.Summary

@@ -326,7 +326,7 @@ func TestAnalysisService_BuildPrompt(t *testing.T) {
 	assert.Contains(t, user, "(no edit summary)")  // empty comment placeholder
 	assert.Contains(t, user, "+600 bytes")
 	assert.Contains(t, user, "-580 bytes")
-	assert.Contains(t, user, "Diff content was not available") // no diffs passed
+	assert.Contains(t, user, "Diff content was unavailable") // no diffs passed
 }
 
 func TestAnalysisService_BuildPrompt_WithDiffs(t *testing.T) {
