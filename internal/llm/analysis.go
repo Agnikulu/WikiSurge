@@ -325,10 +325,10 @@ Produce a JSON object with EXACTLY these fields:
 "what_is_at_stake": 2 sentences using the IF/THEN format. Name actual content: "If [X] wins, the article will say [verbatim or near-verbatim claim from the diff]. If [Y] wins, [specific alternative]." This must reflect what the diffs actually show, not vague summaries.
 
 "summary": 4 sentences minimum. REQUIRED elements:
-  1. What the specific contested content IS (QUOTE from diff if possible).
-  2. Hard numbers: how many reverts, over what time span (compute this from the timestamps).
-  3. What pattern the edits show (e.g. one person adds, another immediately strips it; or two groups taking turns).
-  4. Any escalation signal — are edits accelerating, or has it quieted?
+  1. What the article is actually about — one sentence of real-world context so a reader understands the subject (e.g. "Adam Pacitti is a British television presenter known for...").
+  2. What the specific contested content IS and WHY it matters to the article — QUOTE from diff if possible, and explain the significance (e.g. a birth year that determines whether someone is currently active, a political status that just changed).
+  3. What pattern the edits show (e.g. one person adds, another immediately strips it; or two groups taking turns). You may briefly mention revert count or time span here if it adds meaning, but do NOT lead with raw statistics.
+  4. Any escalation signal or likely motivation — why do the editors care so much about this specific point?
 
 "sides": Array of opposing groups. For genuine disputes use 2+ sides. For vandalism use 2 sides: defenders vs. the vandal. Each side:
   - "position": What they concretely want in the article. Quote or paraphrase actual diff text.
@@ -369,7 +369,7 @@ Respond with valid JSON only — no markdown, no code fences, no commentary.`
 			}
 		}
 
-		sb.WriteString("── Computed statistics (use these exact numbers in your analysis) ──\n")
+		sb.WriteString("── Computed statistics (provided for reference — do NOT lead with these; weave them in only when they add meaning) ──\n")
 		if spanMins < 60 {
 			sb.WriteString(fmt.Sprintf("  Time span:      %.0f minutes\n", spanMins))
 		} else {

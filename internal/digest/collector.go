@@ -45,8 +45,9 @@ type GlobalHighlight struct {
 	EditorCount int      `json:"editor_count,omitempty"`
 	Editors     []string `json:"editors,omitempty"`
 	RevertCount int      `json:"revert_count,omitempty"`
-	Severity    string   `json:"severity,omitempty"`    // "low", "moderate", "high", "critical"
-	LLMSummary  string   `json:"llm_summary,omitempty"` // LLM-generated conflict narrative
+	Severity    string   `json:"severity,omitempty"`     // "low", "moderate", "high", "critical"
+	LLMSummary  string   `json:"llm_summary,omitempty"`  // LLM-generated conflict narrative
+	LLMHeadline string   `json:"llm_headline,omitempty"` // one-sentence hook from LLM
 	ContentArea string   `json:"content_area,omitempty"` // topic area of disagreement
 }
 
@@ -385,6 +386,7 @@ func (c *Collector) enrichEditWars(ctx context.Context, wars []GlobalHighlight) 
 
 		if err == nil && cached != "" {
 			var analysis struct {
+				Headline    string `json:"headline"`
 				Summary     string `json:"summary"`
 				ContentArea string `json:"content_area"`
 				Severity    string `json:"severity"`
@@ -399,6 +401,9 @@ func (c *Collector) enrichEditWars(ctx context.Context, wars []GlobalHighlight) 
 				} `json:"sides"`
 			}
 			if json.Unmarshal([]byte(cached), &analysis) == nil {
+				if analysis.Headline != "" {
+					wars[i].LLMHeadline = analysis.Headline
+				}
 				if analysis.Summary != "" {
 					wars[i].LLMSummary = analysis.Summary
 				}
@@ -516,6 +521,7 @@ func (c *Collector) fillFromDigestArchive(ctx context.Context, wars []GlobalHigh
 			}
 
 			var analysis struct {
+				Headline    string `json:"headline"`
 				Summary     string `json:"summary"`
 				ContentArea string `json:"content_area"`
 				Severity    string `json:"severity"`
@@ -533,6 +539,9 @@ func (c *Collector) fillFromDigestArchive(ctx context.Context, wars []GlobalHigh
 				continue
 			}
 
+			if analysis.Headline != "" && wars[idx].LLMHeadline == "" {
+				wars[idx].LLMHeadline = analysis.Headline
+			}
 			if analysis.Summary != "" {
 				wars[idx].LLMSummary = analysis.Summary
 				wars[idx].Summary = analysis.Summary

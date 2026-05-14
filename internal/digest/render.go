@@ -100,6 +100,11 @@ func RenderDigestEmail(data *DigestData, user *models.User, dashboardURL, unsubT
 }
 
 func buildSubjectLine(data *DigestData) string {
+	// Prefer the LLM headline of the top edit war — it's specific and intriguing.
+	if len(data.EditWarHighlights) > 0 && data.EditWarHighlights[0].LLMHeadline != "" {
+		return fmt.Sprintf("⚔️ %s — WikiSurge %s Digest",
+			data.EditWarHighlights[0].LLMHeadline, strings.Title(data.Period))
+	}
 	if len(data.GlobalHighlights) > 0 {
 		top := data.GlobalHighlights[0]
 		return fmt.Sprintf("WikiSurge %s: \"%s\" and %d more highlights",
@@ -471,6 +476,15 @@ Here's what happened on Wikipedia {{.PeriodLabel}} ⚡
 </table>
 </td>
 </tr>
+
+<!-- LLM Headline -->
+{{if .LLMHeadline}}
+<tr>
+<td style="padding:0 24px 8px;">
+<p style="margin:0;font-size:14px;font-weight:700;color:#C9D1D9;line-height:1.4;font-style:italic;">&#8220;{{.LLMHeadline}}&#8221;</p>
+</td>
+</tr>
+{{end}}
 
 <!-- LLM Summary -->
 {{if .LLMSummary}}

@@ -875,6 +875,191 @@ func TestParseLLMResponse_NewFieldsMissing(t *testing.T) {
 
 // ─── Digest archive tests ────────────────────────────────────────────────────
 
+// ─── Contextual narrative summary tests ──────────────────────────────────────
+
+// TestLLMIntegration_ContextualNarrativeSummary verifies that a mock LLM
+// returning a context-rich, narrative-first summary (article subject + dispute
+// significance, stats woven in naturally) is fully accepted and stored.
+func TestLLMIntegration_ContextualNarrativeSummary(t *testing.T) {
+	redisClient, _ := setupTestRedis(t)
+	defer redisClient.Close()
+
+	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Ideal response matching the new prompt: article context first,
+		// dispute significance second, editing pattern third, no stat dumps.
+		resp := map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{
+					"message": map[string]interface{}{
+						"content": `{
+							"is_vandalism": false,
+							"headline": "Editors are battling over whether Adam Pacitti's birth year is 1968 or 1988 — a difference that determines whether he is currently in his 30s or 50s.",
+							"what_is_at_stake": "If Nanpacitti1 wins, the article will say Adam Pacitti was 'born 21 August 1968', placing him at 57 years old. If Tessaract2 wins, it will say 'born 21 August 1988', placing him at 36.",
+							"summary": "Adam Pacitti is a British television presenter and creator of the viral 'employ me' billboard campaign who rose to prominence in 2013. The entire dispute hinges on a single number: his birth year, with one editor insisting on 1968 while another insists on 1988 — a 20-year gap that misrepresents his age at every career milestone. Nanpacitti1 introduced the 1968 figure while Tessaract2 immediately reverted it, a pattern that repeated across several rapid edits in under five minutes. The speed and narrow focus of the dispute suggest one party may have personal knowledge of the subject and is correcting a biographical error.",
+							"sides": [
+								{"position": "Born 21 August 1988 (age 36)", "editors": [{"user": "Tessaract2", "edit_count": 5, "role": "Reverted the 1968 birth year claim five times, restoring 1988."}]},
+								{"position": "Born 21 August 1968 (age 57)", "editors": [{"user": "Nanpacitti1", "edit_count": 4, "role": "Changed the birth year to 1968 four times without citing a source."}]}
+							],
+							"content_area": "birth year in biography infobox",
+							"severity": "moderate",
+							"recommendation": "Nanpacitti1 should add a reliable source for the 1968 date on the talk page; until then, Tessaract2's sourced 1988 date should stand.",
+							"escalation_trend": "steady"
+						}`,
+					},
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockLLM.Close()
+
+	llmClient := NewClient(Config{
+		Provider: ProviderOpenAI,
+		APIKey:   "test-key",
+		BaseURL:  mockLLM.URL,
+		Model:    "gpt-4o",
+	}, zerolog.Nop())
+	svc := NewAnalysisService(llmClient, redisClient, 5*time.Minute, zerolog.Nop())
+
+	pageTitle := "Adam_Pacitti"
+	now := time.Now()
+	entries := []EditTimelineEntry{
+		{User: "Nanpacitti1", Comment: "correcting birth year to 1968", ByteChange: 2, Timestamp: now.Add(-4 * time.Minute).Unix()},
+		{User: "Tessaract2", Comment: "Reverted edits by Nanpacitti1: wrong year", ByteChange: -2, Timestamp: now.Add(-3*time.Minute + 30*time.Second).Unix()},
+		{User: "Nanpacitti1", Comment: "", ByteChange: 2, Timestamp: now.Add(-3 * time.Minute).Unix()},
+		{User: "Tessaract2", Comment: "Undid revision: birth year is 1988", ByteChange: -2, Timestamp: now.Add(-2*time.Minute + 30*time.Second).Unix()},
+		{User: "Nanpacitti1", Comment: "born 1968", ByteChange: 2, Timestamp: now.Add(-2 * time.Minute).Unix()},
+		{User: "Tessaract2", Comment: "Revert", ByteChange: -2, Timestamp: now.Add(-90 * time.Second).Unix()},
+		{User: "Nanpacitti1", Comment: "1968 is correct", ByteChange: 2, Timestamp: now.Add(-60 * time.Second).Unix()},
+		{User: "Tessaract2", Comment: "Reverted again", ByteChange: -2, Timestamp: now.Add(-30 * time.Second).Unix()},
+		{User: "Nanpacitti1", Comment: "", ByteChange: 2, Timestamp: now.Add(-10 * time.Second).Unix()},
+	}
+	seedTimeline(t, redisClient, pageTitle, entries)
+
+	analysis, err := svc.Analyze(context.Background(), pageTitle)
+	require.NoError(t, err)
+	require.NotNil(t, analysis)
+
+	// Article context — summary should mention the article subject, not open with counts
+	assert.Contains(t, analysis.Summary, "Pacitti",
+		"contextual summary should reference the article subject")
+	assert.False(t, analysis.IsVandalism)
+
+	// Headline is specific about the actual content dispute
+	assert.Contains(t, analysis.Headline, "birth year",
+		"headline should name the specific contested claim")
+	assert.Contains(t, analysis.Headline, "1968",
+		"headline should quote the actual disputed value")
+
+	// WhatIsAtStake uses IF/THEN format referencing actual diff text
+	assert.Contains(t, analysis.WhatIsAtStake, "1968",
+		"what_is_at_stake should name actual disputed content")
+	assert.Contains(t, analysis.WhatIsAtStake, "1988",
+		"what_is_at_stake should name both contested values")
+
+	// Content area should be precise
+	assert.Contains(t, analysis.ContentArea, "birth year",
+		"content_area should precisely describe the disputed field")
+
+	// Structural checks
+	assert.Equal(t, 9, analysis.EditCount)
+	assert.Equal(t, "steady", analysis.EscalationTrend)
+	assert.Equal(t, "moderate", analysis.Severity)
+	assert.Len(t, analysis.Sides, 2)
+
+	// Editor roles must be factual sentences, not creative labels
+	for _, side := range analysis.Sides {
+		for _, ed := range side.Editors {
+			assert.Greater(t, len(ed.Role), 20,
+				"role should be a factual sentence, not a one-word label")
+		}
+	}
+
+	t.Logf("Contextual summary:\n%s", analysis.Summary)
+	t.Logf("Headline: %s", analysis.Headline)
+}
+
+// TestLLMIntegration_ArticleSignificanceDispute validates that the LLM
+// summary explaining WHY a disputed fact matters (not just what it is)
+// is passed through and stored correctly.
+func TestLLMIntegration_ArticleSignificanceDispute(t *testing.T) {
+	redisClient, _ := setupTestRedis(t)
+	defer redisClient.Close()
+
+	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate summary that explains article context and dispute significance
+		resp := map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{
+					"message": map[string]interface{}{
+						"content": `{
+							"is_vandalism": false,
+							"headline": "Andy Burnham's Wikipedia biography is locked in a sourcing dispute over uncited claims about his tenure as Greater Manchester mayor.",
+							"what_is_at_stake": "If Graham Beards wins, several paragraphs about Burnham's policy achievements will be removed until citations are added. If the adding editors win, the biographical content stays but without inline sources, potentially violating WP:V.",
+							"summary": "Andy Burnham is a British Labour politician who became the first Mayor of Greater Manchester in 2017, a role that gave him national prominence during COVID-19 restrictions and later the HS2 debate. The dispute centres on a large block of content about his mayoral tenure that lacks inline citations — Graham Beards has repeatedly restored a version of the article with a prominent 'citation needed' notice and removed 1,063 bytes of unsourced material. Multiple editors keep adding biographical detail without citing sources, triggering another revert each time. The steady pace of this back-and-forth over 18 edits suggests editors may be working from knowledge of his public record but have not yet located citable sources.",
+							"sides": [
+								{"position": "Content must have inline citations before it can remain in the article", "editors": [{"user": "Graham Beards", "edit_count": 6, "role": "Restored the citation-flagged version six times, removing up to 1,063 bytes each time."}]},
+								{"position": "Add biographical detail now, citations to follow", "editors": [{"user": "IPEditor1", "edit_count": 7, "role": "Added unsourced content about Burnham's mayoral achievements across seven edits."}, {"user": "IPEditor2", "edit_count": 5, "role": "Also added unsourced content, sometimes restoring material removed by Graham Beards."}]}
+							],
+							"content_area": "mayoral tenure biography — citation compliance",
+							"severity": "moderate",
+							"recommendation": "Editors adding content about Burnham's tenure should add citations inline; Graham Beards should use the talk page to list which specific claims need sourcing rather than blanket reverting.",
+							"escalation_trend": "steady"
+						}`,
+					},
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockLLM.Close()
+
+	llmClient := NewClient(Config{
+		Provider: ProviderOpenAI,
+		APIKey:   "test-key",
+		BaseURL:  mockLLM.URL,
+	}, zerolog.Nop())
+	svc := NewAnalysisService(llmClient, redisClient, 5*time.Minute, zerolog.Nop())
+
+	pageTitle := "Andy_Burnham"
+	now := time.Now()
+	entries := make([]EditTimelineEntry, 18)
+	for i := range entries {
+		if i%2 == 0 {
+			entries[i] = EditTimelineEntry{User: "IPEditor1", Comment: "Added details about mayoral role", ByteChange: 400, Timestamp: now.Add(time.Duration(-100+i*5) * time.Minute).Unix()}
+		} else {
+			entries[i] = EditTimelineEntry{User: "Graham Beards", Comment: "None of this has cited sources, rv", ByteChange: -1063, Timestamp: now.Add(time.Duration(-99+i*5) * time.Minute).Unix()}
+		}
+	}
+	seedTimeline(t, redisClient, pageTitle, entries)
+
+	analysis, err := svc.Analyze(context.Background(), pageTitle)
+	require.NoError(t, err)
+
+	// Summary must explain article subject context
+	assert.Contains(t, analysis.Summary, "Burnham",
+		"summary should reference the article subject by name")
+	assert.True(t,
+		strings.Contains(analysis.Summary, "mayor") || strings.Contains(analysis.Summary, "Mayor"),
+		"summary should explain Burnham's role (article context)")
+
+	// Significance — the summary should explain WHY citations matter here
+	assert.True(t,
+		strings.Contains(strings.ToLower(analysis.Summary), "citation") ||
+			strings.Contains(strings.ToLower(analysis.Summary), "source"),
+		"summary should explain the significance of the citation dispute")
+
+	// WhatIsAtStake references actual content
+	assert.Contains(t, analysis.WhatIsAtStake, "citation",
+		"what_is_at_stake should name the actual stakes")
+
+	// Content area precise
+	assert.Contains(t, analysis.ContentArea, "citation",
+		"content_area should reference the specific type of dispute")
+
+	t.Logf("Significance summary:\n%s", analysis.Summary)
+}
+
 // ─── Stats block injection tests ─────────────────────────────────────────────
 
 // TestBuildPrompt_StatsBlock_AppearsWithMultipleEntries verifies that when
@@ -1040,9 +1225,10 @@ func TestSystemPrompt_RequiresDiffQuotingWhenAvailable(t *testing.T) {
 	assert.Contains(t, user, "QUOTE", "user prompt should reinforce quoting when diffs present")
 }
 
-// TestSystemPrompt_RequiresHardNumbers verifies the system prompt requires
-// the summary to contain concrete numbers (revert count, time span, etc.).
-func TestSystemPrompt_RequiresHardNumbers(t *testing.T) {
+// TestSystemPrompt_RequiresArticleContext verifies the system prompt instructs
+// the LLM to open the summary with real-world context about the article subject,
+// not raw statistics.
+func TestSystemPrompt_RequiresArticleContext(t *testing.T) {
 	rdb, _ := setupTestRedis(t)
 	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
 
@@ -1050,13 +1236,49 @@ func TestSystemPrompt_RequiresHardNumbers(t *testing.T) {
 		{User: "A", Comment: "edit", ByteChange: 50, Timestamp: time.Now().Add(-5 * time.Minute).Unix()},
 		{User: "B", Comment: "revert", ByteChange: -50, Timestamp: time.Now().Unix()},
 	}
-	system, _ := svc.buildPrompt("Numbers_Test", entries, nil)
+	system, _ := svc.buildPrompt("Context_Test", entries, nil)
 
-	// The prompt should require "hard numbers" or "exact numbers"
+	sysLower := strings.ToLower(system)
+
+	// Prompt must ask for article subject context in the summary
 	assert.True(t,
-		strings.Contains(strings.ToLower(system), "hard numbers") || strings.Contains(strings.ToLower(system), "exact numbers") ||
-			strings.Contains(strings.ToLower(system), "exact number"),
-		"system prompt must demand specific numeric values in the summary")
+		strings.Contains(sysLower, "what the article") || strings.Contains(sysLower, "article is actually about") ||
+			strings.Contains(sysLower, "real-world context"),
+		"system prompt must require article subject context as first summary element")
+
+	// Prompt must explain why the disputed content matters to the article
+	assert.True(t,
+		strings.Contains(sysLower, "why it matters") || strings.Contains(sysLower, "significance") ||
+			strings.Contains(sysLower, "why the disputed"),
+		"system prompt must require explanation of why the content matters")
+
+	// Stats should NOT be a hard requirement in the summary instructions
+	assert.False(t,
+		strings.Contains(sysLower, "hard numbers"),
+		"system prompt should not mandate 'hard numbers' as a required summary element")
+}
+
+// TestBuildPrompt_StatsBlock_IsLabelledAsReference verifies that the
+// computed stats block is labelled as reference material, not mandatory output.
+func TestBuildPrompt_StatsBlock_IsLabelledAsReference(t *testing.T) {
+	rdb, _ := setupTestRedis(t)
+	svc := NewAnalysisService(NewClient(Config{}, zerolog.Nop()), rdb, 0, zerolog.Nop())
+
+	entries := []EditTimelineEntry{
+		{User: "A", Comment: "Revert", ByteChange: -300, Timestamp: time.Now().Add(-10 * time.Minute).Unix()},
+		{User: "B", Comment: "Undid", ByteChange: 290, Timestamp: time.Now().Unix()},
+	}
+	_, user := svc.buildPrompt("Ref_Test", entries, nil)
+
+	// Stats block must use "reference" / "do NOT lead" language
+	assert.True(t,
+		strings.Contains(user, "reference") || strings.Contains(user, "do NOT lead"),
+		"stats block must be labelled as reference material, not mandatory output")
+
+	// Must NOT say "use these exact numbers"
+	assert.False(t,
+		strings.Contains(user, "use these exact numbers"),
+		"stats block must not instruct LLM to use exact numbers as a requirement")
 }
 
 // ─── is_vandalism field parsing tests ────────────────────────────────────────
