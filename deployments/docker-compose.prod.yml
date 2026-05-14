@@ -142,6 +142,7 @@ services:
   # ---------------------------------------------------------------------------
   ingestor:
     image: ghcr.io/agnikulu/wikisurge-ingestor:latest
+    pull_policy: always
     container_name: wikisurge-ingestor
     restart: always
     depends_on:
@@ -168,6 +169,7 @@ services:
   # ---------------------------------------------------------------------------
   processor:
     image: ghcr.io/agnikulu/wikisurge-processor:latest
+    pull_policy: always
     container_name: wikisurge-processor
     restart: always
     depends_on:
@@ -206,6 +208,7 @@ services:
   # ---------------------------------------------------------------------------
   api:
     image: ghcr.io/agnikulu/wikisurge-api:latest
+    pull_policy: always
     container_name: wikisurge-api
     restart: always
     depends_on:
@@ -259,6 +262,7 @@ services:
   # ---------------------------------------------------------------------------
   frontend:
     image: ghcr.io/agnikulu/wikisurge-frontend:latest
+    pull_policy: always
     container_name: wikisurge-frontend
     restart: unless-stopped
     depends_on:
