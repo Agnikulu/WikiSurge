@@ -366,7 +366,7 @@ describe('SettingsPanel – watchlist autocomplete', () => {
     expect(within(list).getByText('Bitcoin Cash')).toBeInTheDocument();
   });
 
-  it('ArrowUp does not go below index -1', async () => {
+  it('ArrowUp does not go below index -1 and does not add free text on Enter', async () => {
     vi.mocked(global.fetch).mockReturnValue(wikiResponse(['Bitcoin', 'Bitcoin Cash']) as never);
     setupStore();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -377,33 +377,92 @@ describe('SettingsPanel – watchlist autocomplete', () => {
     await act(async () => { vi.advanceTimersByTime(300); });
     await waitFor(() => expect(screen.getByText('Bitcoin')).toBeInTheDocument());
 
-    // Press ArrowUp when nothing selected — then Enter should use typed text
+    // ArrowUp keeps active = -1; Enter must NOT add free text "Bit"
     await user.keyboard('{ArrowUp}{Enter}');
 
-    const list = screen.getByRole('list');
-    // "Bit" was typed, no active suggestion, so typed title added as-is
-    expect(within(list).getByText('Bit')).toBeInTheDocument();
+    expect(screen.getByText('0/100')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /select a wikipedia article from the suggestions/i,
+    );
   });
 
-  it('adds free-text title on Enter when no suggestion is active', async () => {
+  it('adds an exact-match typed title on Enter (case-insensitive)', async () => {
     vi.mocked(global.fetch).mockReturnValue(wikiResponse(['OpenAI']) as never);
     setupStore();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<SettingsPanel />);
 
     const input = screen.getByPlaceholderText(/Search Wikipedia article title/i);
-    await user.type(input, 'OpenAI');
+    await user.type(input, 'openai');
     await act(async () => { vi.advanceTimersByTime(300); });
     await waitFor(() => expect(screen.getByText('OpenAI')).toBeInTheDocument());
 
-    // Don't navigate — just press Enter with no active item
+    // Don't navigate — Enter with exact case-insensitive match adds the
+    // canonical title from the suggestion list.
     await user.keyboard('{Enter}');
 
-    // First OpenAI in list will be the suggestion item; after Enter it should be in watchlist
-    const listItems = screen.getAllByText('OpenAI');
-    // At least one is in the watchlist ul
     const list = screen.getByRole('list');
     expect(within(list).getByText('OpenAI')).toBeInTheDocument();
+  });
+
+  // ── Free-text rejection ────────────────────────────────────────────────
+
+  it('rejects free-text titles that do not match any suggestion (Enter)', async () => {
+    vi.mocked(global.fetch).mockReturnValue(wikiResponse(['Bitcoin', 'Bitcoin Cash']) as never);
+    setupStore();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<SettingsPanel />);
+
+    const input = screen.getByPlaceholderText(/Search Wikipedia article title/i);
+    await user.type(input, 'Bitcoinzzz');
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+
+    await user.keyboard('{Enter}');
+
+    // Nothing was added: counter still at 0 and an alert is shown.
+    expect(screen.getByText('0/100')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('disables the add button until input matches a real suggestion', async () => {
+    vi.mocked(global.fetch).mockReturnValue(wikiResponse(['Bitcoin']) as never);
+    setupStore();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<SettingsPanel />);
+
+    const input = screen.getByPlaceholderText(/Search Wikipedia article title/i);
+    const addButton = input.closest('div')!.querySelector('button') as HTMLButtonElement;
+
+    // Type a non-matching prefix
+    await user.type(input, 'Notathing');
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(addButton).toBeDisabled();
+
+    // Now clear and type an exact match
+    await user.clear(input);
+    await user.type(input, 'Bitcoin');
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await waitFor(() => expect(screen.getByText('Bitcoin')).toBeInTheDocument());
+    expect(addButton).not.toBeDisabled();
+  });
+
+  it('clears the validation error when the user resumes typing', async () => {
+    vi.mocked(global.fetch).mockReturnValue(wikiResponse(['Bitcoin']) as never);
+    setupStore();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<SettingsPanel />);
+
+    const input = screen.getByPlaceholderText(/Search Wikipedia article title/i);
+    await user.type(input, 'Garbage');
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    await user.type(input, 'x');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   // ── Duplicate prevention ──────────────────────────────────────────────────
@@ -505,6 +564,22 @@ describe('SettingsPanel – watchlist autocomplete', () => {
 
     await user.click(screen.getByText('SAVE WATCHLIST'));
     await waitFor(() => expect(updateWatchlistMock).toHaveBeenCalledWith(['Bitcoin']));
+  });
+
+  it('save never includes a free-text title that was rejected', async () => {
+    vi.mocked(global.fetch).mockReturnValue(wikiResponse([]) as never);
+    setupStore();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<SettingsPanel />);
+
+    const input = screen.getByPlaceholderText(/Search Wikipedia article title/i);
+    await user.type(input, 'Definitely not a real article');
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await user.keyboard('{Enter}');
+
+    await user.click(screen.getByText('SAVE WATCHLIST'));
+    await waitFor(() => expect(updateWatchlistMock).toHaveBeenCalledWith([]));
   });
 
   it('shows SAVED state briefly after successful save', async () => {

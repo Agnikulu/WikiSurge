@@ -30,10 +30,28 @@ export function SettingsPanel() {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const suggestionsContainerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saved, setSaved] = useState(false);
   const [watchlistSaved, setWatchlistSaved] = useState(false);
+
+  // Resolve the typed input to a real Wikipedia title from the current
+  // suggestion set. If the user has highlighted a suggestion via keyboard,
+  // that wins; otherwise we accept an exact (case-insensitive) match against
+  // a returned suggestion. Free-text entries that don't match a real article
+  // are not allowed.
+  const resolvedTitle: string | null = (() => {
+    if (activeSuggestion >= 0 && suggestions[activeSuggestion]) {
+      return suggestions[activeSuggestion];
+    }
+    const trimmed = newPage.trim();
+    if (!trimmed) return null;
+    const exact = suggestions.find(
+      (s) => s.toLowerCase() === trimmed.toLowerCase()
+    );
+    return exact ?? null;
+  })();
 
   // Sync from store if user changes
   useEffect(() => {
@@ -115,21 +133,32 @@ export function SettingsPanel() {
     setSuggestions([]);
     setShowSuggestions(false);
     setActiveSuggestion(-1);
+    setValidationError(null);
   }, [watchlist]);
 
   const handleAddPage = useCallback(() => {
-    if (activeSuggestion >= 0 && suggestions[activeSuggestion]) {
-      handleSelectSuggestion(suggestions[activeSuggestion]);
+    if (watchlist.length >= 100) return;
+    if (!resolvedTitle) {
+      // The typed text doesn't match a real Wikipedia article in the
+      // current suggestion set — reject and prompt the user to pick one.
+      if (newPage.trim().length > 0) {
+        setValidationError(
+          'Please select a Wikipedia article from the suggestions.'
+        );
+      }
       return;
     }
-    const title = newPage.trim();
-    if (!title || watchlist.includes(title)) return;
-    if (watchlist.length >= 100) return;
-    setWatchlist([...watchlist, title]);
+    if (watchlist.includes(resolvedTitle)) {
+      setValidationError('That article is already on your watchlist.');
+      return;
+    }
+    setWatchlist([...watchlist, resolvedTitle]);
     setNewPage('');
     setSuggestions([]);
     setShowSuggestions(false);
-  }, [newPage, watchlist, activeSuggestion, suggestions, handleSelectSuggestion]);
+    setActiveSuggestion(-1);
+    setValidationError(null);
+  }, [newPage, watchlist, resolvedTitle]);
 
   const handleRemovePage = useCallback(
     (title: string) => {
@@ -378,7 +407,7 @@ export function SettingsPanel() {
             <input
               type="text"
               value={newPage}
-              onChange={(e) => { setNewPage(e.target.value); }}
+              onChange={(e) => { setNewPage(e.target.value); setValidationError(null); }}
               onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') {
@@ -403,7 +432,12 @@ export function SettingsPanel() {
             />
             <button
               onClick={handleAddPage}
-              disabled={!newPage.trim() || watchlist.length >= 100}
+              disabled={!resolvedTitle || watchlist.includes(resolvedTitle ?? '') || watchlist.length >= 100}
+              title={
+                !resolvedTitle && newPage.trim().length > 0
+                  ? 'Select a Wikipedia article from the suggestions'
+                  : 'Add to watchlist'
+              }
               className="px-3 py-2 rounded-lg text-xs font-mono font-bold transition-all disabled:opacity-30"
               style={{
                 background: 'rgba(0,255,136,0.12)',
@@ -446,6 +480,15 @@ export function SettingsPanel() {
                 </li>
               ))}
             </ul>
+          )}
+          {validationError && (
+            <p
+              role="alert"
+              className="mt-1.5 text-[10px] font-mono"
+              style={{ color: '#ff6666' }}
+            >
+              {validationError}
+            </p>
           )}
         </div>
 
