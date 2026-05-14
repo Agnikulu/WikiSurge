@@ -40,7 +40,19 @@ func (s *APIServer) handleWikiAutocomplete(w http.ResponseWriter, r *http.Reques
 	)
 
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(reqURL)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, reqURL, nil)
+	if err != nil {
+		s.logger.Warn().Err(err).Msg("failed to build wiki autocomplete request")
+		writeAPIError(w, r, http.StatusInternalServerError, "wikipedia autocomplete unavailable", ErrCodeServiceUnavailable, "")
+		return
+	}
+	// Wikimedia requires a descriptive User-Agent identifying the tool and
+	// a contact URL. Requests without one get a 403.
+	// https://meta.wikimedia.org/wiki/User-Agent_policy
+	req.Header.Set("User-Agent", "WikiSurge/1.0 (https://github.com/agnikulu/WikiSurge) autocomplete-proxy")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("query", query).Str("lang", lang).Msg("wiki autocomplete request failed")
 		writeAPIError(w, r, http.StatusBadGateway, "wikipedia autocomplete unavailable", ErrCodeServiceUnavailable, "")
