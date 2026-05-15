@@ -295,9 +295,6 @@ const digestTemplate = `<!DOCTYPE html>
 <meta name="supported-color-schemes" content="dark">
 <title>WikiSurge {{.Period}} Digest</title>
 <style>
-  details[open] > summary { display:none; }
-  summary::-webkit-details-marker { display:none; }
-  summary::marker { display:none; content:""; }
 </style>
 <!--[if mso]>
 <style>body,table,td{font-family:Arial,Helvetica,sans-serif!important;}</style>
@@ -492,16 +489,7 @@ Here's what happened on Wikipedia {{.PeriodLabel}} ⚡
 <td style="padding:0 24px 12px;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#161B22;border-radius:10px;border-left:3px solid #8B5CF6;">
 <tr><td style="padding:12px 16px;">
-{{if needsExpand .LLMSummary 280}}
-<details style="margin:0;">
-<summary style="margin:0;font-size:13px;color:#C9D1D9;line-height:1.5;cursor:pointer;list-style:none;">
-{{cleanCut .LLMSummary 280}} <span style="font-size:11px;color:#8B5CF6;font-weight:600;">▶ Read more</span>
-</summary>
 <p style="margin:0;font-size:13px;color:#C9D1D9;line-height:1.5;">{{.LLMSummary}}</p>
-</details>
-{{else}}
-<p style="margin:0;font-size:13px;color:#C9D1D9;line-height:1.5;">{{.LLMSummary}}</p>
-{{end}}
 </td></tr>
 </table>
 </td>
