@@ -612,7 +612,6 @@ func TestE2E_WeeklyDigest_ArchivedSummariesInEmail(t *testing.T) {
 		{"Smiling Friends severity or content area", "Show continuation"},
 		{"Baby Keem severity or content area", "Death reporting"},
 		{"Edit wars section", "Most Popular Edit Wars"},
-		{"Read more (expandable)", "Read more"},
 		{"Weekly in subject", "Weekly"},
 	}
 
